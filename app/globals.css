@@ -83,12 +83,22 @@
     --sidebar-ring: oklch(0.556 0 0);
   }
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+    outline-color: oklch(var(--ring) / 0.5);
   }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+  }
+
+  :root {
+    --color-primary: #1A1A2E;
+    --color-accent: #4F46E5;
+    --color-accent-light: #EEF2FF;
+    --color-surface: #F8FAFC;
+    --color-border: #E2E8F0;
+    --color-muted: #64748B;
   }
 }
