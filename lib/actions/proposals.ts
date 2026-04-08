@@ -151,7 +151,7 @@ export async function getWizardData(): Promise<{
       defaultValidityDays: settings?.defaultValidityDays ?? 30,
       defaultCurrency: settings?.defaultCurrency ?? 'PHP',
       defaultVatRate: String(settings?.defaultVatRate ?? 12),
-      agencyName: settings?.agencyName ?? 'The Agency',
+      agencyName: settings?.agencyName ?? 'Sunday Studio',
     },
   }
 }

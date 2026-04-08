@@ -58,8 +58,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
 
   if (!proposal) notFound()
 
-  const accent = settings?.brandColorHex ?? '#4F46E5'
-  const agencyName = settings?.agencyName ?? 'The Agency'
+  const accent = settings?.brandColorHex ?? '#214ADE'
+  const agencyName = settings?.agencyName ?? 'Sunday Studio'
   const agencyLogoUrl = settings?.agencyLogoUrl ?? null
 
   const nonOptionalItems = proposal.lineItems.filter((li) => !li.isOptional)
@@ -220,7 +220,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={agencyLogoUrl} alt={agencyName} className="agency-logo" />
               ) : (
-                <span className="agency-name-text">{agencyName}</span>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src="/sunday-studio-logo.svg" alt="Sunday Studio" className="agency-logo" />
               )}
               <div>
                 <div className="cover-label">Proposal</div>

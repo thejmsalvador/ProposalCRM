@@ -98,19 +98,13 @@ export function Sidebar({ user, agencyName, agencyLogoUrl, unreadCount }: Props)
     <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 bg-white border-r border-[var(--color-border)] shrink-0">
       {/* Agency logo / name */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-[var(--color-border)]">
-        {agencyLogoUrl ? (
-          <Image
-            src={agencyLogoUrl}
-            alt={agencyName}
-            width={32}
-            height={32}
-            className="rounded object-contain"
-          />
-        ) : (
-          <div className="w-8 h-8 rounded bg-[var(--color-accent)] flex items-center justify-center text-white font-bold text-sm">
-            {agencyName.charAt(0)}
-          </div>
-        )}
+        <Image
+          src={agencyLogoUrl ?? '/sunday-studio-logo.svg'}
+          alt={agencyName}
+          width={32}
+          height={32}
+          className="rounded object-contain"
+        />
         <span className="font-semibold text-[var(--color-primary)] text-sm truncate">
           {agencyName}
         </span>

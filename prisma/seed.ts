@@ -213,7 +213,7 @@ async function main() {
     update: {},
     create: {
       id: 'seed-settings-1',
-      agencyName: 'The Agency',
+      agencyName: 'Sunday Studio',
     },
   })
 

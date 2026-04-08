@@ -21,7 +21,7 @@ export default async function AppLayout({
     <AppShell
       user={session.user}
       unreadCount={unreadCount}
-      agencyName={settings?.agencyName ?? 'ProposalCRM'}
+      agencyName={settings?.agencyName ?? 'Sunday Studio'}
       agencyLogoUrl={settings?.agencyLogoUrl ?? null}
     >
       {children}

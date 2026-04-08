@@ -12,20 +12,20 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 // ─── Button helper ────────────────────────────────────────────────────────────
 
 function viewButton(href: string, label = 'View Proposal') {
-  return `<a href="${href}" style="display:inline-block;padding:10px 20px;background:#4F46E5;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">${label}</a>`
+  return `<a href="${href}" style="display:inline-block;padding:10px 20px;background:#214ADE;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">${label}</a>`
 }
 
 function layout(body: string) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#F8FAFC;font-family:Inter,sans-serif;color:#1A1A2E;">
+<body style="margin:0;padding:0;background:#F4F7FF;font-family:Inter,sans-serif;color:#0D1B4B;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:40px 0;">
   <tr><td align="center">
-    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:1px solid #E2E8F0;overflow:hidden;">
-      <tr><td style="background:#1A1A2E;padding:20px 32px;">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:1px solid #D0D9F5;overflow:hidden;">
+      <tr><td style="background:#214ADE;padding:20px 32px;">
         <span style="color:#fff;font-size:18px;font-weight:700;">ProposalCRM</span>
       </td></tr>
       <tr><td style="padding:32px;">${body}</td></tr>
-      <tr><td style="padding:16px 32px;border-top:1px solid #E2E8F0;background:#F8FAFC;">
+      <tr><td style="padding:16px 32px;border-top:1px solid #D0D9F5;background:#F4F7FF;">
         <p style="margin:0;font-size:12px;color:#64748B;">This is an automated message from ProposalCRM. Do not reply to this email.</p>
       </td></tr>
     </table>
@@ -34,7 +34,7 @@ function layout(body: string) {
 </body></html>`
 }
 
-// ─── Template: Approval Request ───────────────────────────────────────────────
+// ─── Template: Approval Request ──────────────────────────────────────────────
 
 export function approvalRequestEmail(params: {
   approverName: string
