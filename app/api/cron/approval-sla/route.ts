@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createNotification } from '@/lib/notifications'
+import { sendEmail, slaReminderEmail } from '@/lib/email'
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
       number: true,
       updatedAt: true,
       assignedApproverId: true,
+      assignedApprover: { select: { email: true, name: true } },
     },
   })
 
@@ -36,6 +38,15 @@ export async function GET(request: NextRequest) {
       `Reminder: ${proposal.number} has been awaiting your approval for ${hoursWaiting} hours.`,
       `/proposals/${proposal.id}`,
     )
+    if (proposal.assignedApprover) {
+      const tpl = slaReminderEmail({
+        approverName: proposal.assignedApprover.name,
+        proposalNumber: proposal.number,
+        proposalId: proposal.id,
+        hoursWaiting,
+      })
+      await sendEmail(proposal.assignedApprover.email, tpl.subject, tpl.html)
+    }
     notified++
   }
 

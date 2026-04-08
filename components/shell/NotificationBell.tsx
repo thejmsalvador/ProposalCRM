@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  getNotifications,
+  getUnreadCount,
   markNotificationRead,
   markAllRead,
   type NotificationItem,
@@ -36,6 +38,20 @@ export function NotificationBell({ userId, initialNotifications, initialUnreadCo
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications)
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
   const [isPending, startTransition] = useTransition()
+
+  const refresh = useCallback(async () => {
+    const [fresh, count] = await Promise.all([
+      getNotifications(userId),
+      getUnreadCount(userId),
+    ])
+    setNotifications(fresh)
+    setUnreadCount(count)
+  }, [userId])
+
+  useEffect(() => {
+    const id = setInterval(refresh, 30_000)
+    return () => clearInterval(id)
+  }, [refresh])
 
   const handleClickNotification = (notification: NotificationItem) => {
     if (!notification.isRead) {

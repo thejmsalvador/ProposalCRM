@@ -9,6 +9,12 @@ import { prisma } from '../prisma'
 import { logAudit } from '../audit'
 import { createNotification } from '../notifications'
 import {
+  sendEmail,
+  approvalRequestEmail,
+  proposalApprovedEmail,
+  revisionRequestedEmail,
+} from '../email'
+import {
   proposalDraftSchema,
   proposalSubmitSchema,
   computeSubtotal,
@@ -425,13 +431,26 @@ export async function submitProposalForApproval(
     },
   })
 
-  // Notify the assigned approver
+  // Notify + email the assigned approver
   if (raw.assignedApproverId) {
     await createNotification(
       raw.assignedApproverId,
       `Proposal ${saveResult.proposalNumber} has been submitted for your approval by ${session.user.name}.`,
       `/proposals/${saveResult.proposalId}`,
     )
+    const approverUser = await prisma.user.findUnique({
+      where: { id: raw.assignedApproverId },
+      select: { email: true, name: true },
+    })
+    if (approverUser) {
+      const tpl = approvalRequestEmail({
+        approverName: approverUser.name,
+        senderName: session.user.name,
+        proposalNumber: saveResult.proposalNumber,
+        proposalId: saveResult.proposalId,
+      })
+      await sendEmail(approverUser.email, tpl.subject, tpl.html)
+    }
   }
 
   await logAudit(
@@ -812,6 +831,19 @@ export async function approveProposal(
     `/proposals/${proposalId}`,
   )
 
+  const creator = await prisma.user.findUnique({
+    where: { id: proposal.createdById },
+    select: { email: true, name: true },
+  })
+  if (creator) {
+    const tpl = proposalApprovedEmail({
+      creatorName: creator.name,
+      proposalNumber: proposal.number,
+      proposalId,
+    })
+    await sendEmail(creator.email, tpl.subject, tpl.html)
+  }
+
   await logAudit('Proposal', proposalId, 'approved', session.user.id)
   revalidatePath(`/proposals/${proposalId}`)
   revalidatePath('/proposals')
@@ -847,6 +879,21 @@ export async function requestRevision(
     `Revision requested on ${proposal.number}: ${comment}`,
     `/proposals/${proposalId}`,
   )
+
+  const creator = await prisma.user.findUnique({
+    where: { id: proposal.createdById },
+    select: { email: true, name: true },
+  })
+  if (creator) {
+    const tpl = revisionRequestedEmail({
+      creatorName: creator.name,
+      approverName: session.user.name,
+      proposalNumber: proposal.number,
+      proposalId,
+      comment,
+    })
+    await sendEmail(creator.email, tpl.subject, tpl.html)
+  }
 
   await logAudit('Proposal', proposalId, 'revision_requested', session.user.id, { comment })
   revalidatePath(`/proposals/${proposalId}`)
