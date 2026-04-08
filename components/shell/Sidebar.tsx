@@ -45,13 +45,13 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Terms & Conditions',
-    href: '/terms',
+    href: '/tc-templates',
     icon: ScrollText,
     roles: [Role.ADMIN, Role.SUPER_ADMIN],
   },
   {
-    label: 'Team',
-    href: '/team',
+    label: 'Users',
+    href: '/users',
     icon: UserCog,
     roles: [Role.SUPER_ADMIN],
   },

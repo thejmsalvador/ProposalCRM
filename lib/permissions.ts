@@ -5,8 +5,10 @@ export type Action =
   | 'edit:any_proposal'
   | 'approve:proposal'
   | 'manage:catalog'
+  | 'manage:templates'
   | 'manage:users'
   | 'view:audit_log'
+  | 'force:status_override'
 
 /**
  * Permission matrix per role.
@@ -29,7 +31,7 @@ const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     'edit:any_proposal',
     'approve:proposal',
     'manage:catalog',
-    'manage:users',
+    'manage:templates',
     'view:audit_log',
   ],
   [Role.SUPER_ADMIN]: [
@@ -37,8 +39,10 @@ const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     'edit:any_proposal',
     'approve:proposal',
     'manage:catalog',
+    'manage:templates',
     'manage:users',
     'view:audit_log',
+    'force:status_override',
   ],
 }
 
