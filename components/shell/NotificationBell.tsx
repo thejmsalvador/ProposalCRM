@@ -110,8 +110,9 @@ export function NotificationBell({ userId, initialNotifications, initialUnreadCo
         {/* Notification list */}
         <div className="max-h-80 overflow-y-auto">
           {notifications.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-[var(--color-muted)]">
-              No notifications yet.
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm font-medium text-[var(--color-primary)]">You&apos;re all caught up ✓</p>
+              <p className="text-xs text-[var(--color-muted)] mt-1">No new notifications.</p>
             </div>
           ) : (
             notifications.map((n) => (

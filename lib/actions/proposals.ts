@@ -14,6 +14,7 @@ import {
   proposalApprovedEmail,
   revisionRequestedEmail,
 } from '../email'
+import { upsertClientFromProposal } from './clients'
 import {
   proposalDraftSchema,
   proposalSubmitSchema,
@@ -199,6 +200,7 @@ export async function saveProposalDraft(
   )
 
   const proposalData = {
+    clientId: data.clientId || null,
     clientName: data.clientName || 'Untitled',
     contactName: data.contactName || null,
     contactTitle: data.contactTitle || null,
@@ -313,6 +315,20 @@ export async function saveProposalDraft(
     savedNumber = number
   }
 
+  // Auto-link or create Client record if clientName is set but clientId isn't
+  if (data.clientName && !data.clientId) {
+    upsertClientFromProposal(data.clientName, session.user.id)
+      .then(async (newClientId) => {
+        if (newClientId && savedId) {
+          await prisma.proposal.update({
+            where: { id: savedId },
+            data: { clientId: newClientId },
+          }).catch(() => {/* non-critical */})
+        }
+      })
+      .catch(() => {/* non-critical, don't block save */})
+  }
+
   revalidatePath('/proposals')
   return { success: true, proposalId: savedId, proposalNumber: savedNumber }
 }
@@ -396,30 +412,75 @@ export async function submitProposalForApproval(
     return { error: parsed.error.issues[0]?.message ?? 'Validation failed' }
   }
 
-  // Check below-floor pricing requires SALES_MANAGER approver
+  // Check below-floor pricing — auto-escalate to SALES_MANAGER if needed
   const hasBelowFloor = raw.lineItems.some(
     (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
   )
-  if (hasBelowFloor && raw.assignedApproverId) {
-    const approver = await prisma.user.findUnique({
-      where: { id: raw.assignedApproverId },
+  const belowFloorCount = raw.lineItems.filter(
+    (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
+  ).length
+
+  let resolvedApproverId = raw.assignedApproverId || null
+  let autoEscalated = false
+
+  if (hasBelowFloor && resolvedApproverId) {
+    const currentApprover = await prisma.user.findUnique({
+      where: { id: resolvedApproverId },
+      select: { role: true },
     })
-    if (approver && approver.role !== 'SALES_MANAGER' && approver.role !== 'SUPER_ADMIN') {
-      return {
-        error:
-          'Below-floor pricing detected. A Sales Manager must be assigned as approver.',
+    // If the approver is not a manager or super admin, auto-reassign
+    if (
+      currentApprover &&
+      currentApprover.role !== 'SALES_MANAGER' &&
+      currentApprover.role !== 'SUPER_ADMIN'
+    ) {
+      // Find the SALES_MANAGER of the creator's team
+      const creator = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { teamId: true },
+      })
+      const teamManager = creator?.teamId
+        ? await prisma.user.findFirst({
+            where: {
+              role: 'SALES_MANAGER',
+              isActive: true,
+              team: { id: creator.teamId },
+            },
+            select: { id: true },
+          })
+        : null
+
+      // Fall back to any active SALES_MANAGER
+      const fallbackManager = teamManager
+        ? null
+        : await prisma.user.findFirst({
+            where: { role: 'SALES_MANAGER', isActive: true },
+            select: { id: true },
+          })
+
+      const managerId = teamManager?.id ?? fallbackManager?.id
+      if (managerId) {
+        resolvedApproverId = managerId
+        raw = { ...raw, assignedApproverId: managerId }
+        autoEscalated = true
       }
     }
   }
 
-  // Save with version snapshot
+  // Save with version snapshot (uses potentially updated raw with new approverId)
   const saveResult = await saveProposalExplicit(proposalId, raw)
   if ('error' in saveResult) return saveResult
 
-  // Transition to PENDING_APPROVAL
+  // Transition to PENDING_APPROVAL, also update hasBelowFloorPricing flag and approverId
   await prisma.proposal.update({
     where: { id: saveResult.proposalId },
-    data: { status: 'PENDING_APPROVAL' },
+    data: {
+      status: 'PENDING_APPROVAL',
+      hasBelowFloorPricing: hasBelowFloor,
+      ...(autoEscalated && resolvedApproverId
+        ? { assignedApproverId: resolvedApproverId }
+        : {}),
+    },
   })
 
   // Create approval event
@@ -432,14 +493,22 @@ export async function submitProposalForApproval(
   })
 
   // Notify + email the assigned approver
-  if (raw.assignedApproverId) {
+  const notifyApproverId = resolvedApproverId ?? raw.assignedApproverId
+  if (notifyApproverId) {
+    const belowFloorNote = hasBelowFloor
+      ? ` Note: This proposal contains below-floor pricing on ${belowFloorCount} line item${belowFloorCount > 1 ? 's' : ''}.`
+      : ''
+    const autoEscalateNote = autoEscalated
+      ? ' (Auto-assigned: below-floor pricing requires manager approval.)'
+      : ''
+
     await createNotification(
-      raw.assignedApproverId,
-      `Proposal ${saveResult.proposalNumber} has been submitted for your approval by ${session.user.name}.`,
+      notifyApproverId,
+      `Proposal ${saveResult.proposalNumber} has been submitted for your approval by ${session.user.name}.${belowFloorNote}${autoEscalateNote}`,
       `/proposals/${saveResult.proposalId}`,
     )
     const approverUser = await prisma.user.findUnique({
-      where: { id: raw.assignedApproverId },
+      where: { id: notifyApproverId },
       select: { email: true, name: true },
     })
     if (approverUser) {
@@ -1263,6 +1332,7 @@ export async function getPendingApprovals(): Promise<PendingApprovalItem[]> {
 // ─── Get proposal data for edit wizard ───────────────────────────────────────
 
 export type ProposalFormDataExport = {
+  clientId: string | null
   clientName: string
   contactName: string
   contactTitle: string
@@ -1337,6 +1407,7 @@ export async function getProposalForEdit(
   }
 
   const formData: ProposalFormDataExport = {
+    clientId: proposal.clientId ?? null,
     clientName: proposal.clientName,
     contactName: proposal.contactName ?? '',
     contactTitle: proposal.contactTitle ?? '',

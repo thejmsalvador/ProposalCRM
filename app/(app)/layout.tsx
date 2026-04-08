@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
-import { getNotifications, getUnreadCount } from '@/lib/actions/notifications'
+import { getUnreadCount } from '@/lib/actions/notifications'
 import { prisma } from '@/lib/prisma'
 import { AppShell } from '@/components/shell/AppShell'
 
@@ -12,8 +12,7 @@ export default async function AppLayout({
   const session = await getSession()
   if (!session) redirect('/login')
 
-  const [notifications, unreadCount, settings] = await Promise.all([
-    getNotifications(session.user.id),
+  const [unreadCount, settings] = await Promise.all([
     getUnreadCount(session.user.id),
     prisma.systemSettings.findFirst(),
   ])
@@ -21,7 +20,6 @@ export default async function AppLayout({
   return (
     <AppShell
       user={session.user}
-      notifications={notifications}
       unreadCount={unreadCount}
       agencyName={settings?.agencyName ?? 'ProposalCRM'}
       agencyLogoUrl={settings?.agencyLogoUrl ?? null}

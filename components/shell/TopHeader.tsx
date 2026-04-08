@@ -11,10 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { NotificationBell } from './NotificationBell'
 import { signOut } from '@/lib/actions/auth'
 import type { UserModel } from '@/lib/generated/prisma/models/User'
-import type { NotificationItem } from '@/lib/actions/notifications'
 
 // Derive a human-readable page title from the pathname
 function pageTitleFromPath(pathname: string): string {
@@ -25,20 +23,19 @@ function pageTitleFromPath(pathname: string): string {
     clients: 'Clients',
     catalog: 'Service Catalog',
     'payment-terms': 'Payment Terms',
-    terms: 'Terms & Conditions',
-    team: 'Team',
+    'tc-templates': 'Terms & Conditions',
+    users: 'Users',
     settings: 'Settings',
+    notifications: 'Notifications',
   }
   return map[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1)
 }
 
 type Props = {
   user: UserModel
-  notifications: NotificationItem[]
-  unreadCount: number
 }
 
-export function TopHeader({ user, notifications, unreadCount }: Props) {
+export function TopHeader({ user }: Props) {
   const pathname = usePathname()
   const pageTitle = pageTitleFromPath(pathname)
 
@@ -47,13 +44,6 @@ export function TopHeader({ user, notifications, unreadCount }: Props) {
       <h1 className="text-base font-semibold text-[var(--color-primary)]">{pageTitle}</h1>
 
       <div className="flex items-center gap-1">
-        {/* Notification bell */}
-        <NotificationBell
-          userId={user.id}
-          initialNotifications={notifications}
-          initialUnreadCount={unreadCount}
-        />
-
         {/* User avatar dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -92,16 +82,12 @@ export function TopHeader({ user, notifications, unreadCount }: Props) {
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="w-full flex items-center gap-2 text-sm text-red-600 hover:text-red-700"
-                >
-                  <LogOut size={14} />
-                  Sign Out
-                </button>
-              </form>
+            <DropdownMenuItem
+              className="cursor-pointer text-red-600 focus:text-red-600 flex items-center gap-2"
+              onSelect={() => signOut()}
+            >
+              <LogOut size={14} />
+              Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

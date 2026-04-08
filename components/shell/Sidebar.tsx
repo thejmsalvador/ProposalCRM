@@ -13,6 +13,7 @@ import {
   ScrollText,
   UserCog,
   Settings,
+  Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { UserModel } from '@/lib/generated/prisma/models/User'
@@ -24,44 +25,53 @@ type NavItem = {
   icon: React.ElementType
   roles?: Role[]
   variant?: 'default' | 'cta'
+  badge?: number
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Proposals', href: '/proposals', icon: FileText },
-  { label: 'New Proposal', href: '/proposals/new', icon: Plus, variant: 'cta' },
-  { label: 'Clients', href: '/clients', icon: Users },
-  {
-    label: 'Service Catalog',
-    href: '/catalog',
-    icon: Package,
-    roles: [Role.ADMIN, Role.SUPER_ADMIN],
-  },
-  {
-    label: 'Payment Terms',
-    href: '/payment-terms',
-    icon: CreditCard,
-    roles: [Role.ADMIN, Role.SUPER_ADMIN],
-  },
-  {
-    label: 'Terms & Conditions',
-    href: '/tc-templates',
-    icon: ScrollText,
-    roles: [Role.ADMIN, Role.SUPER_ADMIN],
-  },
-  {
-    label: 'Users',
-    href: '/users',
-    icon: UserCog,
-    roles: [Role.SUPER_ADMIN],
-  },
-  {
-    label: 'Settings',
-    href: '/settings',
-    icon: Settings,
-    roles: [Role.SUPER_ADMIN],
-  },
-]
+function getNavItems(unreadCount: number): NavItem[] {
+  return [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Proposals', href: '/proposals', icon: FileText },
+    { label: 'New Proposal', href: '/proposals/new', icon: Plus, variant: 'cta' },
+    { label: 'Clients', href: '/clients', icon: Users },
+    {
+      label: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      badge: unreadCount > 0 ? unreadCount : undefined,
+    },
+    {
+      label: 'Service Catalog',
+      href: '/catalog',
+      icon: Package,
+      roles: [Role.ADMIN, Role.SUPER_ADMIN],
+    },
+    {
+      label: 'Payment Terms',
+      href: '/payment-terms',
+      icon: CreditCard,
+      roles: [Role.ADMIN, Role.SUPER_ADMIN],
+    },
+    {
+      label: 'Terms & Conditions',
+      href: '/tc-templates',
+      icon: ScrollText,
+      roles: [Role.ADMIN, Role.SUPER_ADMIN],
+    },
+    {
+      label: 'Users',
+      href: '/users',
+      icon: UserCog,
+      roles: [Role.SUPER_ADMIN],
+    },
+    {
+      label: 'Settings',
+      href: '/settings',
+      icon: Settings,
+      roles: [Role.SUPER_ADMIN],
+    },
+  ]
+}
 
 const ROLE_LABEL: Record<Role, string> = {
   [Role.SALES_EXEC]: 'Sales Executive',
@@ -74,17 +84,18 @@ type Props = {
   user: UserModel
   agencyName: string
   agencyLogoUrl: string | null
+  unreadCount: number
 }
 
-export function Sidebar({ user, agencyName, agencyLogoUrl }: Props) {
+export function Sidebar({ user, agencyName, agencyLogoUrl, unreadCount }: Props) {
   const pathname = usePathname()
 
-  const visibleItems = NAV_ITEMS.filter(
+  const visibleItems = getNavItems(unreadCount).filter(
     (item) => !item.roles || item.roles.includes(user.role as Role),
   )
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 min-h-screen bg-white border-r border-[var(--color-border)] shrink-0">
+    <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 bg-white border-r border-[var(--color-border)] shrink-0">
       {/* Agency logo / name */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-[var(--color-border)]">
         {agencyLogoUrl ? (
@@ -139,7 +150,12 @@ export function Sidebar({ user, agencyName, agencyLogoUrl }: Props) {
               )}
             >
               <Icon size={16} />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badge !== undefined && (
+                <span className="min-w-[20px] h-5 px-1 rounded-full bg-[var(--color-accent)] text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {item.badge > 99 ? '99+' : item.badge}
+                </span>
+              )}
             </Link>
           )
         })}

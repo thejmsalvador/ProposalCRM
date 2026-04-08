@@ -111,10 +111,41 @@ model TCTemplate {
   proposals Proposal[]
 }
 
+model Client {
+  id          String   @id @default(cuid())
+  companyName String
+  industry    String?
+  website     String?
+  address     String?
+  notes       String?  @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contacts  ClientContact[]
+  proposals Proposal[]
+}
+
+model ClientContact {
+  id           String   @id @default(cuid())
+  clientId     String
+  contactName  String?
+  contactTitle String?
+  email        String?
+  phone        String?
+  isPrimary    Boolean  @default(false)
+  notes        String?  @db.Text
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
 model Proposal {
   id                    String         @id @default(cuid())
   number                String         @unique
   version               Int            @default(1)
+  clientId              String?
   clientName            String
   contactName           String?
   contactTitle          String?
@@ -143,6 +174,7 @@ model Proposal {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  client          Client?           @relation(fields: [clientId], references: [id])
   createdBy       User              @relation("ProposalCreatedBy", fields: [createdById], references: [id])
   assignedApprover User?            @relation("ProposalApprover", fields: [assignedApproverId], references: [id])
   paymentTemplate PaymentTemplate?  @relation(fields: [paymentTemplateId], references: [id])
@@ -230,4 +262,13 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ProposalTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  createdById  String
+  isOrgWide    Boolean  @default(false)
+  snapshotJson Json
+  createdAt    DateTime @default(now())
 }

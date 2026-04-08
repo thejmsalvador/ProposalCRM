@@ -26,6 +26,20 @@ export async function getNotifications(userId: string): Promise<NotificationItem
   })
 }
 
+export async function getAllNotifications(userId: string): Promise<NotificationItem[]> {
+  return prisma.notification.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      message: true,
+      link: true,
+      isRead: true,
+      createdAt: true,
+    },
+  })
+}
+
 export async function getUnreadCount(userId: string): Promise<number> {
   return prisma.notification.count({
     where: { userId, isRead: false },

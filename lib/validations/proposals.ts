@@ -26,6 +26,7 @@ export type LineItemFormData = z.infer<typeof lineItemSchema>
 
 export const proposalDraftSchema = z.object({
   // Step 1
+  clientId: z.string().nullable().default(null),
   clientName: z.string().default(''),
   contactName: z.string().default(''),
   contactTitle: z.string().default(''),

@@ -108,6 +108,7 @@ export function WizardProvider({
   const form = useForm<ProposalFormData>({
     resolver: zodResolver(proposalDraftSchema),
     defaultValues: {
+      clientId: null,
       clientName: '',
       contactName: '',
       contactTitle: '',

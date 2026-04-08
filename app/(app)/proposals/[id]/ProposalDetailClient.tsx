@@ -17,6 +17,7 @@ import {
   Eye,
   RotateCcw,
   GitBranch,
+  Bookmark,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -45,6 +46,7 @@ import {
   submitExistingProposal,
   restoreVersion,
 } from '@/lib/actions/proposals'
+import { saveAsTemplate } from '@/lib/actions/templates'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -328,6 +330,15 @@ export function ProposalDetailClient({
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set())
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null)
 
+  // Save as template
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [templateIsOrgWide, setTemplateIsOrgWide] = useState(false)
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+
+  const canManageTemplates =
+    currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN'
+
   const status = proposal.status
   const isAssignedApprover = proposal.assignedApprover?.id === currentUser.id
 
@@ -430,6 +441,26 @@ export function ProposalDetailClient({
     })
   }
 
+  // ─── Save as template ─────────────────────────────────────────────────────────
+
+  async function handleSaveAsTemplate() {
+    if (!templateName.trim()) {
+      toast({ title: 'Template name is required', variant: 'destructive' })
+      return
+    }
+    setIsSavingTemplate(true)
+    const result = await saveAsTemplate(proposal.id, templateName.trim(), templateIsOrgWide)
+    setIsSavingTemplate(false)
+    if ('error' in result) {
+      toast({ title: 'Error', description: result.error, variant: 'destructive' })
+    } else {
+      toast({ title: 'Template saved', description: `"${templateName}" is now available in the proposal wizard.` })
+      setTemplateDialogOpen(false)
+      setTemplateName('')
+      setTemplateIsOrgWide(false)
+    }
+  }
+
   // ─── Restore version ─────────────────────────────────────────────────────────
 
   function handleRestoreConfirm() {
@@ -482,14 +513,14 @@ export function ProposalDetailClient({
 
   const approvalActionBar =
     canApprove && isAssignedApprover && status === 'PENDING_APPROVAL' ? (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center gap-3">
-        <p className="text-sm text-amber-800 font-medium flex-1 min-w-0">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-col gap-3">
+        <p className="text-sm text-amber-800 font-medium">
           This proposal is awaiting your approval.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
             size="sm"
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className="min-h-[44px] sm:min-h-0 bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto"
             onClick={handleApprove}
             disabled={isPending}
           >
@@ -499,7 +530,7 @@ export function ProposalDetailClient({
           <Button
             size="sm"
             variant="outline"
-            className="text-orange-600 border-orange-300 hover:bg-orange-50"
+            className="min-h-[44px] sm:min-h-0 text-orange-600 border-orange-300 hover:bg-orange-50 w-full sm:w-auto"
             onClick={() => setRevisionOpen(true)}
             disabled={isPending}
           >
@@ -508,7 +539,7 @@ export function ProposalDetailClient({
           <Button
             size="sm"
             variant="outline"
-            className="text-red-600 border-red-200 hover:bg-red-50"
+            className="min-h-[44px] sm:min-h-0 text-red-600 border-red-200 hover:bg-red-50 w-full sm:w-auto"
             onClick={() => setRejectOpen(true)}
             disabled={isPending}
           >
@@ -619,6 +650,19 @@ export function ProposalDetailClient({
           Force Override
         </Button>
       )}
+
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-slate-500 hover:text-slate-700"
+        onClick={() => {
+          setTemplateName(`${proposal.projectTitle} Template`)
+          setTemplateDialogOpen(true)
+        }}
+      >
+        <Bookmark className="h-4 w-4 mr-1.5" />
+        Save as Template
+      </Button>
     </div>
   )
 
@@ -1192,6 +1236,60 @@ export function ProposalDetailClient({
             >
               <RotateCcw className="h-4 w-4 mr-1.5" />
               Yes, Restore
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save as Template Dialog */}
+      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bookmark className="h-5 w-5 text-indigo-500" />
+              Save as Template
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div>
+              <Label htmlFor="template-name">Template Name *</Label>
+              <Input
+                id="template-name"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="e.g. Standard Brand Campaign"
+                className="mt-1"
+              />
+            </div>
+            {canManageTemplates && (
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="template-org-wide"
+                  checked={templateIsOrgWide}
+                  onChange={(e) => setTemplateIsOrgWide(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <Label htmlFor="template-org-wide" className="cursor-pointer">
+                  Make available to entire organisation (Org-wide)
+                </Label>
+              </div>
+            )}
+            <p className="text-xs text-slate-500">
+              The template will pre-fill line items, payment terms, T&C, and pricing settings. Client name, date, and validity period are reset when using a template.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveAsTemplate}
+              disabled={isSavingTemplate || !templateName.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              <Bookmark className="h-4 w-4 mr-1.5" />
+              {isSavingTemplate ? 'Saving…' : 'Save Template'}
             </Button>
           </DialogFooter>
         </DialogContent>
