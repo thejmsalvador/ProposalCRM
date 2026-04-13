@@ -1,6 +1,5 @@
 import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
-import { TopHeader } from './TopHeader'
 import { Toaster } from '@/components/ui/toaster'
 import type { UserModel } from '@/lib/generated/prisma/models/User'
 
@@ -26,8 +25,6 @@ export function AppShell({
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader user={user} />
-
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
           {children}
         </main>

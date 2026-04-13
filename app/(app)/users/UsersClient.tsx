@@ -64,14 +64,14 @@ export function UsersClient({ users, teams }: Props) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-6 p-4 lg:p-6">
       {/* Page header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--color-primary)]">
+          <h1 className="text-2xl font-bold text-slate-900">
             User Management
           </h1>
-          <p className="text-sm text-[var(--color-muted)] mt-0.5">
+          <p className="text-sm text-slate-500 mt-0.5">
             {users.length} {users.length === 1 ? 'member' : 'members'} in your organisation
           </p>
         </div>

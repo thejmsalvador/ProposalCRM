@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useMemo, useTransition, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -16,6 +16,9 @@ import {
   Copy,
   Download,
   Archive,
+  List,
+  KanbanSquare,
+  Columns3,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -38,6 +41,12 @@ import {
 import { duplicateProposal } from '@/lib/actions/proposals'
 import type { ProposalListItem } from '@/lib/actions/proposals'
 import { buttonVariants } from '@/components/ui/button'
+import { KanbanBoard } from '@/components/proposals/kanban/KanbanBoard'
+import { KANBAN_COLUMNS } from '@/components/proposals/kanban/config'
+
+type ViewMode = 'list' | 'kanban'
+const VIEW_PREF_KEY = 'proposals_view_preference'
+const HIDDEN_COLUMNS_KEY = 'kanban_hidden_columns'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -133,6 +142,34 @@ type Props = {
 export function ProposalsClient({ proposals, salespeople, currentUserId, currentUserRole }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
+
+  // View mode persisted to localStorage
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  useEffect(() => {
+    const saved = localStorage.getItem(VIEW_PREF_KEY)
+    if (saved === 'kanban' || saved === 'list') setViewMode(saved)
+  }, [])
+  function switchView(mode: ViewMode) {
+    setViewMode(mode)
+    localStorage.setItem(VIEW_PREF_KEY, mode)
+  }
+
+  // Hidden columns for kanban
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(HIDDEN_COLUMNS_KEY)
+      if (saved) setHiddenColumns(new Set(JSON.parse(saved)))
+    } catch {}
+  }, [])
+  function toggleColumn(status: string) {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev)
+      next.has(status) ? next.delete(status) : next.add(status)
+      localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify(Array.from(next)))
+      return next
+    })
+  }
 
   // Multi-select for bulk PDF
   const canBulkDownload = currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN'
@@ -359,17 +396,50 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Proposals</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {proposals.length} proposal{proposals.length !== 1 ? 's' : ''} total
           </p>
         </div>
-        <Link href="/proposals/new" className={buttonVariants()}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Proposal
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden">
+            <button
+              onClick={() => switchView('list')}
+              className={[
+                'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors min-h-[36px]',
+                viewMode === 'list'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-50',
+              ].join(' ')}
+              aria-label="List view"
+              aria-pressed={viewMode === 'list'}
+            >
+              <List className="h-4 w-4" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => switchView('kanban')}
+              className={[
+                'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors min-h-[36px] border-l border-slate-200',
+                viewMode === 'kanban'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-50',
+              ].join(' ')}
+              aria-label="Kanban view"
+              aria-pressed={viewMode === 'kanban'}
+            >
+              <KanbanSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Board</span>
+            </button>
+          </div>
+          <Link href="/proposals/new" className={buttonVariants({ className: 'gap-2 min-h-[44px]' })}>
+            <Plus size={16} aria-hidden="true" />
+            New Proposal
+          </Link>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -425,19 +495,66 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
           )}
         </div>
 
-        {/* Status checkboxes */}
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
-          {ALL_STATUSES.map((s) => (
-            <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
-              <Checkbox
-                checked={selectedStatuses.has(s)}
-                onCheckedChange={() => toggleStatus(s)}
-                id={`status-${s}`}
-              />
-              <span className="text-sm text-slate-700">{STATUS_LABELS[s]}</span>
-            </label>
-          ))}
-        </div>
+        {/* Status checkboxes — list view only */}
+        {viewMode === 'list' && (
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {ALL_STATUSES.map((s) => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
+                <Checkbox
+                  checked={selectedStatuses.has(s)}
+                  onCheckedChange={() => toggleStatus(s)}
+                  id={`status-${s}`}
+                />
+                <span className="text-sm text-slate-700">{STATUS_LABELS[s]}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {/* Kanban: hide columns dropdown */}
+        {viewMode === 'kanban' && (
+          <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Columns3 className="h-4 w-4" />
+                  Columns ({KANBAN_COLUMNS.length - hiddenColumns.size})
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52">
+                {KANBAN_COLUMNS.map((col) => (
+                  <DropdownMenuItem
+                    key={col.status}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      toggleColumn(col.status)
+                    }}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={!hiddenColumns.has(col.status)}
+                      onCheckedChange={() => toggleColumn(col.status)}
+                      id={`col-${col.status}`}
+                      aria-label={`Toggle ${col.label} column`}
+                    />
+                    <span className="text-sm">{col.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {hiddenColumns.size > 0 && (
+              <button
+                onClick={() => {
+                  setHiddenColumns(new Set())
+                  localStorage.removeItem(HIDDEN_COLUMNS_KEY)
+                }}
+                className="text-xs text-indigo-600 hover:underline"
+              >
+                Show all columns
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bulk action bar */}
@@ -464,8 +581,19 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
         </div>
       )}
 
-      {/* Mobile card list (< md) */}
-      <div className="md:hidden flex flex-col gap-3">
+      {/* Kanban board view */}
+      {viewMode === 'kanban' && (
+        <KanbanBoard
+          proposals={proposals}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          filters={{ search, dateFrom, dateTo, salespersonId }}
+          hiddenColumns={hiddenColumns}
+        />
+      )}
+
+      {/* List view — mobile card list (< md) */}
+      {viewMode === 'list' && <div className="md:hidden flex flex-col gap-3">
         {sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2 text-center rounded-xl border border-slate-200 bg-white">
             <FileText className="h-8 w-8 text-slate-300" />
@@ -572,10 +700,10 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
             </div>
           ))
         )}
-      </div>
+      </div>}
 
-      {/* Desktop table (≥ md) */}
-      <div className="hidden md:block rounded-xl border border-slate-200 bg-white overflow-hidden">
+      {/* List view — Desktop table (≥ md) */}
+      {viewMode === 'list' && <div className="hidden md:block rounded-xl border border-slate-200 bg-white overflow-hidden">
         {sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
             <FileText className="h-8 w-8 text-slate-300" />
@@ -746,11 +874,13 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
             </table>
           </div>
         )}
-      </div>
+      </div>}
 
-      <p className="text-xs text-slate-400 text-right">
-        Showing {sorted.length} of {proposals.length} proposals
-      </p>
+      {viewMode === 'list' && (
+        <p className="text-xs text-slate-400 text-right">
+          Showing {sorted.length} of {proposals.length} proposals
+        </p>
+      )}
     </div>
   )
 }

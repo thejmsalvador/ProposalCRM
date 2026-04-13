@@ -241,6 +241,60 @@ export async function restoreService(
   return { success: true }
 }
 
+export async function bulkRestoreServices(
+  serviceIds: string[],
+): Promise<{ success: true; count: number } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+  if (!can(session.user, 'manage:catalog')) return { error: 'Unauthorized' }
+  if (serviceIds.length === 0) return { error: 'No services selected' }
+
+  await prisma.service.updateMany({
+    where: { id: { in: serviceIds }, isActive: false },
+    data: { isActive: true },
+  })
+
+  await Promise.all(
+    serviceIds.map((id) => logAudit('Service', id, 'restored', session.user.id)),
+  )
+
+  revalidatePath('/catalog')
+  return { success: true, count: serviceIds.length }
+}
+
+/**
+ * Checks which names from the given list already exist as active services (case-insensitive).
+ * Also returns names that match archived services (for warnings).
+ */
+export async function checkDuplicateServiceNames(names: string[]): Promise<{
+  activeNames: string[]
+  archivedNames: string[]
+}> {
+  const session = await getSession()
+  if (!session) return { activeNames: [], archivedNames: [] }
+  if (!can(session.user, 'manage:catalog')) return { activeNames: [], archivedNames: [] }
+
+  const lower = names.map((n) => n.toLowerCase())
+
+  const existing = await prisma.service.findMany({
+    where: { name: { in: names, mode: 'insensitive' } },
+    select: { name: true, isActive: true },
+  })
+
+  const activeNames: string[] = []
+  const archivedNames: string[] = []
+
+  for (const svc of existing) {
+    const lName = svc.name.toLowerCase()
+    if (lower.includes(lName)) {
+      if (svc.isActive) activeNames.push(lName)
+      else archivedNames.push(lName)
+    }
+  }
+
+  return { activeNames, archivedNames }
+}
+
 export async function bulkArchiveServices(
   serviceIds: string[],
 ): Promise<{ success: true; count: number } | { error: string }> {

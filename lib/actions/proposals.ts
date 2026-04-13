@@ -543,6 +543,8 @@ export type ProposalListItem = {
   total: string
   status: string
   version: number
+  validUntil: string
+  pdfUrl: string | null
   createdAt: string
   updatedAt: string
   createdBy: { id: string; name: string }
@@ -565,7 +567,10 @@ export async function getProposals(): Promise<ProposalListItem[]> {
 
   const proposals = await prisma.proposal.findMany({
     where,
-    include: { createdBy: { select: { id: true, name: true } } },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      versions: { select: { pdfUrl: true }, orderBy: { versionNumber: 'desc' }, take: 1 },
+    },
     orderBy: { updatedAt: 'desc' },
   })
 
@@ -577,6 +582,8 @@ export async function getProposals(): Promise<ProposalListItem[]> {
     total: String(p.total),
     status: p.status,
     version: p.version,
+    validUntil: p.validUntil.toISOString(),
+    pdfUrl: p.versions[0]?.pdfUrl ?? null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     createdBy: p.createdBy,
@@ -1660,5 +1667,74 @@ export async function restoreVersion(
   await logAudit('ProposalVersion', versionId, 'restored', session.user.id)
   revalidatePath(`/proposals/${proposalId}`)
 
+  return { success: true }
+}
+
+// ─── Mark as On Hold ──────────────────────────────────────────────────────────
+
+export async function markOnHold(
+  proposalId: string,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } })
+  if (!proposal) return { error: 'Proposal not found' }
+
+  const activeStatuses = ['DRAFT', 'PENDING_APPROVAL', 'REVISION_REQUIRED', 'APPROVED', 'SENT']
+  if (!activeStatuses.includes(proposal.status)) {
+    return { error: 'Only active proposals can be put on hold' }
+  }
+
+  if (
+    proposal.createdById !== session.user.id &&
+    !can(session.user, 'edit:any_proposal')
+  ) {
+    return { error: 'Unauthorized' }
+  }
+
+  await prisma.proposal.update({ where: { id: proposalId }, data: { status: 'ON_HOLD' } })
+
+  await prisma.approvalEvent.create({
+    data: { proposalId, action: 'on_hold', actorId: session.user.id },
+  })
+
+  await logAudit('Proposal', proposalId, 'on_hold', session.user.id)
+  revalidatePath(`/proposals/${proposalId}`)
+  revalidatePath('/proposals')
+  return { success: true }
+}
+
+// ─── Revert to Draft (from On Hold) ──────────────────────────────────────────
+
+export async function revertToDraft(
+  proposalId: string,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } })
+  if (!proposal) return { error: 'Proposal not found' }
+
+  if (proposal.status !== 'ON_HOLD') {
+    return { error: 'Only on-hold proposals can be reverted to draft' }
+  }
+
+  if (
+    proposal.createdById !== session.user.id &&
+    !can(session.user, 'edit:any_proposal')
+  ) {
+    return { error: 'Unauthorized' }
+  }
+
+  await prisma.proposal.update({ where: { id: proposalId }, data: { status: 'DRAFT' } })
+
+  await prisma.approvalEvent.create({
+    data: { proposalId, action: 'reverted_to_draft', actorId: session.user.id },
+  })
+
+  await logAudit('Proposal', proposalId, 'reverted_to_draft', session.user.id)
+  revalidatePath(`/proposals/${proposalId}`)
+  revalidatePath('/proposals')
   return { success: true }
 }

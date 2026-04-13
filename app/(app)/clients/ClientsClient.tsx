@@ -345,7 +345,8 @@ export function ClientsClient({ clients: initial }: Props) {
           </p>
         </div>
         <Button
-          className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
+          type="button"
+          className="gap-2 min-h-[44px]"
           onClick={() => setAddOpen(true)}
         >
           <Plus className="h-4 w-4 mr-2" />

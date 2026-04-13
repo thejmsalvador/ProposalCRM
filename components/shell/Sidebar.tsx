@@ -14,7 +14,9 @@ import {
   UserCog,
   Settings,
   Bell,
+  LogOut,
 } from 'lucide-react'
+import { signOut } from '@/lib/actions/auth'
 import { cn } from '@/lib/utils'
 import type { UserModel } from '@/lib/generated/prisma/models/User'
 import { Role } from '@/lib/generated/prisma/enums'
@@ -158,25 +160,36 @@ export function Sidebar({ user, agencyName, agencyLogoUrl, unreadCount }: Props)
       {/* User profile at bottom */}
       <div className="px-4 py-4 border-t border-[var(--color-border)]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-sm font-semibold shrink-0">
+          <Link
+            href="/settings/profile"
+            className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-sm font-semibold shrink-0 overflow-hidden hover:ring-2 hover:ring-[var(--color-accent)] hover:ring-offset-2 transition-all"
+            aria-label="Go to profile"
+          >
             {user.avatarUrl ? (
               <Image
                 src={user.avatarUrl}
                 alt={user.name}
                 width={32}
                 height={32}
-                className="rounded-full object-cover"
+                className="rounded-full object-cover w-full h-full"
               />
             ) : (
               user.name.charAt(0).toUpperCase()
             )}
-          </div>
-          <div className="min-w-0">
+          </Link>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-[var(--color-primary)] truncate">{user.name}</p>
             <p className="text-xs text-[var(--color-muted)] truncate">
               {ROLE_LABEL[user.role as Role]}
             </p>
           </div>
+          <button
+            onClick={() => signOut()}
+            aria-label="Sign out"
+            className="p-1.5 rounded-md text-[var(--color-muted)] hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </aside>

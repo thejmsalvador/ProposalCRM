@@ -15,12 +15,16 @@ export default async function CatalogPage() {
     getTemplateOptions(),
   ])
 
+  // ADMIN and SUPER_ADMIN can import; SALES_MANAGER can manage catalog but not import
+  const canImport = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
+
   return (
     <CatalogClient
       services={services}
       categories={categories}
       paymentTemplates={templates.paymentTemplates}
       tcTemplates={templates.tcTemplates}
+      canImport={canImport}
     />
   )
 }
