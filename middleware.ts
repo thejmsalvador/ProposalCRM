@@ -1,32 +1,11 @@
-import { createServerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/utils/supabase/middleware'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback', '/pdf/']
 
 export async function middleware(req: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request: req })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          // Forward cookies to both the request and the response so the
-          // session token is refreshed transparently on every request.
-          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request: req })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          )
-        },
-      },
-    },
-  )
+  const { supabase, supabaseResponse } = createClient(req)
 
   // Refresh the session — must be awaited before any redirect/response logic
   const {

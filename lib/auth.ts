@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { prisma } from './prisma'
 import type { UserModel } from './generated/prisma/models/User'
@@ -16,28 +16,7 @@ export type SessionUser = {
  */
 export async function getSession(): Promise<SessionUser | null> {
   const cookieStore = cookies()
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            )
-          } catch {
-            // setAll is called from Server Components where cookies are read-only;
-            // the middleware handles refreshing, so this is safe to ignore.
-          }
-        },
-      },
-    },
-  )
+  const supabase = createClient(cookieStore)
 
   const {
     data: { session },
