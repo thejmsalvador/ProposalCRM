@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SALES_EXEC
+  SALES_MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ProposalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  REVISION_REQUIRED
+  APPROVED
+  SENT
+  WON
+  LOST
+  ON_HOLD
+  EXPIRED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(cuid())
+  name              String
+  email             String    @unique
+  role              Role      @default(SALES_EXEC)
+  jobTitle          String?
+  avatarUrl         String?
+  teamId            String?
+  defaultApproverId String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  lastLoginAt       DateTime?
+
+  team              Team?             @relation("TeamMembers", fields: [teamId], references: [id])
+  managedTeams      Team[]            @relation("TeamManager")
+  createdProposals  Proposal[]        @relation("ProposalCreatedBy")
+  approvedProposals Proposal[]        @relation("ProposalApprover")
+  proposalVersions  ProposalVersion[]
+  approvalEvents    ApprovalEvent[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+}
+
+model Team {
+  id        String  @id @default(cuid())
+  name      String
+  managerId String?
+
+  manager User?  @relation("TeamManager", fields: [managerId], references: [id])
+  members User[] @relation("TeamMembers")
+}
+
+model Service {
+  id              String    @id @default(cuid())
+  name            String
+  category        String
+  description     String
+  defaultScope    String    @db.Text
+  unit            String
+  defaultRate     Decimal   @db.Decimal(12, 2)
+  minRate         Decimal?  @db.Decimal(12, 2)
+  maxRate         Decimal?  @db.Decimal(12, 2)
+  tcTemplateId    String?
+  paymentTplId    String?
+  isActive        Boolean   @default(true)
+  internalNotes   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tcTemplate      TCTemplate?      @relation(fields: [tcTemplateId], references: [id])
+  paymentTemplate PaymentTemplate? @relation(fields: [paymentTplId], references: [id])
+  lineItems       ProposalLineItem[]
+}
+
+model PaymentTemplate {
+  id           String    @id @default(cuid())
+  name         String
+  bodyRichText String    @db.Text
+  isDefault    Boolean   @default(false)
+  isArchived   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  services  Service[]
+  proposals Proposal[]
+}
+
+model TCTemplate {
+  id           String    @id @default(cuid())
+  name         String
+  bodyRichText String    @db.Text
+  categories   String[]
+  isArchived   Boolean   @default(false)
+  isLocked     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  services  Service[]
+  proposals Proposal[]
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  companyName String
+  industry    String?
+  website     String?
+  address     String?
+  notes       String?  @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contacts  ClientContact[]
+  proposals Proposal[]
+}
+
+model ClientContact {
+  id           String   @id @default(cuid())
+  clientId     String
+  contactName  String?
+  contactTitle String?
+  email        String?
+  phone        String?
+  isPrimary    Boolean  @default(false)
+  notes        String?  @db.Text
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model Proposal {
+  id                    String         @id @default(cuid())
+  number                String         @unique
+  version               Int            @default(1)
+  clientId              String?
+  clientName            String
+  contactName           String?
+  contactTitle          String?
+  projectTitle          String
+  date                  DateTime
+  validUntil            DateTime
+  status                ProposalStatus @default(DRAFT)
+  createdById           String
+  assignedApproverId    String?
+  currency              String         @default("PHP")
+  subtotal              Decimal        @db.Decimal(12, 2)
+  discountType          String?
+  discountValue         Decimal?       @db.Decimal(12, 2)
+  vatRate               Decimal?       @db.Decimal(5, 2)
+  total                 Decimal        @db.Decimal(12, 2)
+  pricingNotes          String?
+  introText             String?        @db.Text
+  paymentTemplateId     String?
+  paymentTermsOverride  String?        @db.Text
+  tcTemplateId          String?
+  tcOverride            String?        @db.Text
+  confidentialWatermark Boolean        @default(false)
+  hasBelowFloorPricing  Boolean        @default(false)
+  lostReason            String?
+  internalNotes         String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  client          Client?           @relation(fields: [clientId], references: [id])
+  createdBy       User              @relation("ProposalCreatedBy", fields: [createdById], references: [id])
+  assignedApprover User?            @relation("ProposalApprover", fields: [assignedApproverId], references: [id])
+  paymentTemplate PaymentTemplate?  @relation(fields: [paymentTemplateId], references: [id])
+  tcTemplate      TCTemplate?       @relation(fields: [tcTemplateId], references: [id])
+  lineItems       ProposalLineItem[]
+  versions        ProposalVersion[]
+  approvalEvents  ApprovalEvent[]
+}
+
+model ProposalLineItem {
+  id           String   @id @default(cuid())
+  proposalId   String
+  serviceId    String?
+  customName   String?
+  description  String
+  scopeOfWork  String   @db.Text
+  unit         String
+  quantity     Decimal  @db.Decimal(12, 4)
+  unitRate     Decimal  @db.Decimal(12, 2)
+  lineTotal    Decimal  @db.Decimal(12, 2)
+  isOptional   Boolean  @default(false)
+  internalNote String?
+  sortOrder    Int
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  service  Service? @relation(fields: [serviceId], references: [id])
+}
+
+model ProposalVersion {
+  id            String         @id @default(cuid())
+  proposalId    String
+  versionNumber Int
+  snapshotJson  Json
+  pdfUrl        String?
+  createdById   String
+  changeSummary String?
+  status        ProposalStatus
+  createdAt     DateTime       @default(now())
+
+  proposal  Proposal @relation(fields: [proposalId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+}
+
+model ApprovalEvent {
+  id         String   @id @default(cuid())
+  proposalId String
+  action     String
+  actorId    String
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id])
+  actor    User     @relation(fields: [actorId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  actorId    String
+  diffJson   Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+}
+
+model SystemSettings {
+  id                  String   @id @default(cuid())
+  agencyName          String
+  agencyLogoUrl       String?
+  brandColorHex       String   @default("#4F46E5")
+  defaultValidityDays Int      @default(30)
+  defaultCurrency     String   @default("PHP")
+  defaultVatRate      Decimal  @default(12.00) @db.Decimal(5, 2)
+  updatedAt           DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ProposalTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  createdById  String
+  isOrgWide    Boolean  @default(false)
+  snapshotJson Json
+  createdAt    DateTime @default(now())
+}
