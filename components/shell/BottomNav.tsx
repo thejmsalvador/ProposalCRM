@@ -13,7 +13,6 @@ import {
   ScrollText,
   UserCog,
   Settings,
-  X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -43,13 +42,13 @@ const OVERFLOW_ITEMS: OverflowItem[] = [
   },
   {
     label: 'Terms & Conditions',
-    href: '/terms',
+    href: '/tc-templates',
     icon: ScrollText,
     roles: [Role.ADMIN, Role.SUPER_ADMIN],
   },
   {
-    label: 'Team',
-    href: '/team',
+    label: 'Users',
+    href: '/users',
     icon: UserCog,
     roles: [Role.SUPER_ADMIN],
   },
@@ -133,6 +132,9 @@ export function BottomNav({ user }: Props) {
         {/* Menu — opens sheet for overflow items */}
         <button
           onClick={() => setSheetOpen(true)}
+          aria-label="Open menu"
+          aria-haspopup="dialog"
+          aria-expanded={sheetOpen}
           className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-xs text-[var(--color-muted)] transition-colors"
         >
           <Menu size={20} />

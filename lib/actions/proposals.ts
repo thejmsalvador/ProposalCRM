@@ -424,10 +424,16 @@ export async function submitProposalForApproval(
   let autoEscalated = false
 
   if (hasBelowFloor && resolvedApproverId) {
-    const currentApprover = await prisma.user.findUnique({
-      where: { id: resolvedApproverId },
-      select: { role: true },
-    })
+    const [currentApprover, creator] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: resolvedApproverId },
+        select: { role: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { teamId: true },
+      }),
+    ])
     // If the approver is not a manager or super admin, auto-reassign
     if (
       currentApprover &&
@@ -435,10 +441,6 @@ export async function submitProposalForApproval(
       currentApprover.role !== 'SUPER_ADMIN'
     ) {
       // Find the SALES_MANAGER of the creator's team
-      const creator = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { teamId: true },
-      })
       const teamManager = creator?.teamId
         ? await prisma.user.findFirst({
             where: {
@@ -550,31 +552,130 @@ export type ProposalListItem = {
   createdBy: { id: string; name: string }
 }
 
-export async function getProposals(): Promise<ProposalListItem[]> {
-  const session = await getSession()
-  if (!session) return []
+export type ProposalSortField =
+  | 'number'
+  | 'clientName'
+  | 'projectTitle'
+  | 'total'
+  | 'status'
+  | 'createdBy'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'version'
 
-  const { user } = session
+export type ProposalListQuery = {
+  q?: string
+  statuses?: string[]
+  dateFrom?: string
+  dateTo?: string
+  salespersonId?: string
+  sort?: ProposalSortField
+  dir?: 'asc' | 'desc'
+  page?: number
+  pageSize?: number
+}
 
-  let where: Record<string, unknown> = {}
+export type ProposalsPage = {
+  items: ProposalListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
 
+export type KanbanColumnData = {
+  status: string
+  /** Total row count in this column under the current filters (items may be capped). */
+  total: number
+  /** Sum of proposal totals across the whole column, not just loaded items. */
+  totalValue: string
+  items: ProposalListItem[]
+}
+
+type ProposalFilterQuery = Pick<
+  ProposalListQuery,
+  'q' | 'statuses' | 'dateFrom' | 'dateTo' | 'salespersonId'
+>
+
+const PROPOSAL_SORT_FIELDS: ProposalSortField[] = [
+  'number', 'clientName', 'projectTitle', 'total', 'status',
+  'createdBy', 'createdAt', 'updatedAt', 'version',
+]
+
+const ALL_PROPOSAL_STATUSES = [
+  'DRAFT', 'PENDING_APPROVAL', 'REVISION_REQUIRED', 'APPROVED',
+  'SENT', 'WON', 'LOST', 'ON_HOLD', 'EXPIRED',
+] as const
+
+type ProposalStatusValue = (typeof ALL_PROPOSAL_STATUSES)[number]
+
+function buildProposalWhere(
+  user: { id: string; role: string; teamId: string | null },
+  query: ProposalFilterQuery,
+): Prisma.ProposalWhereInput {
+  const conditions: Prisma.ProposalWhereInput[] = []
+
+  // Role scoping always applies; filters can only narrow it further
   if (user.role === 'SALES_EXEC') {
-    where = { createdById: user.id }
+    conditions.push({ createdById: user.id })
   } else if (user.role === 'SALES_MANAGER') {
-    where = { createdBy: { teamId: user.teamId ?? '__none__' } }
+    conditions.push({ createdBy: { teamId: user.teamId ?? '__none__' } })
   }
-  // ADMIN / SUPER_ADMIN: no filter
 
-  const proposals = await prisma.proposal.findMany({
-    where,
-    include: {
-      createdBy: { select: { id: true, name: true } },
-      versions: { select: { pdfUrl: true }, orderBy: { versionNumber: 'desc' }, take: 1 },
-    },
-    orderBy: { updatedAt: 'desc' },
-  })
+  if (query.q?.trim()) {
+    const q = query.q.trim()
+    conditions.push({
+      OR: [
+        { clientName: { contains: q, mode: 'insensitive' } },
+        { projectTitle: { contains: q, mode: 'insensitive' } },
+      ],
+    })
+  }
 
-  return proposals.map((p) => ({
+  const statuses = query.statuses?.filter((s): s is ProposalStatusValue =>
+    (ALL_PROPOSAL_STATUSES as readonly string[]).includes(s),
+  )
+  if (statuses && statuses.length > 0 && statuses.length < ALL_PROPOSAL_STATUSES.length) {
+    conditions.push({ status: { in: statuses } })
+  }
+
+  const createdAt: { gte?: Date; lte?: Date } = {}
+  if (query.dateFrom) createdAt.gte = new Date(query.dateFrom)
+  if (query.dateTo) createdAt.lte = new Date(query.dateTo + 'T23:59:59.999')
+  if (createdAt.gte || createdAt.lte) conditions.push({ createdAt })
+
+  if (query.salespersonId && query.salespersonId !== 'all') {
+    conditions.push({ createdById: query.salespersonId })
+  }
+
+  return conditions.length > 0 ? { AND: conditions } : {}
+}
+
+function buildProposalOrderBy(
+  sort: ProposalSortField | undefined,
+  dir: 'asc' | 'desc',
+): Prisma.ProposalOrderByWithRelationInput {
+  const field = sort && PROPOSAL_SORT_FIELDS.includes(sort) ? sort : 'updatedAt'
+  if (field === 'createdBy') return { createdBy: { name: dir } }
+  return { [field]: dir }
+}
+
+type ProposalRow = {
+  id: string
+  number: string
+  clientName: string
+  projectTitle: string
+  total: Prisma.Decimal
+  status: string
+  version: number
+  validUntil: Date
+  createdAt: Date
+  updatedAt: Date
+  createdBy: { id: string; name: string }
+  versions?: { pdfUrl: string | null }[]
+}
+
+function toProposalListItem(p: ProposalRow): ProposalListItem {
+  return {
     id: p.id,
     number: p.number,
     clientName: p.clientName,
@@ -583,11 +684,105 @@ export async function getProposals(): Promise<ProposalListItem[]> {
     status: p.status,
     version: p.version,
     validUntil: p.validUntil.toISOString(),
-    pdfUrl: p.versions[0]?.pdfUrl ?? null,
+    pdfUrl: p.versions?.[0]?.pdfUrl ?? null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     createdBy: p.createdBy,
-  }))
+  }
+}
+
+export async function getProposalsPage(query: ProposalListQuery = {}): Promise<ProposalsPage> {
+  const session = await getSession()
+  if (!session) return { items: [], total: 0, page: 1, pageSize: 50 }
+
+  const { user } = session
+  const pageSize = Math.min(Math.max(query.pageSize ?? 50, 1), 100)
+  const page = Math.max(query.page ?? 1, 1)
+  const where = buildProposalWhere(user, query)
+
+  const [rows, total] = await Promise.all([
+    prisma.proposal.findMany({
+      where,
+      orderBy: buildProposalOrderBy(query.sort, query.dir ?? 'desc'),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { createdBy: { select: { id: true, name: true } } },
+    }),
+    prisma.proposal.count({ where }),
+  ])
+
+  return { items: rows.map(toProposalListItem), total, page, pageSize }
+}
+
+export async function getKanbanBoard(
+  query: ProposalFilterQuery = {},
+  perColumn = 50,
+): Promise<KanbanColumnData[]> {
+  const session = await getSession()
+  if (!session) return []
+
+  const { user } = session
+  const where = buildProposalWhere(user, { ...query, statuses: undefined })
+
+  const grouped = await prisma.proposal.groupBy({
+    by: ['status'],
+    where,
+    _count: { _all: true },
+    _sum: { total: true },
+  })
+  const byStatus = new Map(grouped.map((g) => [g.status as string, g]))
+
+  return Promise.all(
+    ALL_PROPOSAL_STATUSES.map(async (status): Promise<KanbanColumnData> => {
+      const group = byStatus.get(status)
+      if (!group) return { status, total: 0, totalValue: '0', items: [] }
+
+      const rows = await prisma.proposal.findMany({
+        where: { AND: [where, { status }] },
+        orderBy: { updatedAt: 'desc' },
+        take: perColumn,
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          versions: { select: { pdfUrl: true }, orderBy: { versionNumber: 'desc' }, take: 1 },
+        },
+      })
+
+      return {
+        status,
+        total: group._count._all,
+        totalValue: String(group._sum.total ?? 0),
+        items: rows.map(toProposalListItem),
+      }
+    }),
+  )
+}
+
+export async function getKanbanColumnPage(
+  status: string,
+  query: ProposalFilterQuery,
+  skip: number,
+  take = 50,
+): Promise<{ items: ProposalListItem[] }> {
+  const session = await getSession()
+  if (!session) return { items: [] }
+
+  if (!(ALL_PROPOSAL_STATUSES as readonly string[]).includes(status)) return { items: [] }
+
+  const { user } = session
+  const where = buildProposalWhere(user, { ...query, statuses: undefined })
+
+  const rows = await prisma.proposal.findMany({
+    where: { AND: [where, { status: status as ProposalStatusValue }] },
+    orderBy: { updatedAt: 'desc' },
+    skip,
+    take: Math.min(Math.max(take, 1), 100),
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      versions: { select: { pdfUrl: true }, orderBy: { versionNumber: 'desc' }, take: 1 },
+    },
+  })
+
+  return { items: rows.map(toProposalListItem) }
 }
 
 // ─── Proposal detail query ────────────────────────────────────────────────────
@@ -600,10 +795,11 @@ export type ProposalVersionEntry = {
   pdfUrl: string | null
   createdAt: string
   createdBy: { id: string; name: string }
-  snapshotJson: {
-    proposal: Record<string, unknown>
-    lineItems: Record<string, unknown>[]
-  }
+}
+
+export type VersionSnapshot = {
+  proposal: Record<string, unknown>
+  lineItems: Record<string, unknown>[]
 }
 
 export type ProposalDetail = {
@@ -670,7 +866,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
   const proposal = await prisma.proposal.findUnique({
     where: { id },
     include: {
-      createdBy: { select: { id: true, name: true, email: true } },
+      createdBy: { select: { id: true, name: true, email: true, teamId: true } },
       assignedApprover: { select: { id: true, name: true } },
       paymentTemplate: { select: { id: true, name: true, bodyRichText: true } },
       tcTemplate: { select: { id: true, name: true, bodyRichText: true } },
@@ -679,7 +875,18 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
         include: { actor: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
       },
-      versions: { orderBy: { versionNumber: 'desc' } },
+      versions: {
+        orderBy: { versionNumber: 'desc' },
+        select: {
+          id: true,
+          versionNumber: true,
+          changeSummary: true,
+          status: true,
+          pdfUrl: true,
+          createdAt: true,
+          createdBy: { select: { id: true, name: true } },
+        },
+      },
     },
   })
 
@@ -693,25 +900,9 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
 
   if (
     user.role === 'SALES_MANAGER' &&
-    proposal.createdBy.id !== user.id
-  ) {
-    // Allow if same team — re-fetch with team check
-    const creator = await prisma.user.findUnique({
-      where: { id: proposal.createdById },
-      select: { teamId: true },
-    })
-    if (!creator || creator.teamId !== user.teamId) return null
-  }
-
-  // Fetch version creators (ProposalVersion has no relation to User in schema)
-  const versionCreatorIds = Array.from(new Set(proposal.versions.map((v) => v.createdById)))
-  const versionCreators = versionCreatorIds.length > 0
-    ? await prisma.user.findMany({
-        where: { id: { in: versionCreatorIds } },
-        select: { id: true, name: true },
-      })
-    : []
-  const creatorMap = Object.fromEntries(versionCreators.map((u) => [u.id, u]))
+    proposal.createdById !== user.id &&
+    proposal.createdBy.teamId !== user.teamId
+  ) return null
 
   return {
     id: proposal.id,
@@ -740,7 +931,11 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     internalNotes: proposal.internalNotes,
     createdAt: proposal.createdAt.toISOString(),
     updatedAt: proposal.updatedAt.toISOString(),
-    createdBy: proposal.createdBy,
+    createdBy: {
+      id: proposal.createdBy.id,
+      name: proposal.createdBy.name,
+      email: proposal.createdBy.email,
+    },
     assignedApprover: proposal.assignedApprover,
     paymentTemplate: proposal.paymentTemplate,
     tcTemplate: proposal.tcTemplate,
@@ -772,13 +967,40 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       status: v.status,
       pdfUrl: v.pdfUrl,
       createdAt: v.createdAt.toISOString(),
-      createdBy: creatorMap[v.createdById] ?? { id: v.createdById, name: 'Unknown' },
-      snapshotJson: v.snapshotJson as {
-        proposal: Record<string, unknown>
-        lineItems: Record<string, unknown>[]
-      },
+      createdBy: v.createdBy,
     })),
   }
+}
+
+export async function getVersionSnapshot(versionId: string): Promise<VersionSnapshot | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const { user } = session
+
+  const version = await prisma.proposalVersion.findUnique({
+    where: { id: versionId },
+    select: {
+      snapshotJson: true,
+      proposal: {
+        select: {
+          createdById: true,
+          createdBy: { select: { teamId: true } },
+        },
+      },
+    },
+  })
+
+  if (!version) return null
+
+  if (user.role === 'SALES_EXEC' && version.proposal.createdById !== user.id) return null
+  if (
+    user.role === 'SALES_MANAGER' &&
+    version.proposal.createdById !== user.id &&
+    version.proposal.createdBy.teamId !== user.teamId
+  ) return null
+
+  return version.snapshotJson as VersionSnapshot
 }
 
 // ─── Duplicate proposal ──────────────────────────────────────────────────────
@@ -888,7 +1110,10 @@ export async function approveProposal(
   if (!session) return { error: 'Unauthenticated' }
   if (!can(session.user, 'approve:proposal')) return { error: 'Unauthorized' }
 
-  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } })
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { createdBy: { select: { email: true, name: true } } },
+  })
   if (!proposal) return { error: 'Proposal not found' }
   if (proposal.status !== 'PENDING_APPROVAL') return { error: 'Proposal is not pending approval' }
   if (proposal.assignedApproverId !== session.user.id && session.user.role !== 'SUPER_ADMIN') {
@@ -907,10 +1132,7 @@ export async function approveProposal(
     `/proposals/${proposalId}`,
   )
 
-  const creator = await prisma.user.findUnique({
-    where: { id: proposal.createdById },
-    select: { email: true, name: true },
-  })
+  const creator = proposal.createdBy
   if (creator) {
     const tpl = proposalApprovedEmail({
       creatorName: creator.name,
@@ -1622,24 +1844,22 @@ export async function restoreVersion(
 
   // Replace line items with snapshot data
   await prisma.proposalLineItem.deleteMany({ where: { proposalId } })
-  for (const li of snapshot.lineItems) {
-    await prisma.proposalLineItem.create({
-      data: {
-        proposalId,
-        serviceId: li.serviceId ? String(li.serviceId) : null,
-        customName: li.customName ? String(li.customName) : null,
-        description: String(li.description ?? ''),
-        scopeOfWork: String(li.scopeOfWork ?? ''),
-        unit: String(li.unit ?? ''),
-        quantity: new Prisma.Decimal(String(li.quantity ?? '1')),
-        unitRate: new Prisma.Decimal(String(li.unitRate ?? '0')),
-        lineTotal: new Prisma.Decimal(String(li.lineTotal ?? '0')),
-        isOptional: Boolean(li.isOptional),
-        internalNote: li.internalNote ? String(li.internalNote) : null,
-        sortOrder: Number(li.sortOrder ?? 0),
-      },
-    })
-  }
+  await prisma.proposalLineItem.createMany({
+    data: snapshot.lineItems.map((li) => ({
+      proposalId,
+      serviceId: li.serviceId ? String(li.serviceId) : null,
+      customName: li.customName ? String(li.customName) : null,
+      description: String(li.description ?? ''),
+      scopeOfWork: String(li.scopeOfWork ?? ''),
+      unit: String(li.unit ?? ''),
+      quantity: new Prisma.Decimal(String(li.quantity ?? '1')),
+      unitRate: new Prisma.Decimal(String(li.unitRate ?? '0')),
+      lineTotal: new Prisma.Decimal(String(li.lineTotal ?? '0')),
+      isOptional: Boolean(li.isOptional),
+      internalNote: li.internalNote ? String(li.internalNote) : null,
+      sortOrder: Number(li.sortOrder ?? 0),
+    })),
+  })
 
   // Create a new ProposalVersion recording this restore
   const restored = await prisma.proposal.findUnique({

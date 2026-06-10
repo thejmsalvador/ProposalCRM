@@ -139,6 +139,8 @@ model ClientContact {
   createdAt    DateTime @default(now())
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
 }
 
 model Proposal {
@@ -182,6 +184,11 @@ model Proposal {
   lineItems       ProposalLineItem[]
   versions        ProposalVersion[]
   approvalEvents  ApprovalEvent[]
+
+  @@index([createdById])
+  @@index([clientId])
+  @@index([status])
+  @@index([updatedAt])
 }
 
 model ProposalLineItem {
@@ -201,6 +208,8 @@ model ProposalLineItem {
 
   proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   service  Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([proposalId])
 }
 
 model ProposalVersion {
@@ -216,6 +225,8 @@ model ProposalVersion {
 
   proposal  Proposal @relation(fields: [proposalId], references: [id])
   createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([proposalId])
 }
 
 model ApprovalEvent {
@@ -228,6 +239,8 @@ model ApprovalEvent {
 
   proposal Proposal @relation(fields: [proposalId], references: [id])
   actor    User     @relation(fields: [actorId], references: [id])
+
+  @@index([proposalId])
 }
 
 model AuditLog {
@@ -240,6 +253,8 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
 }
 
 model SystemSettings {
@@ -262,6 +277,8 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
 }
 
 model ProposalTemplate {

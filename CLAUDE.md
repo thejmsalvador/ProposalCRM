@@ -342,11 +342,11 @@ Use `lib/permissions.ts` — a `can(user, action)` function — for all permissi
 
 | Action | SALES_EXEC | SALES_MANAGER | ADMIN | SUPER_ADMIN |
 |---|---|---|---|---|
-| `create:proposal` | ✓ | ✓ | — | ✓ |
-| `edit:own_proposal` | ✓ | ✓ | — | ✓ |
-| `edit:any_proposal` | — | ✓ | — | ✓ |
-| `approve:proposal` | — | ✓ | — | ✓ |
-| `manage:catalog` | — | — | ✓ | ✓ |
+| `create:proposal` | ✓ | ✓ | ✓ | ✓ |
+| `edit:own_proposal` | ✓ | ✓ | ✓ | ✓ |
+| `edit:any_proposal` | — | ✓ | ✓ | ✓ |
+| `approve:proposal` | — | ✓ | ✓ | ✓ |
+| `manage:catalog` | — | ✓ | ✓ | ✓ |
 | `manage:templates` | — | — | ✓ | ✓ |
 | `manage:users` | — | — | — | ✓ |
 | `view:audit_log` | — | — | ✓ | ✓ |

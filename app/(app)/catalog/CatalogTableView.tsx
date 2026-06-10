@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { archiveService, restoreService, bulkArchiveServices, bulkRestoreServices } from '@/lib/actions/catalog'
 import type { ServiceListItem } from '@/lib/actions/catalog'
 
@@ -100,23 +101,45 @@ export function CatalogTableView({ services, onEdit }: Props) {
   function toggleRow(id: string) {
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
 
-  async function handleBulkArchive() {
-    const ids = Array.from(selected).filter((id) => {
-      const svc = services.find((s) => s.id === id)
-      return svc?.isActive
-    })
-    if (ids.length === 0) return
-    const result = await bulkArchiveServices(ids)
-    if ('error' in result) {
-      toast({ title: 'Error', description: result.error, variant: 'destructive' })
-    } else {
-      toast({ title: `${result.count} service${result.count !== 1 ? 's' : ''} archived` })
-      setSelected(new Set())
+  // Archive needs confirmation; restore is the safe direction and stays direct
+  const [archiveTarget, setArchiveTarget] = useState<{ kind: 'row'; id: string } | { kind: 'bulk' } | null>(null)
+  const [isArchiving, setIsArchiving] = useState(false)
+
+  async function confirmArchive() {
+    if (!archiveTarget) return
+    setIsArchiving(true)
+    try {
+      if (archiveTarget.kind === 'row') {
+        const result = await archiveService(archiveTarget.id)
+        if ('error' in result) {
+          toast({ title: 'Error', description: result.error, variant: 'destructive' })
+        } else {
+          toast({ title: 'Service archived' })
+        }
+      } else {
+        const ids = Array.from(selected).filter((id) => {
+          const svc = services.find((s) => s.id === id)
+          return svc?.isActive
+        })
+        if (ids.length > 0) {
+          const result = await bulkArchiveServices(ids)
+          if ('error' in result) {
+            toast({ title: 'Error', description: result.error, variant: 'destructive' })
+          } else {
+            toast({ title: `${result.count} service${result.count !== 1 ? 's' : ''} archived` })
+            setSelected(new Set())
+          }
+        }
+      }
+    } finally {
+      setIsArchiving(false)
+      setArchiveTarget(null)
     }
   }
 
@@ -132,15 +155,6 @@ export function CatalogTableView({ services, onEdit }: Props) {
     } else {
       toast({ title: `${result.count} service${result.count !== 1 ? 's' : ''} restored` })
       setSelected(new Set())
-    }
-  }
-
-  async function handleRowArchive(id: string) {
-    const result = await archiveService(id)
-    if ('error' in result) {
-      toast({ title: 'Error', description: result.error, variant: 'destructive' })
-    } else {
-      toast({ title: 'Service archived' })
     }
   }
 
@@ -171,7 +185,7 @@ export function CatalogTableView({ services, onEdit }: Props) {
               size="sm"
               variant="outline"
               className="gap-1.5 border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white min-h-[36px]"
-              onClick={handleBulkArchive}
+              onClick={() => setArchiveTarget({ kind: 'bulk' })}
             >
               <Archive size={14} />
               Archive {selectedActive.length} active
@@ -299,7 +313,7 @@ export function CatalogTableView({ services, onEdit }: Props) {
                         <DropdownMenuSeparator />
                         {svc.isActive ? (
                           <DropdownMenuItem
-                            onClick={() => handleRowArchive(svc.id)}
+                            onClick={() => setArchiveTarget({ kind: 'row', id: svc.id })}
                             className="gap-2 text-[var(--color-danger)] focus:text-[var(--color-danger)]"
                           >
                             <Archive size={14} /> Archive
@@ -355,6 +369,21 @@ export function CatalogTableView({ services, onEdit }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={archiveTarget !== null}
+        onOpenChange={(o) => !o && setArchiveTarget(null)}
+        title={
+          archiveTarget?.kind === 'bulk'
+            ? `Archive ${selectedActive.length} service${selectedActive.length !== 1 ? 's' : ''}?`
+            : 'Archive service?'
+        }
+        description="Archived services are hidden from the proposal wizard but stay linked to existing proposals. You can restore them at any time."
+        confirmLabel="Archive"
+        destructive
+        isPending={isArchiving}
+        onConfirm={confirmArchive}
+      />
     </div>
   )
 }

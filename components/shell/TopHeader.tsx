@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { LogOut, User } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import Image from 'next/image'
 import {
   DropdownMenu,
@@ -74,13 +74,6 @@ export function TopHeader({ user }: Props) {
                 <span className="text-xs text-[var(--color-muted)] truncate">{user.email}</span>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <a href="/settings/profile" className="cursor-pointer flex items-center gap-2">
-                <User size={14} />
-                Profile
-              </a>
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer text-red-600 focus:text-red-600 flex items-center gap-2"

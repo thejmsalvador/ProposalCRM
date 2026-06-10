@@ -20,8 +20,10 @@ import { getSession } from '@/lib/auth'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AutoRefresh } from '@/components/dashboard/AutoRefresh'
-import { StatusDonut } from '@/components/dashboard/StatusDonut'
-import { PipelineFunnel } from '@/components/dashboard/PipelineFunnel'
+import {
+  LazyStatusDonut as StatusDonut,
+  LazyPipelineFunnel as PipelineFunnel,
+} from '@/components/dashboard/LazyCharts'
 import {
   proposalsByStatus,
   pipelineValue,

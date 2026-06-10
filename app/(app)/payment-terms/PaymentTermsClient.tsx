@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useTransition } from 'react'
-import { CreditCard, Plus, Star, Archive, RotateCcw, Pencil } from 'lucide-react'
+import { CreditCard, Plus, Star, Pencil } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { setDefaultPaymentTerm } from '@/lib/actions/payment-terms'

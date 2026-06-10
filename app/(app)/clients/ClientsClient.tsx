@@ -10,8 +10,6 @@ import {
   ChevronRight,
   ArrowUpDown,
   Building2,
-  Globe,
-  Star,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'

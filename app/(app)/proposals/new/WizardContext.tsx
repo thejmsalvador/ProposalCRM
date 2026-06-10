@@ -8,7 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { useForm, type UseFormReturn } from 'react-hook-form'
+import { useForm, type UseFormReturn, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   proposalDraftSchema,
@@ -106,7 +106,9 @@ export function WizardProvider({
   const defaultPayment = paymentTemplates.find((p) => p.isDefault)
 
   const form = useForm<ProposalFormData>({
-    resolver: zodResolver(proposalDraftSchema),
+    // Cast: the schema's .default() makes zod's input type looser than its
+    // output, but the form always supplies complete defaultValues
+    resolver: zodResolver(proposalDraftSchema) as Resolver<ProposalFormData>,
     defaultValues: {
       clientId: null,
       clientName: '',

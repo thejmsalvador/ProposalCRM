@@ -103,6 +103,28 @@ function buildWhereClause(userId: string, role: Role, teamId: string | null) {
 
 // ─── getClientList ─────────────────────────────────────────────────────────
 
+type ClientStats = {
+  totalProposals: number
+  wonDeals: number
+  lostDeals: number
+  activeDeals: number
+  lifetimeValue: number
+  activeValue: number
+  lastActivityAt: Date | null
+  lastWonAt: Date | null
+}
+
+const EMPTY_STATS: ClientStats = {
+  totalProposals: 0,
+  wonDeals: 0,
+  lostDeals: 0,
+  activeDeals: 0,
+  lifetimeValue: 0,
+  activeValue: 0,
+  lastActivityAt: null,
+  lastWonAt: null,
+}
+
 export async function getClientList(
   userId: string,
   role: Role,
@@ -112,69 +134,84 @@ export async function getClientList(
 
   const clients = await prisma.client.findMany({
     where,
-    include: {
+    select: {
+      id: true,
+      companyName: true,
+      industry: true,
+      website: true,
+      createdAt: true,
       contacts: {
         where: { isPrimary: true },
         take: 1,
         select: { contactName: true, contactTitle: true },
       },
-      proposals: {
-        select: {
-          status: true,
-          total: true,
-          updatedAt: true,
-        },
-      },
     },
     orderBy: { companyName: 'asc' },
   })
 
+  if (clients.length === 0) return []
+
+  // One grouped aggregate replaces fetching every proposal row:
+  // at most clients × 9 status rows come back regardless of proposal count.
+  const grouped = await prisma.proposal.groupBy({
+    by: ['clientId', 'status'],
+    where: { clientId: { in: clients.map((c) => c.id) } },
+    _count: { _all: true },
+    _sum: { total: true },
+    _max: { updatedAt: true },
+  })
+
+  const statsByClient = new Map<string, ClientStats>()
+  for (const row of grouped) {
+    if (!row.clientId) continue
+    const stats = statsByClient.get(row.clientId) ?? { ...EMPTY_STATS }
+    const count = row._count._all
+    const sum = Number(row._sum.total ?? 0)
+    const maxUpdated = row._max.updatedAt
+
+    stats.totalProposals += count
+    if (row.status === ProposalStatus.WON) {
+      stats.wonDeals += count
+      stats.lifetimeValue += sum
+      stats.lastWonAt = maxUpdated
+    }
+    if (row.status === ProposalStatus.LOST) stats.lostDeals += count
+    if (ACTIVE_STATUSES.includes(row.status as ProposalStatus)) stats.activeDeals += count
+    if (row.status === ProposalStatus.APPROVED || row.status === ProposalStatus.SENT) {
+      stats.activeValue += sum
+    }
+    if (maxUpdated && (!stats.lastActivityAt || maxUpdated > stats.lastActivityAt)) {
+      stats.lastActivityAt = maxUpdated
+    }
+    statsByClient.set(row.clientId, stats)
+  }
+
   const now = new Date()
 
   return clients.map((c) => {
-    const proposals = c.proposals
-    const wonProposals = proposals.filter((p) => p.status === ProposalStatus.WON)
-    const lostDeals = proposals.filter((p) => p.status === ProposalStatus.LOST).length
-    const activeDeals = proposals.filter((p) =>
-      ACTIVE_STATUSES.includes(p.status as ProposalStatus),
-    ).length
-
-    const lifetimeValue = wonProposals.reduce((sum, p) => sum + Number(p.total), 0)
-    const activeValue = proposals
-      .filter(
-        (p) =>
-          p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.SENT,
-      )
-      .reduce((sum, p) => sum + Number(p.total), 0)
-
-    const wonDeals = wonProposals.length
-    const totalProposals = proposals.length
-
-    const wonAndLost = wonDeals + lostDeals
-    const winRate = wonAndLost > 0 ? Math.round((wonDeals / wonAndLost) * 1000) / 10 : 0
-
-    const allDates = proposals.map((p) => p.updatedAt)
-    const lastActivityAt = allDates.length > 0 ? new Date(Math.max(...allDates.map((d) => d.getTime()))) : null
-    const daysSinceLastActivity = lastActivityAt ? daysBetween(lastActivityAt, now) : null
-
-    const wonDates = wonProposals.map((p) => p.updatedAt)
-    const lastWonAt = wonDates.length > 0 ? new Date(Math.max(...wonDates.map((d) => d.getTime()))) : null
+    const stats = statsByClient.get(c.id) ?? EMPTY_STATS
+    const wonAndLost = stats.wonDeals + stats.lostDeals
+    const winRate =
+      wonAndLost > 0 ? Math.round((stats.wonDeals / wonAndLost) * 1000) / 10 : 0
+    const daysSinceLastActivity = stats.lastActivityAt
+      ? daysBetween(stats.lastActivityAt, now)
+      : null
 
     return {
       id: c.id,
       companyName: c.companyName,
       industry: c.industry,
       website: c.website,
-      totalProposals,
-      wonDeals,
-      lostDeals,
-      activeDeals,
-      lifetimeValue,
-      activeValue,
+      totalProposals: stats.totalProposals,
+      wonDeals: stats.wonDeals,
+      lostDeals: stats.lostDeals,
+      activeDeals: stats.activeDeals,
+      lifetimeValue: stats.lifetimeValue,
+      activeValue: stats.activeValue,
       primaryContact: c.contacts[0] ?? null,
       createdAt: c.createdAt,
-      lastWonAt,
-      lastActivityAt,
+      lastWonAt: stats.lastWonAt,
+      lastActivityAt: stats.lastActivityAt,
       winRate,
       daysSinceLastActivity,
       health: computeHealth(daysSinceLastActivity),
@@ -199,7 +236,16 @@ export async function getClientDetail(
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
       proposals: {
-        include: {
+        // Slim select — the bare include dragged every column along,
+        // including the large rich-text fields (introText, tcOverride, …)
+        select: {
+          id: true,
+          number: true,
+          projectTitle: true,
+          total: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
           createdBy: { select: { name: true } },
         },
         orderBy: { createdAt: 'desc' },

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useTransition } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Archive, RotateCcw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 import { paymentTermSchema, type PaymentTermInput } from '@/lib/validations/payment-terms'
 import {
   createPaymentTerm,
@@ -43,7 +43,9 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
     reset,
     formState: { errors, isSubmitting },
   } = useForm<PaymentTermInput>({
-    resolver: zodResolver(paymentTermSchema),
+    // Cast: the schema's .default() makes zod's input type looser than its
+    // output, but the form always supplies complete defaultValues
+    resolver: zodResolver(paymentTermSchema) as Resolver<PaymentTermInput>,
     defaultValues: { name: '', bodyRichText: '', isDefault: false },
   })
 

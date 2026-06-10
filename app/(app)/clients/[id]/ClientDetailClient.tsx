@@ -20,7 +20,6 @@ import {
   FileText,
 } from 'lucide-react'
 import {
-  BarChart,
   Bar,
   XAxis,
   YAxis,
@@ -68,10 +67,6 @@ type Props = {
 
 function formatPHP(value: number) {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-}
-
-function formatMonth(date: Date) {
-  return new Date(date).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -210,8 +205,8 @@ function DealChart({ proposals }: { client: ClientDetail; proposals: ClientDetai
           tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}K`}
         />
         <Tooltip
-          formatter={(value: number, name: string) => [
-            `₱${value.toLocaleString()}`,
+          formatter={(value, name) => [
+            `₱${Number(value ?? 0).toLocaleString()}`,
             name === 'value' ? 'Won Value' : 'Cumulative',
           ]}
         />
@@ -669,7 +664,7 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
 
 export function ClientDetailClient({ client: initial, currentUserId, currentUserRole }: Props) {
   const router = useRouter()
-  const [client, setClient] = useState(initial)
+  const [client] = useState(initial)
   const [editOpen, setEditOpen] = useState(false)
   const [addContactOpen, setAddContactOpen] = useState(false)
   const [showMoreProposals, setShowMoreProposals] = useState(false)

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { getUnreadCount } from '@/lib/actions/notifications'
-import { prisma } from '@/lib/prisma'
+import { getCachedSystemSettings } from '@/lib/queries/settings'
 import { AppShell } from '@/components/shell/AppShell'
 
 export default async function AppLayout({
@@ -14,7 +14,7 @@ export default async function AppLayout({
 
   const [unreadCount, settings] = await Promise.all([
     getUnreadCount(session.user.id),
-    prisma.systemSettings.findFirst(),
+    getCachedSystemSettings(),
   ])
 
   return (

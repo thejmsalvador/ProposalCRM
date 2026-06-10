@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   DndContext,
@@ -34,6 +34,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanDragOverlay } from './KanbanDragOverlay'
 import { KANBAN_COLUMNS } from './config'
@@ -44,8 +45,9 @@ import {
   markOnHold,
   revertToDraft,
   duplicateProposal,
+  getKanbanColumnPage,
 } from '@/lib/actions/proposals'
-import type { ProposalListItem } from '@/lib/actions/proposals'
+import type { ProposalListItem, KanbanColumnData } from '@/lib/actions/proposals'
 
 // ─── Win/Loss modal ───────────────────────────────────────────────────────────
 
@@ -228,34 +230,52 @@ function EmptyBoard() {
 
 // ─── Main Board ───────────────────────────────────────────────────────────────
 
+type ColumnState = {
+  status: string
+  total: number
+  totalValue: number
+  items: ProposalListItem[]
+}
+
 type Props = {
-  proposals: ProposalListItem[]
-  currentUserId: string
-  currentUserRole: string
-  filters: {
-    search: string
+  columns: KanbanColumnData[]
+  query: {
+    q: string
     dateFrom: string
     dateTo: string
     salespersonId: string
   }
+  hasActiveFilters: boolean
+  currentUserId: string
+  currentUserRole: string
   hiddenColumns: Set<string>
 }
 
+function toColumnState(columns: KanbanColumnData[]): ColumnState[] {
+  return columns.map((c) => ({
+    status: c.status,
+    total: c.total,
+    totalValue: parseFloat(c.totalValue) || 0,
+    items: c.items,
+  }))
+}
+
 export function KanbanBoard({
-  proposals: initialProposals,
+  columns: initialColumns,
+  query,
+  hasActiveFilters,
   currentUserId,
   currentUserRole,
-  filters,
   hiddenColumns,
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
 
-  // Local optimistic state
-  const [proposals, setProposals] = useState(initialProposals)
+  // Local optimistic state, re-synced whenever the server sends fresh columns
+  const [columns, setColumns] = useState<ColumnState[]>(() => toColumnState(initialColumns))
   useEffect(() => {
-    setProposals(initialProposals)
-  }, [initialProposals])
+    setColumns(toColumnState(initialColumns))
+  }, [initialColumns])
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -264,6 +284,13 @@ export function KanbanBoard({
   // Win/Loss modal
   const [winLossModal, setWinLossModal] = useState<WinLossModal | null>(null)
   const [isModalPending, setIsModalPending] = useState(false)
+
+  // Duplicate confirmation
+  const [duplicateId, setDuplicateId] = useState<string | null>(null)
+  const [isDuplicating, setIsDuplicating] = useState(false)
+
+  // Per-column "Load more"
+  const [loadingMoreStatus, setLoadingMoreStatus] = useState<string | null>(null)
 
   // Mobile active column
   const [mobileColumn, setMobileColumn] = useState(KANBAN_COLUMNS[0].status)
@@ -275,33 +302,80 @@ export function KanbanBoard({
     }),
   )
 
-  // Filtered proposals
-  const filtered = useMemo(() => {
-    const q = filters.search.toLowerCase()
-    const from = filters.dateFrom ? new Date(filters.dateFrom).getTime() : null
-    const to = filters.dateTo ? new Date(filters.dateTo + 'T23:59:59').getTime() : null
-
-    return proposals.filter((p) => {
-      if (q && !p.clientName.toLowerCase().includes(q) && !p.projectTitle.toLowerCase().includes(q))
-        return false
-      if (from && new Date(p.createdAt).getTime() < from) return false
-      if (to && new Date(p.createdAt).getTime() > to) return false
-      if (filters.salespersonId !== 'all' && p.createdBy.id !== filters.salespersonId) return false
-      return true
-    })
-  }, [proposals, filters])
-
+  const allItems = columns.flatMap((c) => c.items)
   const visibleColumns = KANBAN_COLUMNS.filter((col) => !hiddenColumns.has(col.status))
-  const allEmpty = filtered.length === 0 && initialProposals.length === 0
+  const boardTotal = columns.reduce((sum, c) => sum + c.total, 0)
 
-  if (allEmpty) return <EmptyBoard />
+  function columnFor(status: string) {
+    return columns.find((c) => c.status === status)
+  }
 
-  const allFilteredEmpty = filtered.length === 0 && initialProposals.length > 0
+  function statusOf(proposalId: string): string | null {
+    return columns.find((c) => c.items.some((p) => p.id === proposalId))?.status ?? null
+  }
+
+  function moveCard(proposalId: string, fromStatus: string, toStatus: string) {
+    setColumns((prev) => {
+      const item = prev
+        .find((c) => c.status === fromStatus)
+        ?.items.find((p) => p.id === proposalId)
+      if (!item) return prev
+      const value = parseFloat(item.total) || 0
+      return prev.map((c) => {
+        if (c.status === fromStatus) {
+          return {
+            ...c,
+            total: c.total - 1,
+            totalValue: c.totalValue - value,
+            items: c.items.filter((p) => p.id !== proposalId),
+          }
+        }
+        if (c.status === toStatus) {
+          return {
+            ...c,
+            total: c.total + 1,
+            totalValue: c.totalValue + value,
+            items: [{ ...item, status: toStatus }, ...c.items],
+          }
+        }
+        return c
+      })
+    })
+  }
+
+  async function handleLoadMore(status: string) {
+    const col = columnFor(status)
+    if (!col || loadingMoreStatus) return
+    setLoadingMoreStatus(status)
+    try {
+      const { items } = await getKanbanColumnPage(status, query, col.items.length)
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.status === status
+            ? {
+                ...c,
+                items: [
+                  ...c.items,
+                  ...items.filter((n) => !c.items.some((e) => e.id === n.id)),
+                ],
+              }
+            : c,
+        ),
+      )
+    } catch {
+      toast({ title: 'Failed to load more proposals', variant: 'destructive' })
+    } finally {
+      setLoadingMoreStatus(null)
+    }
+  }
+
+  if (boardTotal === 0 && !hasActiveFilters) return <EmptyBoard />
+
+  const allFilteredEmpty = boardTotal === 0 && hasActiveFilters
 
   // ─── DnD handlers ────────────────────────────────────────────────────────────
 
   function handleDragStart({ active }: DragStartEvent) {
-    // Block touch/mobile drag
     setActiveId(active.id as string)
   }
 
@@ -356,10 +430,8 @@ export function KanbanBoard({
     }
 
     // Optimistic update
-    const previous = proposals.map((p) => ({ ...p }))
-    setProposals((prev) =>
-      prev.map((p) => (p.id === proposalId ? { ...p, status: toStatus } : p)),
-    )
+    const previous = columns
+    moveCard(proposalId, fromStatus, toStatus)
 
     startTransition(async () => {
       let result: { success: true } | { error: string }
@@ -375,7 +447,7 @@ export function KanbanBoard({
       }
 
       if ('error' in result) {
-        setProposals(previous)
+        setColumns(previous)
         toast({ title: 'Move failed', description: result.error, variant: 'destructive' })
       } else {
         router.refresh()
@@ -412,44 +484,73 @@ export function KanbanBoard({
     })
   }
 
-  function handleMarkAsSent(id: string) {
-    const previous = proposals.map((p) => ({ ...p }))
-    setProposals((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'SENT' } : p)))
+  function runStatusMove(
+    id: string,
+    toStatus: string,
+    action: (id: string) => Promise<{ success: true } | { error: string }>,
+  ) {
+    const fromStatus = statusOf(id)
+    const previous = columns
+    if (fromStatus) moveCard(id, fromStatus, toStatus)
     startTransition(async () => {
-      const result = await markAsSent(id)
+      const result = await action(id)
       if ('error' in result) {
-        setProposals(previous)
+        setColumns(previous)
         toast({ title: 'Failed', description: result.error, variant: 'destructive' })
       } else {
         router.refresh()
       }
     })
+  }
+
+  function handleMarkAsSent(id: string) {
+    runStatusMove(id, 'SENT', markAsSent)
   }
 
   function handleMarkOnHold(id: string) {
-    const previous = proposals.map((p) => ({ ...p }))
-    setProposals((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'ON_HOLD' } : p)))
-    startTransition(async () => {
-      const result = await markOnHold(id)
-      if ('error' in result) {
-        setProposals(previous)
-        toast({ title: 'Failed', description: result.error, variant: 'destructive' })
-      } else {
-        router.refresh()
-      }
-    })
+    runStatusMove(id, 'ON_HOLD', markOnHold)
   }
 
-  function handleDuplicate(id: string) {
+  function confirmDuplicate() {
+    if (!duplicateId) return
+    setIsDuplicating(true)
     startTransition(async () => {
-      const result = await duplicateProposal(id)
+      const result = await duplicateProposal(duplicateId)
+      setIsDuplicating(false)
+      // On success, duplicateProposal redirects to the new draft
       if (result && 'error' in result) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
+        setDuplicateId(null)
       }
     })
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
+
+  function renderColumn(col: (typeof KANBAN_COLUMNS)[number], isOver: boolean) {
+    const state = columnFor(col.status)
+    const items = state?.items ?? []
+    const totalCount = state?.total ?? 0
+    return (
+      <KanbanColumn
+        key={col.status}
+        column={col}
+        proposals={items}
+        totalCount={totalCount}
+        totalValue={state?.totalValue ?? 0}
+        hasMore={items.length < totalCount}
+        isLoadingMore={loadingMoreStatus === col.status}
+        onLoadMore={() => handleLoadMore(col.status)}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
+        isOver={isOver}
+        onWinLossModal={(id, type) => setWinLossModal({ proposalId: id, type })}
+        onMarkAsSent={handleMarkAsSent}
+        onMarkOnHold={handleMarkOnHold}
+        onDuplicate={setDuplicateId}
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -475,53 +576,19 @@ export function KanbanBoard({
       >
         {/* Desktop: horizontal scroll board */}
         <div className="hidden md:flex gap-3 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
-          {visibleColumns.map((col) => {
-            const colProposals = filtered.filter((p) => p.status === col.status)
-            return (
-              <KanbanColumn
-                key={col.status}
-                column={col}
-                proposals={colProposals}
-                currentUserId={currentUserId}
-                currentUserRole={currentUserRole}
-                activeId={activeId}
-                isOver={overId === col.status}
-                onWinLossModal={(id, type) => setWinLossModal({ proposalId: id, type })}
-                onMarkAsSent={handleMarkAsSent}
-                onMarkOnHold={handleMarkOnHold}
-                onDuplicate={handleDuplicate}
-              />
-            )
-          })}
+          {visibleColumns.map((col) => renderColumn(col, overId === col.status))}
         </div>
 
         {/* Mobile: single column at a time */}
         <div className="md:hidden">
           {visibleColumns
             .filter((col) => col.status === mobileColumn)
-            .map((col) => {
-              const colProposals = filtered.filter((p) => p.status === col.status)
-              return (
-                <KanbanColumn
-                  key={col.status}
-                  column={col}
-                  proposals={colProposals}
-                  currentUserId={currentUserId}
-                  currentUserRole={currentUserRole}
-                  activeId={activeId}
-                  isOver={false}
-                  onWinLossModal={(id, type) => setWinLossModal({ proposalId: id, type })}
-                  onMarkAsSent={handleMarkAsSent}
-                  onMarkOnHold={handleMarkOnHold}
-                  onDuplicate={handleDuplicate}
-                />
-              )
-            })}
+            .map((col) => renderColumn(col, false))}
         </div>
 
         <KanbanDragOverlay
           activeId={activeId}
-          proposals={proposals}
+          proposals={allItems}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
         />
@@ -536,6 +603,16 @@ export function KanbanBoard({
           isPending={isModalPending}
         />
       )}
+
+      <ConfirmDialog
+        open={duplicateId !== null}
+        onOpenChange={(o) => !o && setDuplicateId(null)}
+        title="Duplicate proposal?"
+        description="This creates a new draft proposal with a new number, copying all line items, pricing, and terms. You'll be taken to the new draft."
+        confirmLabel="Duplicate"
+        isPending={isDuplicating}
+        onConfirm={confirmDuplicate}
+      />
     </div>
   )
 }

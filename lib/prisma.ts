@@ -6,7 +6,14 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+  // Modest pool: DATABASE_URL points at Supabase's pgbouncer, which multiplexes
+  // server connections; a large per-instance pool just exhausts pooler slots.
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL!,
+    max: 10,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+  })
   return new PrismaClient({ adapter })
 }
 

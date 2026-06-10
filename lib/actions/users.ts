@@ -5,6 +5,7 @@ import { getSession } from '../auth'
 import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { getSupabaseAdmin } from '../supabaseAdmin'
+import type { Role } from '../generated/prisma/enums'
 import { logAudit } from '../audit'
 import {
   inviteUserSchema,
@@ -119,13 +120,13 @@ export async function inviteUser(
       data: {
         name: data.name,
         email: data.email.toLowerCase(),
-        role: data.role as any,
+        role: data.role as Role,
         jobTitle: data.jobTitle || null,
         teamId: data.teamId || null,
         isActive: true,
       },
     })
-  } catch (err) {
+  } catch {
     // Prisma create failed — clean up the Supabase Auth user so state stays consistent
     if (authData?.user?.id) {
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
@@ -159,7 +160,7 @@ export async function updateUser(
     data: {
       name: data.name,
       jobTitle: data.jobTitle || null,
-      role: data.role as any,
+      role: data.role as Role,
       teamId: data.teamId || null,
       defaultApproverId: data.defaultApproverId || null,
       isActive: data.isActive,

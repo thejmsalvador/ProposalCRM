@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -34,7 +34,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
-import type { ProposalDetail, ProposalVersionEntry } from '@/lib/actions/proposals'
+import type { ProposalDetail, ProposalVersionEntry, VersionSnapshot } from '@/lib/actions/proposals'
 import {
   approveProposal,
   requestRevision,
@@ -45,6 +45,7 @@ import {
   forceOverrideStatus,
   submitExistingProposal,
   restoreVersion,
+  getVersionSnapshot,
 } from '@/lib/actions/proposals'
 import { saveAsTemplate } from '@/lib/actions/templates'
 
@@ -152,7 +153,7 @@ type Props = {
 
 // ─── Snapshot preview component ───────────────────────────────────────────────
 
-function SnapshotPreview({ snapshot }: { snapshot: ProposalVersionEntry['snapshotJson'] }) {
+function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
   // Cast to typed shape for safe rendering
   const sp = snapshot.proposal as {
     clientName?: string
@@ -327,8 +328,24 @@ export function ProposalDetailClient({
 
   // Version preview / restore
   const [previewVersion, setPreviewVersion] = useState<ProposalVersionEntry | null>(null)
+  const [previewSnapshot, setPreviewSnapshot] = useState<VersionSnapshot | null>(null)
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set())
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null)
+
+  // Snapshots are large, so they stay server-side until a version is previewed
+  useEffect(() => {
+    if (!previewVersion) {
+      setPreviewSnapshot(null)
+      return
+    }
+    let cancelled = false
+    getVersionSnapshot(previewVersion.id).then((snapshot) => {
+      if (!cancelled) setPreviewSnapshot(snapshot)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [previewVersion])
 
   // Save as template
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
@@ -1188,7 +1205,15 @@ export function ProposalDetailClient({
           )}
 
           {previewVersion && (
-            <SnapshotPreview snapshot={previewVersion.snapshotJson} />
+            previewSnapshot ? (
+              <SnapshotPreview snapshot={previewSnapshot} />
+            ) : (
+              <div className="flex flex-col gap-3 py-2" aria-busy="true">
+                <div className="h-16 rounded-lg bg-slate-100 animate-pulse" />
+                <div className="h-32 rounded-lg bg-slate-100 animate-pulse" />
+                <div className="h-20 w-60 ml-auto rounded-lg bg-slate-100 animate-pulse" />
+              </div>
+            )
           )}
 
           <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">

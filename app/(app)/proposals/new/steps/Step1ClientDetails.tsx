@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 import { searchClients } from '@/lib/actions/clients'
 import type { ClientOption } from '@/lib/actions/clients'
 import { Building2, UserPlus } from 'lucide-react'

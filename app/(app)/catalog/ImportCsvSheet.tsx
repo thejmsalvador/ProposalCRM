@@ -46,7 +46,6 @@ type ImportResult = {
 }
 
 const REQUIRED_HEADERS = ['name', 'category', 'description', 'unit', 'defaultrate']
-const OPTIONAL_HEADERS = ['defaultscope', 'minrate', 'maxrate', 'internalnotes']
 const MAX_ROWS = 200
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 
@@ -330,7 +329,8 @@ export function ImportCsvSheet({ open, onOpenChange }: Props) {
   function toggleExpand(idx: number) {
     setExpandedRows((prev) => {
       const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
       return next
     })
   }

@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
 import { getProposalDetail } from '@/lib/actions/proposals'
+import { Breadcrumbs } from '@/components/shell/Breadcrumbs'
 import { ProposalDetailClient } from './ProposalDetailClient'
 
 type Props = {
@@ -23,12 +24,22 @@ export default async function ProposalDetailPage({ params }: Props) {
   const canForceOverride = session.user.role === 'SUPER_ADMIN'
 
   return (
-    <ProposalDetailClient
-      proposal={proposal}
-      currentUser={{ id: session.user.id, role: session.user.role }}
-      canEdit={canEdit}
-      canApprove={canApprove}
-      canForceOverride={canForceOverride}
-    />
+    <>
+      <div className="px-6 pt-4">
+        <Breadcrumbs
+          items={[
+            { label: 'Proposals', href: '/proposals' },
+            { label: proposal.number },
+          ]}
+        />
+      </div>
+      <ProposalDetailClient
+        proposal={proposal}
+        currentUser={{ id: session.user.id, role: session.user.role }}
+        canEdit={canEdit}
+        canApprove={canApprove}
+        canForceOverride={canForceOverride}
+      />
+    </>
   )
 }

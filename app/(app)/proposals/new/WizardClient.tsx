@@ -9,12 +9,43 @@ import {
 } from './WizardContext'
 import { useAutoSave } from './useAutoSave'
 import { StepIndicator } from './StepIndicator'
+import dynamic from 'next/dynamic'
 import { Step1ClientDetails } from './steps/Step1ClientDetails'
-import { Step2Services } from './steps/Step2Services'
-import { Step3Pricing } from './steps/Step3Pricing'
-import { Step4PaymentTerms } from './steps/Step4PaymentTerms'
-import { Step5TermsConditions } from './steps/Step5TermsConditions'
-import { Step6Review } from './steps/Step6Review'
+
+function StepSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading step">
+      <div className="h-10 rounded-lg bg-slate-100 animate-pulse" />
+      <div className="h-24 rounded-lg bg-slate-100 animate-pulse" />
+      <div className="h-10 w-1/2 rounded-lg bg-slate-100 animate-pulse" />
+    </div>
+  )
+}
+
+// Step 1 stays static (first paint); the rest load on demand and are
+// prefetched after mount so "Next" never shows the skeleton in practice.
+// The react-hook-form instance lives in WizardProvider above this split,
+// so lazy-mounting steps doesn't affect form state.
+const Step2Services = dynamic(
+  () => import('./steps/Step2Services').then((m) => m.Step2Services),
+  { ssr: false, loading: () => <StepSkeleton /> },
+)
+const Step3Pricing = dynamic(
+  () => import('./steps/Step3Pricing').then((m) => m.Step3Pricing),
+  { ssr: false, loading: () => <StepSkeleton /> },
+)
+const Step4PaymentTerms = dynamic(
+  () => import('./steps/Step4PaymentTerms').then((m) => m.Step4PaymentTerms),
+  { ssr: false, loading: () => <StepSkeleton /> },
+)
+const Step5TermsConditions = dynamic(
+  () => import('./steps/Step5TermsConditions').then((m) => m.Step5TermsConditions),
+  { ssr: false, loading: () => <StepSkeleton /> },
+)
+const Step6Review = dynamic(
+  () => import('./steps/Step6Review').then((m) => m.Step6Review),
+  { ssr: false, loading: () => <StepSkeleton /> },
+)
 import { Button } from '@/components/ui/button'
 import type {
   ApproverOption,
@@ -94,6 +125,15 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [form.formState.isDirty])
+
+  // Warm the lazy step chunks after first paint
+  useEffect(() => {
+    import('./steps/Step2Services')
+    import('./steps/Step3Pricing')
+    import('./steps/Step4PaymentTerms')
+    import('./steps/Step5TermsConditions')
+    import('./steps/Step6Review')
+  }, [])
 
   function applyTemplate(template: ProposalTemplateOption) {
     const sp = template.snapshotJson.proposal

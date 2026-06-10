@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
 import { getWizardData, getProposalForEdit } from '@/lib/actions/proposals'
+import { Breadcrumbs } from '@/components/shell/Breadcrumbs'
 import { WizardClient } from '../../new/WizardClient'
 
 type Props = {
@@ -26,6 +27,15 @@ export default async function EditProposalPage({ params }: Props) {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mb-4">
+        <Breadcrumbs
+          items={[
+            { label: 'Proposals', href: '/proposals' },
+            { label: proposalNumber ?? 'Proposal', href: `/proposals/${proposalId}` },
+            { label: 'Edit' },
+          ]}
+        />
+      </div>
       <WizardClient
         services={wizardData.services}
         approvers={wizardData.approvers}

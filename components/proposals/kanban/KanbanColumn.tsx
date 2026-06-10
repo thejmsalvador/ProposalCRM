@@ -24,9 +24,15 @@ function formatCurrencyShort(total: number) {
 type Props = {
   column: KanbanColumnConfig
   proposals: ProposalListItem[]
+  /** Total row count in the column under current filters (may exceed loaded items). */
+  totalCount: number
+  /** Sum of proposal totals across the whole column, server-computed. */
+  totalValue: number
+  hasMore: boolean
+  isLoadingMore: boolean
+  onLoadMore: () => void
   currentUserId: string
   currentUserRole: string
-  activeId: string | null
   isOver: boolean
   isLoading?: boolean
   onWinLossModal: (id: string, type: 'WON' | 'LOST') => void
@@ -40,9 +46,13 @@ type Props = {
 export function KanbanColumn({
   column,
   proposals,
+  totalCount,
+  totalValue,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
   currentUserId,
   currentUserRole,
-  activeId,
   isOver,
   isLoading,
   onWinLossModal,
@@ -51,8 +61,6 @@ export function KanbanColumn({
   onDuplicate,
 }: Props) {
   const { setNodeRef } = useDroppable({ id: column.status })
-
-  const columnTotal = proposals.reduce((sum, p) => sum + parseFloat(p.total), 0)
 
   const dropOverStyle = isOver
     ? column.dropAllowed
@@ -81,12 +89,12 @@ export function KanbanColumn({
             />
           )}
           <span className="text-xs font-semibold text-slate-500 bg-white/70 rounded-full px-1.5 py-0.5 border border-slate-200 tabular-nums">
-            {proposals.length}
+            {totalCount}
           </span>
         </div>
-        {proposals.length > 0 && (
+        {totalCount > 0 && (
           <p className="text-[11px] text-slate-400 mt-0.5 tabular-nums">
-            {formatCurrencyShort(columnTotal)} total
+            {formatCurrencyShort(totalValue)} total
           </p>
         )}
       </div>
@@ -124,6 +132,18 @@ export function KanbanColumn({
           ))
         )}
 
+        {hasMore && !isLoading && (
+          <button
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="w-full py-2 rounded-[8px] border border-dashed border-slate-300 text-xs font-medium text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-colors disabled:opacity-50"
+          >
+            {isLoadingMore
+              ? 'Loading…'
+              : `Load more (${proposals.length} of ${totalCount})`}
+          </button>
+        )}
+
         {/* Drag-over blocked overlay tooltip */}
         {isOver && !column.dropAllowed && column.dropBlockedReason && (
           <div className="absolute inset-x-2 bottom-2 bg-red-600 text-white text-xs rounded-lg px-3 py-2 shadow-lg z-10">
@@ -133,13 +153,14 @@ export function KanbanColumn({
       </div>
 
       {/* Summary footer — only when not empty */}
-      {proposals.length > 0 && (
+      {totalCount > 0 && (
         <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
           <span className="text-[10px] text-slate-400">
-            {proposals.length} proposal{proposals.length !== 1 ? 's' : ''}
+            {totalCount} proposal{totalCount !== 1 ? 's' : ''}
+            {proposals.length < totalCount ? ` · ${proposals.length} loaded` : ''}
           </span>
           <span className="text-[10px] text-slate-500 font-medium tabular-nums">
-            {formatCurrencyShort(columnTotal)}
+            {formatCurrencyShort(totalValue)}
           </span>
         </div>
       )}

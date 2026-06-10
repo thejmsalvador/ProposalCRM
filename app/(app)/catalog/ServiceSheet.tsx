@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 import { serviceSchema, type ServiceInput } from '@/lib/validations/catalog'
 import { createService, updateService, archiveService, restoreService } from '@/lib/actions/catalog'
 import type { ServiceListItem, TemplateOption } from '@/lib/actions/catalog'

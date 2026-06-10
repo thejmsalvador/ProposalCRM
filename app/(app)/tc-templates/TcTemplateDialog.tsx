@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useTransition } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Archive, RotateCcw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 import { tcTemplateSchema, type TcTemplateInput } from '@/lib/validations/tc-templates'
 import {
   createTcTemplate,
@@ -47,7 +47,9 @@ export function TcTemplateDialog({ open, onOpenChange, template, serviceCategori
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<TcTemplateInput>({
-    resolver: zodResolver(tcTemplateSchema),
+    // Cast: the schema's .default() makes zod's input type looser than its
+    // output, but the form always supplies complete defaultValues
+    resolver: zodResolver(tcTemplateSchema) as Resolver<TcTemplateInput>,
     defaultValues: { name: '', bodyRichText: '', categories: [] },
   })
 

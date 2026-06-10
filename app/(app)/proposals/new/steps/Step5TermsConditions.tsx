@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 
 export function Step5TermsConditions() {
   const { form, tcTemplates, services: catalogServices } = useWizard()

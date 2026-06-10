@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo, useTransition, useEffect } from 'react'
+import { useState, useEffect, useCallback, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   FileText,
   Plus,
@@ -10,6 +10,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  ChevronLeft,
+  ChevronRight,
   MoreHorizontal,
   Eye,
   Edit2,
@@ -39,13 +41,34 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { duplicateProposal } from '@/lib/actions/proposals'
-import type { ProposalListItem } from '@/lib/actions/proposals'
+import type {
+  ProposalListItem,
+  ProposalsPage,
+  KanbanColumnData,
+  ProposalSortField,
+} from '@/lib/actions/proposals'
 import { buttonVariants } from '@/components/ui/button'
-import { KanbanBoard } from '@/components/proposals/kanban/KanbanBoard'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import dynamic from 'next/dynamic'
 import { KANBAN_COLUMNS } from '@/components/proposals/kanban/config'
 
+function BoardSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-hidden pb-4" aria-busy="true" aria-label="Loading board">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="w-[280px] h-[320px] shrink-0 rounded-[12px] bg-slate-100 animate-pulse" />
+      ))}
+    </div>
+  )
+}
+
+// dnd-kit + board code only load when the kanban view is active
+const KanbanBoard = dynamic(
+  () => import('@/components/proposals/kanban/KanbanBoard').then((m) => m.KanbanBoard),
+  { ssr: false, loading: () => <BoardSkeleton /> },
+)
+
 type ViewMode = 'list' | 'kanban'
-const VIEW_PREF_KEY = 'proposals_view_preference'
 const HIDDEN_COLUMNS_KEY = 'kanban_hidden_columns'
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -115,44 +138,149 @@ function formatDate(iso: string) {
 
 // ─── Sort types ───────────────────────────────────────────────────────────────
 
-type SortField =
-  | 'number'
-  | 'clientName'
-  | 'projectTitle'
-  | 'total'
-  | 'status'
-  | 'createdBy'
-  | 'createdAt'
-  | 'updatedAt'
-  | 'version'
-
+type SortField = ProposalSortField
 type SortDir = 'asc' | 'desc'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+type InitialQuery = {
+  q: string
+  statuses: string[] | null
+  dateFrom: string
+  dateTo: string
+  salespersonId: string
+  sort: SortField
+  dir: SortDir
+}
+
 type Props = {
-  proposals: ProposalListItem[]
+  view: ViewMode
+  listData: ProposalsPage | null
+  kanbanColumns: KanbanColumnData[] | null
   salespeople: { id: string; name: string }[]
   currentUserId: string
   currentUserRole: string
+  initialQuery: InitialQuery
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ProposalsClient({ proposals, salespeople, currentUserId, currentUserRole }: Props) {
+export function ProposalsClient({
+  view,
+  listData,
+  kanbanColumns,
+  salespeople,
+  currentUserId,
+  currentUserRole,
+  initialQuery,
+}: Props) {
   const router = useRouter()
-  const [, startTransition] = useTransition()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
 
-  // View mode persisted to localStorage
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  useEffect(() => {
-    const saved = localStorage.getItem(VIEW_PREF_KEY)
-    if (saved === 'kanban' || saved === 'list') setViewMode(saved)
-  }, [])
+  // ─── URL helpers — the URL is the source of truth for filters/sort/page ─────
+
+  const pushQuery = useCallback(
+    (changes: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString())
+      for (const [key, value] of Object.entries(changes)) {
+        if (value === null || value === '') params.delete(key)
+        else params.set(key, value)
+      }
+      const qs = params.toString()
+      startTransition(() => {
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      })
+    },
+    [searchParams, pathname, router],
+  )
+
   function switchView(mode: ViewMode) {
-    setViewMode(mode)
-    localStorage.setItem(VIEW_PREF_KEY, mode)
+    // Cookie lets the server default correctly on a bare /proposals visit
+    document.cookie = `proposals_view=${mode}; path=/; max-age=31536000; samesite=lax`
+    pushQuery({ view: mode === 'kanban' ? 'kanban' : null, page: null })
   }
+
+  // ─── Filter inputs (locally controlled, synced to URL) ──────────────────────
+
+  const [search, setSearch] = useState(initialQuery.q)
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<ProposalStatus>>(
+    new Set((initialQuery.statuses as ProposalStatus[] | null) ?? ALL_STATUSES),
+  )
+  const [dateFrom, setDateFrom] = useState(initialQuery.dateFrom)
+  const [dateTo, setDateTo] = useState(initialQuery.dateTo)
+  const [salespersonId, setSalespersonId] = useState(initialQuery.salespersonId)
+
+  // Debounced search → URL (skips when URL already matches, e.g. on mount)
+  useEffect(() => {
+    const current = searchParams.get('q') ?? ''
+    if (search.trim() === current) return
+    const t = setTimeout(() => pushQuery({ q: search.trim() || null, page: null }), 300)
+    return () => clearTimeout(t)
+  }, [search, searchParams, pushQuery])
+
+  function toggleStatus(s: ProposalStatus) {
+    const next = new Set(selectedStatuses)
+    if (next.has(s)) next.delete(s)
+    else next.add(s)
+    setSelectedStatuses(next)
+    pushQuery({
+      status:
+        next.size === 0 || next.size === ALL_STATUSES.length
+          ? null
+          : Array.from(next).join(','),
+      page: null,
+    })
+  }
+
+  function changeDateFrom(value: string) {
+    setDateFrom(value)
+    pushQuery({ from: value || null, page: null })
+  }
+
+  function changeDateTo(value: string) {
+    setDateTo(value)
+    pushQuery({ to: value || null, page: null })
+  }
+
+  function changeSalesperson(value: string) {
+    setSalespersonId(value)
+    pushQuery({ sp: value === 'all' ? null : value, page: null })
+  }
+
+  // ─── Sort (server-side; current value comes from the URL via props) ─────────
+
+  const sortField = initialQuery.sort
+  const sortDir = initialQuery.dir
+
+  function handleSort(field: SortField) {
+    const nextDir: SortDir = sortField === field ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc'
+    pushQuery({ sort: field, dir: nextDir, page: null })
+  }
+
+  // ─── Pagination ──────────────────────────────────────────────────────────────
+
+  const items = listData?.items ?? []
+  const total = listData?.total ?? 0
+  const page = listData?.page ?? 1
+  const pageSize = listData?.pageSize ?? 50
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  function goToPage(p: number) {
+    pushQuery({ page: p > 1 ? String(p) : null })
+  }
+
+  const hasActiveFilters = Boolean(
+    initialQuery.q ||
+      initialQuery.statuses ||
+      initialQuery.dateFrom ||
+      initialQuery.dateTo ||
+      initialQuery.salespersonId !== 'all',
+  )
+
+  const grandTotal =
+    view === 'list' ? total : (kanbanColumns ?? []).reduce((sum, c) => sum + c.total, 0)
 
   // Hidden columns for kanban
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
@@ -165,7 +293,8 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
   function toggleColumn(status: string) {
     setHiddenColumns((prev) => {
       const next = new Set(prev)
-      next.has(status) ? next.delete(status) : next.add(status)
+      if (next.has(status)) next.delete(status)
+      else next.add(status)
       localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify(Array.from(next)))
       return next
     })
@@ -176,134 +305,46 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkDownloading, setIsBulkDownloading] = useState(false)
 
-  // Filters
-  const [search, setSearch] = useState('')
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<ProposalStatus>>(
-    new Set(ALL_STATUSES),
-  )
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [salespersonId, setSalespersonId] = useState('all')
-
-  // Sort
-  const [sortField, setSortField] = useState<SortField>('updatedAt')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
-
-  function toggleStatus(s: ProposalStatus) {
-    setSelectedStatuses((prev) => {
-      const next = new Set(prev)
-      next.has(s) ? next.delete(s) : next.add(s)
-      return next
-    })
-  }
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortField(field)
-      setSortDir('asc')
-    }
-  }
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    const from = dateFrom ? new Date(dateFrom).getTime() : null
-    const to = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null
-
-    return proposals.filter((p) => {
-      if (q && !p.clientName.toLowerCase().includes(q) && !p.projectTitle.toLowerCase().includes(q))
-        return false
-      if (!selectedStatuses.has(p.status as ProposalStatus)) return false
-      if (from && new Date(p.createdAt).getTime() < from) return false
-      if (to && new Date(p.createdAt).getTime() > to) return false
-      if (salespersonId !== 'all' && p.createdBy.id !== salespersonId) return false
-      return true
-    })
-  }, [proposals, search, selectedStatuses, dateFrom, dateTo, salespersonId])
-
-  const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      let aVal: string | number
-      let bVal: string | number
-
-      switch (sortField) {
-        case 'number':
-          aVal = a.number
-          bVal = b.number
-          break
-        case 'clientName':
-          aVal = a.clientName.toLowerCase()
-          bVal = b.clientName.toLowerCase()
-          break
-        case 'projectTitle':
-          aVal = a.projectTitle.toLowerCase()
-          bVal = b.projectTitle.toLowerCase()
-          break
-        case 'total':
-          aVal = parseFloat(a.total)
-          bVal = parseFloat(b.total)
-          break
-        case 'status':
-          aVal = a.status
-          bVal = b.status
-          break
-        case 'createdBy':
-          aVal = a.createdBy.name.toLowerCase()
-          bVal = b.createdBy.name.toLowerCase()
-          break
-        case 'createdAt':
-          aVal = new Date(a.createdAt).getTime()
-          bVal = new Date(b.createdAt).getTime()
-          break
-        case 'updatedAt':
-          aVal = new Date(a.updatedAt).getTime()
-          bVal = new Date(b.updatedAt).getTime()
-          break
-        case 'version':
-          aVal = a.version
-          bVal = b.version
-          break
-        default:
-          return 0
-      }
-
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
-  }, [filtered, sortField, sortDir])
-
   function canEdit(p: ProposalListItem) {
     if (p.status !== 'DRAFT' && p.status !== 'REVISION_REQUIRED') return false
     if (currentUserRole === 'SALES_EXEC' && p.createdBy.id !== currentUserId) return false
     return true
   }
 
-  function handleDuplicate(id: string) {
+  const [duplicateId, setDuplicateId] = useState<string | null>(null)
+  const [isDuplicating, setIsDuplicating] = useState(false)
+
+  function confirmDuplicate() {
+    if (!duplicateId) return
+    setIsDuplicating(true)
     startTransition(async () => {
-      const result = await duplicateProposal(id)
+      const result = await duplicateProposal(duplicateId)
+      setIsDuplicating(false)
+      // On success, duplicateProposal redirects to the new draft
       if (result && 'error' in result) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
+        setDuplicateId(null)
       }
-      // On success, duplicateProposal redirects — router.refresh handles revalidation
     })
   }
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
 
   function toggleSelectAll() {
-    if (selectedIds.size === sorted.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(sorted.map((p) => p.id)))
-    }
+    const pageIds = items.map((p) => p.id)
+    const allSelected = pageIds.every((id) => selectedIds.has(id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      pageIds.forEach((id) => (allSelected ? next.delete(id) : next.add(id)))
+      return next
+    })
   }
 
   async function handleBulkDownload() {
@@ -373,7 +414,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
 
   // ─── Empty states ────────────────────────────────────────────────────────────
 
-  if (proposals.length === 0) {
+  if (grandTotal === 0 && !hasActiveFilters) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
         <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center">
@@ -400,7 +441,8 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Proposals</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {proposals.length} proposal{proposals.length !== 1 ? 's' : ''} total
+            {grandTotal} proposal{grandTotal !== 1 ? 's' : ''}
+            {hasActiveFilters ? ' matching filters' : ' total'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -410,12 +452,12 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
               onClick={() => switchView('list')}
               className={[
                 'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors min-h-[36px]',
-                viewMode === 'list'
+                view === 'list'
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
               aria-label="List view"
-              aria-pressed={viewMode === 'list'}
+              aria-pressed={view === 'list'}
             >
               <List className="h-4 w-4" />
               <span className="hidden sm:inline">List</span>
@@ -424,12 +466,12 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
               onClick={() => switchView('kanban')}
               className={[
                 'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors min-h-[36px] border-l border-slate-200',
-                viewMode === 'kanban'
+                view === 'kanban'
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
               aria-label="Kanban view"
-              aria-pressed={viewMode === 'kanban'}
+              aria-pressed={view === 'kanban'}
             >
               <KanbanSquare className="h-4 w-4" />
               <span className="hidden sm:inline">Board</span>
@@ -461,7 +503,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
               <Input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => changeDateFrom(e.target.value)}
                 className="w-[140px]"
               />
             </div>
@@ -470,7 +512,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
               <Input
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => changeDateTo(e.target.value)}
                 className="w-[140px]"
               />
             </div>
@@ -478,7 +520,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
           {salespeople.length > 0 && (
             <div>
               <Label className="text-xs text-slate-500 mb-1 block">Salesperson</Label>
-              <Select value={salespersonId} onValueChange={setSalespersonId}>
+              <Select value={salespersonId} onValueChange={changeSalesperson}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All salespeople" />
                 </SelectTrigger>
@@ -496,7 +538,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
         </div>
 
         {/* Status checkboxes — list view only */}
-        {viewMode === 'list' && (
+        {view === 'list' && (
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {ALL_STATUSES.map((s) => (
               <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -512,7 +554,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
         )}
 
         {/* Kanban: hide columns dropdown */}
-        {viewMode === 'kanban' && (
+        {view === 'kanban' && (
           <div className="flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -582,25 +624,33 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
       )}
 
       {/* Kanban board view */}
-      {viewMode === 'kanban' && (
-        <KanbanBoard
-          proposals={proposals}
-          currentUserId={currentUserId}
-          currentUserRole={currentUserRole}
-          filters={{ search, dateFrom, dateTo, salespersonId }}
-          hiddenColumns={hiddenColumns}
-        />
+      {view === 'kanban' && kanbanColumns && (
+        <div className={isPending ? 'opacity-60 transition-opacity' : ''}>
+          <KanbanBoard
+            columns={kanbanColumns}
+            query={{
+              q: initialQuery.q,
+              dateFrom: initialQuery.dateFrom,
+              dateTo: initialQuery.dateTo,
+              salespersonId: initialQuery.salespersonId,
+            }}
+            hasActiveFilters={hasActiveFilters}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+            hiddenColumns={hiddenColumns}
+          />
+        </div>
       )}
 
       {/* List view — mobile card list (< md) */}
-      {viewMode === 'list' && <div className="md:hidden flex flex-col gap-3">
-        {sorted.length === 0 ? (
+      {view === 'list' && <div className={`md:hidden flex flex-col gap-3 ${isPending ? 'opacity-60 transition-opacity' : ''}`}>
+        {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2 text-center rounded-xl border border-slate-200 bg-white">
             <FileText className="h-8 w-8 text-slate-300" />
             <p className="text-slate-500 text-sm">No proposals found.</p>
           </div>
         ) : (
-          sorted.map((p) => (
+          items.map((p) => (
             <div
               key={p.id}
               className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2"
@@ -660,7 +710,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem
-                        onClick={() => handleDuplicate(p.id)}
+                        onClick={() => setDuplicateId(p.id)}
                         className="flex items-center gap-2"
                       >
                         <Copy className="h-4 w-4" />
@@ -703,8 +753,8 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
       </div>}
 
       {/* List view — Desktop table (≥ md) */}
-      {viewMode === 'list' && <div className="hidden md:block rounded-xl border border-slate-200 bg-white overflow-hidden">
-        {sorted.length === 0 ? (
+      {view === 'list' && <div className={`hidden md:block rounded-xl border border-slate-200 bg-white overflow-hidden ${isPending ? 'opacity-60 transition-opacity' : ''}`}>
+        {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
             <FileText className="h-8 w-8 text-slate-300" />
             <p className="text-slate-500 text-sm">No proposals found.</p>
@@ -717,9 +767,9 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
                   {canBulkDownload && (
                     <th className="px-4 py-3 text-left w-10">
                       <Checkbox
-                        checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                        checked={items.length > 0 && items.every((p) => selectedIds.has(p.id))}
                         onCheckedChange={toggleSelectAll}
-                        aria-label="Select all proposals"
+                        aria-label="Select all proposals on this page"
                       />
                     </th>
                   )}
@@ -762,7 +812,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((p, i) => (
+                {items.map((p, i) => (
                   <tr
                     key={p.id}
                     className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
@@ -841,7 +891,7 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
-                            onClick={() => handleDuplicate(p.id)}
+                            onClick={() => setDuplicateId(p.id)}
                             className="flex items-center gap-2"
                           >
                             <Copy className="h-4 w-4" />
@@ -876,11 +926,52 @@ export function ProposalsClient({ proposals, salespeople, currentUserId, current
         )}
       </div>}
 
-      {viewMode === 'list' && (
-        <p className="text-xs text-slate-400 text-right">
-          Showing {sorted.length} of {proposals.length} proposals
-        </p>
+      {/* Pagination */}
+      {view === 'list' && total > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-slate-400">
+            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}{' '}
+            proposal{total !== 1 ? 's' : ''}
+          </p>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(page - 1)}
+                disabled={page <= 1 || isPending}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-xs text-slate-500 tabular-nums">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(page + 1)}
+                disabled={page >= totalPages || isPending}
+                aria-label="Next page"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
       )}
+
+      <ConfirmDialog
+        open={duplicateId !== null}
+        onOpenChange={(o) => !o && setDuplicateId(null)}
+        title="Duplicate proposal?"
+        description="This creates a new draft proposal with a new number, copying all line items, pricing, and terms. You'll be taken to the new draft."
+        confirmLabel="Duplicate"
+        isPending={isDuplicating}
+        onConfirm={confirmDuplicate}
+      />
     </div>
   )
 }

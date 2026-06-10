@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { prisma } from './prisma'
@@ -13,8 +14,10 @@ export type SessionUser = {
  * Returns the current session and the matching Prisma User.
  * Must be called from a Server Component, Route Handler, or Server Action.
  * Returns null if unauthenticated or if no matching Prisma User exists.
+ * Memoized per request via React cache() so multiple callers in the same render
+ * tree only pay the Supabase + DB cost once.
  */
-export async function getSession(): Promise<SessionUser | null> {
+export const getSession = cache(async (): Promise<SessionUser | null> => {
   const cookieStore = cookies()
   const supabase = createClient(cookieStore)
 
@@ -35,4 +38,4 @@ export async function getSession(): Promise<SessionUser | null> {
     user: user as UserModel,
     role: user.role as UserModel['role'],
   }
-}
+})
