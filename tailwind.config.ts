@@ -37,6 +37,20 @@ const config: Config = {
         surface:        "var(--color-surface)",
         border:         "var(--color-border)",
         muted:          "var(--color-muted)",
+        // shadcn/ui semantic tokens (map to oklch CSS vars in globals.css).
+        // Required so utilities like `bg-popover` / `bg-card` actually render
+        // an opaque background instead of being dropped as unknown classes.
+        popover:                 "var(--popover)",
+        "popover-foreground":    "var(--popover-foreground)",
+        card:                    "var(--card)",
+        "card-foreground":       "var(--card-foreground)",
+        secondary:               "var(--secondary)",
+        "secondary-foreground":  "var(--secondary-foreground)",
+        "muted-foreground":      "var(--muted-foreground)",
+        "accent-foreground":     "var(--accent-foreground)",
+        destructive:             "var(--destructive)",
+        input:                   "var(--input)",
+        ring:                    "var(--ring)",
         // Override Tailwind's indigo → brand blue (handles all inline `indigo-*` classes)
         indigo: brandBlue,
         // Also available as `brand-*` for new code
