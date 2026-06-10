@@ -3,8 +3,14 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
-import { getServiceById, getServiceAuditLog } from '@/lib/actions/catalog'
+import {
+  getServiceById,
+  getServiceAuditLog,
+  getExistingCategories,
+  getTemplateOptions,
+} from '@/lib/actions/catalog'
 import { Button } from '@/components/ui/button'
+import { EditServiceButton } from './EditServiceButton'
 
 function formatRate(rate: string | null) {
   if (!rate) return '—'
@@ -43,9 +49,11 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
   if (!session) redirect('/login')
   if (!can(session.user, 'manage:catalog')) redirect('/dashboard')
 
-  const [service, auditLog] = await Promise.all([
+  const [service, auditLog, categories, templateOptions] = await Promise.all([
     getServiceById(params.id),
     getServiceAuditLog(params.id),
+    getExistingCategories(),
+    getTemplateOptions(),
   ])
 
   if (!service) notFound()
@@ -76,6 +84,14 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
           <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-accent-light)] text-[var(--color-accent)]">
             {service.category}
           </span>
+        </div>
+        <div className="shrink-0">
+          <EditServiceButton
+            service={service}
+            categories={categories}
+            paymentTemplates={templateOptions.paymentTemplates}
+            tcTemplates={templateOptions.tcTemplates}
+          />
         </div>
       </div>
 
