@@ -6,11 +6,14 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  // Modest pool: DATABASE_URL points at Supabase's pgbouncer, which multiplexes
-  // server connections; a large per-instance pool just exhausts pooler slots.
+  // DATABASE_URL points at Supabase's pooler in SESSION mode: pool_size 15 is
+  // shared by every connected process (Next dev workers, Prisma Studio, seed
+  // scripts), and each client connection holds a slot until it disconnects.
+  // Keep the per-process pool well under 15 — queries beyond `max` queue
+  // in-process instead of failing with EMAXCONNSESSION at the pooler.
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL!,
-    max: 10,
+    max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
   })
