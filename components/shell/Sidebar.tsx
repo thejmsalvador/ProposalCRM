@@ -32,9 +32,9 @@ type NavItem = {
 
 function getNavItems(unreadCount: number): NavItem[] {
   return [
+    { label: 'New Proposal', href: '/proposals/new', icon: Plus, variant: 'cta' },
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Proposals', href: '/proposals', icon: FileText },
-    { label: 'New Proposal', href: '/proposals/new', icon: Plus, variant: 'cta' },
     { label: 'Clients', href: '/clients', icon: Users },
     {
       label: 'Notifications',
