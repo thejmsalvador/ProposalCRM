@@ -29,7 +29,6 @@ export function Step6Review() {
     proposalNumber,
     paymentTemplates,
     tcTemplates,
-    approvers,
     currentUser,
   } = useWizard()
   const { setValue, watch } = form
@@ -66,7 +65,6 @@ export function Step6Review() {
   // Lookup references
   const paymentTemplate = paymentTemplates.find((p) => p.id === data.paymentTemplateId)
   const tcTemplate = tcTemplates.find((t) => t.id === data.tcTemplateId)
-  const approver = approvers.find((a) => a.id === data.assignedApproverId)
 
   async function handleSaveDraft() {
     setIsSaving(true)
@@ -110,13 +108,24 @@ export function Step6Review() {
           <h3 className="text-lg font-bold text-[var(--color-primary)]">
             {data.projectTitle || 'Untitled Project'}
           </h3>
+          {data.brandName && (
+            <p className="text-xs text-[var(--color-muted)] mt-0.5">
+              Brand: {data.brandName}
+            </p>
+          )}
           <p className="text-sm text-[var(--color-muted)] mt-0.5">
             Prepared for {data.clientName || '—'}
+            {data.department ? ` — ${data.department}` : ''}
           </p>
           {data.contactName && (
             <p className="text-xs text-[var(--color-muted)]">
               Attn: {data.contactName}
               {data.contactTitle ? ` — ${data.contactTitle}` : ''}
+            </p>
+          )}
+          {(data.contactEmail || data.contactPhone) && (
+            <p className="text-xs text-[var(--color-muted)]">
+              {[data.contactEmail, data.contactPhone].filter(Boolean).join(' · ')}
             </p>
           )}
         </div>
@@ -126,7 +135,7 @@ export function Step6Review() {
           <DetailCell label="Proposal Date" value={data.date || '—'} />
           <DetailCell label="Valid Until" value={data.validUntil || '—'} />
           <DetailCell label="Salesperson" value={currentUser.name} />
-          <DetailCell label="Approver" value={approver?.name || '—'} />
+          <DetailCell label="Approver" value="Auto-assigned on submit" />
         </div>
 
         {/* Executive Summary */}
@@ -277,7 +286,7 @@ export function Step6Review() {
           <div className="text-sm">
             <p className="font-medium">Below-floor pricing detected</p>
             <p className="text-xs mt-0.5">
-              One or more line items have rates below the minimum floor. A Sales Manager or Super Admin must be assigned as the approver.
+              One or more line items have rates below the minimum floor. This proposal will be routed to a Sales Manager for approval automatically.
             </p>
           </div>
         </div>

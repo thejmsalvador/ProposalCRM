@@ -274,8 +274,10 @@ function ContactCard({
                 {contact.contactName ?? 'Unknown'}
               </p>
             </div>
-            {contact.contactTitle && (
-              <p className="text-xs text-slate-500 truncate">{contact.contactTitle}</p>
+            {(contact.contactTitle || contact.department) && (
+              <p className="text-xs text-slate-500 truncate">
+                {[contact.contactTitle, contact.department].filter(Boolean).join(' · ')}
+              </p>
             )}
           </div>
           {canEdit && (
@@ -393,6 +395,7 @@ function ContactCard({
 type ContactFormData = {
   contactName: string
   contactTitle: string
+  department: string
   email: string
   phone: string
   isPrimary: boolean
@@ -402,6 +405,7 @@ type ContactFormData = {
 const emptyContact: ContactFormData = {
   contactName: '',
   contactTitle: '',
+  department: '',
   email: '',
   phone: '',
   isPrimary: false,
@@ -428,6 +432,7 @@ function ContactFormSheet({
       ? {
           contactName: initial.contactName ?? '',
           contactTitle: initial.contactTitle ?? '',
+          department: initial.department ?? '',
           email: initial.email ?? '',
           phone: initial.phone ?? '',
           isPrimary: initial.isPrimary,
@@ -470,12 +475,21 @@ function ContactFormSheet({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cf-title">Title</Label>
+            <Label htmlFor="cf-title">Position</Label>
             <Input
               id="cf-title"
               value={form.contactTitle}
               onChange={(e) => setForm((f) => ({ ...f, contactTitle: e.target.value }))}
               placeholder="e.g. CEO"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cf-department">Department</Label>
+            <Input
+              id="cf-department"
+              value={form.department}
+              onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
+              placeholder="e.g. Marketing"
             />
           </div>
           <div className="space-y-1.5">

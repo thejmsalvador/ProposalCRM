@@ -41,12 +41,26 @@ export type ClientContactDetail = {
   id: string
   contactName: string | null
   contactTitle: string | null
+  department: string | null
   email: string | null
   phone: string | null
   isPrimary: boolean
   notes: string | null
   createdById: string
   createdAt: Date
+}
+
+export type ContactListItem = {
+  id: string
+  contactName: string | null
+  contactTitle: string | null
+  department: string | null
+  email: string | null
+  phone: string | null
+  isPrimary: boolean
+  notes: string | null
+  createdAt: Date
+  company: { id: string; companyName: string } | null
 }
 
 export type ClientDetail = ClientListItem & {
@@ -318,6 +332,7 @@ export async function getClientDetail(
       id: c.id,
       contactName: c.contactName,
       contactTitle: c.contactTitle,
+      department: c.department,
       email: c.email,
       phone: c.phone,
       isPrimary: c.isPrimary,
@@ -336,4 +351,40 @@ export async function getClientDetail(
       createdByName: p.createdBy.name,
     })),
   }
+}
+
+// ─── getContactList ───────────────────────────────────────────────────────────
+// All contact persons — both company-linked and standalone — visible to the
+// user: contacts of companies they can see, plus contacts they created.
+
+export async function getContactList(
+  userId: string,
+  role: Role,
+  teamId: string | null,
+): Promise<ContactListItem[]> {
+  const clientWhere = buildWhereClause(userId, role, teamId)
+
+  const where =
+    role === Role.ADMIN || role === Role.SUPER_ADMIN
+      ? {}
+      : { OR: [{ client: clientWhere }, { createdById: userId }] }
+
+  const contacts = await prisma.clientContact.findMany({
+    where,
+    include: { client: { select: { id: true, companyName: true } } },
+    orderBy: [{ contactName: 'asc' }],
+  })
+
+  return contacts.map((c) => ({
+    id: c.id,
+    contactName: c.contactName,
+    contactTitle: c.contactTitle,
+    department: c.department,
+    email: c.email,
+    phone: c.phone,
+    isPrimary: c.isPrimary,
+    notes: c.notes,
+    createdAt: c.createdAt,
+    company: c.client ? { id: c.client.id, companyName: c.client.companyName } : null,
+  }))
 }

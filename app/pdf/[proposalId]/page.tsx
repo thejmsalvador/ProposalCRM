@@ -233,10 +233,20 @@ export default async function PdfPage({ params, searchParams }: Props) {
               <div>
                 <div className="cover-label">Prepared for</div>
                 <div className="cover-client">{proposal.clientName}</div>
+                {proposal.department && (
+                  <div className="cover-contact">{proposal.department}</div>
+                )}
                 {proposal.contactName && (
                   <div className="cover-contact">
                     {proposal.contactName}
                     {proposal.contactTitle ? `, ${proposal.contactTitle}` : ''}
+                  </div>
+                )}
+                {(proposal.contactEmail || proposal.contactPhone) && (
+                  <div className="cover-contact">
+                    {[proposal.contactEmail, proposal.contactPhone]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </div>
                 )}
               </div>
@@ -244,6 +254,9 @@ export default async function PdfPage({ params, searchParams }: Props) {
               <div>
                 <div className="cover-label">Project</div>
                 <div className="cover-project">{proposal.projectTitle}</div>
+                {proposal.brandName && (
+                  <div className="cover-contact">Brand: {proposal.brandName}</div>
+                )}
               </div>
 
               <div className="cover-meta-grid">

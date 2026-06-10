@@ -117,8 +117,12 @@ export function WizardProvider({
     defaultValues: {
       clientId: null,
       clientName: '',
+      department: '',
       contactName: '',
       contactTitle: '',
+      contactEmail: '',
+      contactPhone: '',
+      brandName: '',
       projectTitle: '',
       date: today,
       validUntil: validUntilDefault,

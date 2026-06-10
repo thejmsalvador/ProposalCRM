@@ -128,9 +128,10 @@ model Client {
 
 model ClientContact {
   id           String   @id @default(cuid())
-  clientId     String
+  clientId     String?
   contactName  String?
   contactTitle String?
+  department   String?
   email        String?
   phone        String?
   isPrimary    Boolean  @default(false)
@@ -138,7 +139,7 @@ model ClientContact {
   createdById  String
   createdAt    DateTime @default(now())
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
 }
@@ -151,6 +152,10 @@ model Proposal {
   clientName            String
   contactName           String?
   contactTitle          String?
+  department            String?
+  contactEmail          String?
+  contactPhone          String?
+  brandName             String?
   projectTitle          String
   date                  DateTime
   validUntil            DateTime

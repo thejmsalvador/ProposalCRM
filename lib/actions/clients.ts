@@ -12,7 +12,13 @@ export type ClientOption = {
   id: string
   companyName: string
   industry: string | null
-  primaryContact: { contactName: string | null; contactTitle: string | null } | null
+  primaryContact: {
+    contactName: string | null
+    contactTitle: string | null
+    department: string | null
+    email: string | null
+    phone: string | null
+  } | null
 }
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
@@ -32,10 +38,16 @@ const clientSchema = z.object({
 const contactSchema = z.object({
   contactName: z.string().min(1, 'Contact name is required'),
   contactTitle: z.string().optional(),
+  department: z.string().optional(),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   phone: z.string().optional(),
   isPrimary: z.boolean().default(false),
   notes: z.string().optional(),
+})
+
+// Contacts may exist without a company — clientId is optional
+const standaloneContactSchema = contactSchema.extend({
+  clientId: z.string().nullable().optional(),
 })
 
 // ─── createClient ─────────────────────────────────────────────────────────────
@@ -121,7 +133,7 @@ export async function addContact(
   const client = await prisma.client.findUnique({ where: { id: clientId } })
   if (!client) return { error: 'Client not found' }
 
-  const { contactName, contactTitle, email, phone, isPrimary, notes } = parsed.data
+  const { contactName, contactTitle, department, email, phone, isPrimary, notes } = parsed.data
 
   // Unset any existing primary contact first
   if (isPrimary) {
@@ -136,6 +148,7 @@ export async function addContact(
       clientId,
       contactName: contactName.trim(),
       contactTitle: contactTitle || null,
+      department: department || null,
       email: email || null,
       phone: phone || null,
       isPrimary,
@@ -144,7 +157,53 @@ export async function addContact(
     },
   })
 
+  revalidatePath('/clients')
   revalidatePath(`/clients/${clientId}`)
+  return { success: true, id: contact.id }
+}
+
+// ─── createContact (standalone or company-linked, from the Contacts tab) ─────
+
+export async function createContact(
+  data: unknown,
+): Promise<{ success: true; id: string } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  const parsed = standaloneContactSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+
+  const { contactName, contactTitle, department, email, phone, isPrimary, notes } = parsed.data
+  const clientId = parsed.data.clientId || null
+
+  if (clientId) {
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    if (!client) return { error: 'Company not found' }
+    if (isPrimary) {
+      await prisma.clientContact.updateMany({
+        where: { clientId, isPrimary: true },
+        data: { isPrimary: false },
+      })
+    }
+  }
+
+  const contact = await prisma.clientContact.create({
+    data: {
+      clientId,
+      contactName: contactName.trim(),
+      contactTitle: contactTitle || null,
+      department: department || null,
+      email: email || null,
+      phone: phone || null,
+      // "Primary" only makes sense relative to a company
+      isPrimary: clientId ? isPrimary : false,
+      notes: notes || null,
+      createdById: session.user.id,
+    },
+  })
+
+  revalidatePath('/clients')
+  if (clientId) revalidatePath(`/clients/${clientId}`)
   return { success: true, id: contact.id }
 }
 
@@ -157,17 +216,25 @@ export async function updateContact(
   const session = await getSession()
   if (!session) return { error: 'Unauthenticated' }
 
-  const parsed = contactSchema.safeParse(data)
+  const parsed = standaloneContactSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
   const existing = await prisma.clientContact.findUnique({ where: { id } })
   if (!existing) return { error: 'Contact not found' }
 
-  const { contactName, contactTitle, email, phone, isPrimary, notes } = parsed.data
+  const { contactName, contactTitle, department, email, phone, isPrimary, notes } = parsed.data
+  // Keep the current company link unless the caller explicitly passes one
+  const clientId =
+    parsed.data.clientId === undefined ? existing.clientId : parsed.data.clientId || null
 
-  if (isPrimary) {
+  if (clientId && clientId !== existing.clientId) {
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    if (!client) return { error: 'Company not found' }
+  }
+
+  if (isPrimary && clientId) {
     await prisma.clientContact.updateMany({
-      where: { clientId: existing.clientId, isPrimary: true, id: { not: id } },
+      where: { clientId, isPrimary: true, id: { not: id } },
       data: { isPrimary: false },
     })
   }
@@ -175,16 +242,20 @@ export async function updateContact(
   await prisma.clientContact.update({
     where: { id },
     data: {
+      clientId,
       contactName: contactName.trim(),
       contactTitle: contactTitle || null,
+      department: department || null,
       email: email || null,
       phone: phone || null,
-      isPrimary,
+      isPrimary: clientId ? isPrimary : false,
       notes: notes || null,
     },
   })
 
-  revalidatePath(`/clients/${existing.clientId}`)
+  revalidatePath('/clients')
+  if (existing.clientId) revalidatePath(`/clients/${existing.clientId}`)
+  if (clientId && clientId !== existing.clientId) revalidatePath(`/clients/${clientId}`)
   return { success: true }
 }
 
@@ -201,7 +272,8 @@ export async function removeContact(
 
   await prisma.clientContact.delete({ where: { id } })
 
-  revalidatePath(`/clients/${existing.clientId}`)
+  revalidatePath('/clients')
+  if (existing.clientId) revalidatePath(`/clients/${existing.clientId}`)
   return { success: true }
 }
 
@@ -219,7 +291,13 @@ export async function searchClients(query: string): Promise<ClientOption[]> {
       contacts: {
         where: { isPrimary: true },
         take: 1,
-        select: { contactName: true, contactTitle: true },
+        select: {
+          contactName: true,
+          contactTitle: true,
+          department: true,
+          email: true,
+          phone: true,
+        },
       },
     },
     orderBy: { companyName: 'asc' },
@@ -231,32 +309,93 @@ export async function searchClients(query: string): Promise<ClientOption[]> {
     companyName: c.companyName,
     industry: c.industry,
     primaryContact: c.contacts[0]
-      ? { contactName: c.contacts[0].contactName, contactTitle: c.contacts[0].contactTitle }
+      ? {
+          contactName: c.contacts[0].contactName,
+          contactTitle: c.contacts[0].contactTitle,
+          department: c.contacts[0].department,
+          email: c.contacts[0].email,
+          phone: c.contacts[0].phone,
+        }
       : null,
   }))
 }
 
-// ─── upsertClientFromProposal (called during proposal save) ──────────────────
-// Returns the clientId — either the found/created Client's id, or null.
+// ─── syncClientFromProposal (called during proposal save) ────────────────────
+// Links the proposal to a Client record (creating one if needed) and upserts
+// the contact person into that company's contact book.
 
-export async function upsertClientFromProposal(
+type ProposalContactInfo = {
+  contactName: string
+  contactTitle: string
+  department: string
+  email: string
+  phone: string
+}
+
+export async function syncClientFromProposal(
+  proposalId: string,
+  clientId: string | null,
   companyName: string,
+  contact: ProposalContactInfo,
   createdById: string,
-): Promise<string | null> {
-  if (!companyName.trim()) return null
+): Promise<void> {
+  let resolvedClientId = clientId
 
-  const existing = await prisma.client.findFirst({
-    where: { companyName: { equals: companyName.trim(), mode: 'insensitive' } },
-  })
+  // Find or create the company, then link the proposal to it
+  if (!resolvedClientId && companyName.trim()) {
+    const existing = await prisma.client.findFirst({
+      where: { companyName: { equals: companyName.trim(), mode: 'insensitive' } },
+    })
+    resolvedClientId =
+      existing?.id ??
+      (
+        await prisma.client.create({
+          data: { companyName: companyName.trim(), createdById },
+        })
+      ).id
 
-  if (existing) return existing.id
+    await prisma.proposal
+      .update({ where: { id: proposalId }, data: { clientId: resolvedClientId } })
+      .catch(() => {/* non-critical */})
+  }
 
-  const client = await prisma.client.create({
-    data: {
-      companyName: companyName.trim(),
-      createdById,
+  if (!resolvedClientId || !contact.contactName.trim()) return
+
+  // Upsert the contact person on the company (matched by name)
+  const name = contact.contactName.trim()
+  const existingContact = await prisma.clientContact.findFirst({
+    where: {
+      clientId: resolvedClientId,
+      contactName: { equals: name, mode: 'insensitive' },
     },
   })
 
-  return client.id
+  if (existingContact) {
+    await prisma.clientContact.update({
+      where: { id: existingContact.id },
+      data: {
+        contactTitle: contact.contactTitle.trim() || existingContact.contactTitle,
+        department: contact.department.trim() || existingContact.department,
+        email: contact.email.trim() || existingContact.email,
+        phone: contact.phone.trim() || existingContact.phone,
+      },
+    })
+  } else {
+    const hasPrimary = await prisma.clientContact.findFirst({
+      where: { clientId: resolvedClientId, isPrimary: true },
+      select: { id: true },
+    })
+    await prisma.clientContact.create({
+      data: {
+        clientId: resolvedClientId,
+        contactName: name,
+        contactTitle: contact.contactTitle.trim() || null,
+        department: contact.department.trim() || null,
+        email: contact.email.trim() || null,
+        phone: contact.phone.trim() || null,
+        isPrimary: !hasPrimary,
+        createdById,
+      },
+    })
+  }
 }

@@ -25,14 +25,21 @@ export type LineItemFormData = z.infer<typeof lineItemSchema>
 // ─── Draft save schema (relaxed — allows partial data) ──────────────────────
 
 export const proposalDraftSchema = z.object({
-  // Step 1
+  // Step 1 — Client Details
   clientId: z.string().nullable().default(null),
   clientName: z.string().default(''),
+  department: z.string().default(''),
   contactName: z.string().default(''),
   contactTitle: z.string().default(''),
+  contactEmail: z.string().default(''),
+  contactPhone: z.string().default(''),
+  // Step 1 — Project Details
+  brandName: z.string().default(''),
   projectTitle: z.string().default(''),
   date: z.string().default(''),
   validUntil: z.string().default(''),
+  // Approver is resolved server-side on submit (creator's default approver /
+  // team manager) — no longer picked in the wizard.
   assignedApproverId: z.string().default(''),
   introText: z.string().default(''),
 
@@ -66,13 +73,22 @@ export type ProposalFormData = z.infer<typeof proposalDraftSchema>
 
 export const proposalSubmitSchema = z
   .object({
-    clientName: z.string().min(2, 'Client name is required'),
+    clientName: z.string().min(2, 'Company name is required'),
+    department: z.string().default(''),
     contactName: z.string().default(''),
     contactTitle: z.string().default(''),
+    contactEmail: z
+      .string()
+      .email('Invalid email address')
+      .or(z.literal(''))
+      .default(''),
+    contactPhone: z.string().default(''),
+    brandName: z.string().default(''),
     projectTitle: z.string().min(3, 'Project title is required'),
     date: z.string().min(1, 'Proposal date is required'),
     validUntil: z.string().min(1, 'Valid until date is required'),
-    assignedApproverId: z.string().min(1, 'Approver is required'),
+    // Resolved server-side from the creator's pre-defined approver
+    assignedApproverId: z.string().default(''),
     introText: z.string().default(''),
     lineItems: z.array(lineItemSchema).min(1, 'At least one service is required'),
     currency: z.string().default('PHP'),
@@ -123,7 +139,7 @@ export type StepValidationResult = {
 
 /** Fields owned by each step, used to clear stale manual errors before re-validating */
 export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
-  1: ['clientName', 'projectTitle', 'date', 'validUntil'],
+  1: ['clientName', 'contactEmail', 'projectTitle', 'date', 'validUntil'],
   2: ['lineItems'],
   3: [],
   4: ['paymentTemplateId'],
@@ -140,7 +156,13 @@ export function validateWizardStep(
 
   if (step === 1) {
     if (!data.clientName || data.clientName.trim().length < 2) {
-      fieldErrors.clientName = 'Client name is required'
+      fieldErrors.clientName = 'Company name is required'
+    }
+    if (
+      data.contactEmail &&
+      !z.string().email().safeParse(data.contactEmail).success
+    ) {
+      fieldErrors.contactEmail = 'Invalid email address'
     }
     if (!data.projectTitle || data.projectTitle.trim().length < 3) {
       fieldErrors.projectTitle = 'Project title is required'

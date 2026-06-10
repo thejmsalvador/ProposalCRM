@@ -1107,6 +1107,9 @@ export function ProposalDetailClient({
               {proposal.clientName || (
                 <span className="italic text-slate-400">No client name</span>
               )}
+              {proposal.department && (
+                <span className="text-slate-400"> — {proposal.department}</span>
+              )}
               {proposal.contactName && (
                 <span className="text-slate-400">
                   {' '}
@@ -1115,7 +1118,15 @@ export function ProposalDetailClient({
                 </span>
               )}
             </p>
+            {(proposal.contactEmail || proposal.contactPhone) && (
+              <p className="text-xs text-slate-400">
+                {[proposal.contactEmail, proposal.contactPhone]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
             <div className="flex flex-wrap gap-4 text-xs text-slate-500 mt-1">
+              {proposal.brandName && <span>Brand: {proposal.brandName}</span>}
               <span>Created by {proposal.createdBy.name}</span>
               <span>Proposal date: {fmtDate(proposal.date)}</span>
               <span>Valid until: {fmtDate(proposal.validUntil)}</span>

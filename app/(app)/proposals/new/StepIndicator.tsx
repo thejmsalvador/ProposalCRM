@@ -4,7 +4,7 @@ import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const STEPS = [
-  { number: 1, label: 'Client Details' },
+  { number: 1, label: 'Client & Project' },
   { number: 2, label: 'Services' },
   { number: 3, label: 'Pricing' },
   { number: 4, label: 'Payment Terms' },

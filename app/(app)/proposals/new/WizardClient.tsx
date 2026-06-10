@@ -146,10 +146,14 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       // Reset client fields
       clientId: null,
       clientName: '',
+      department: '',
       contactName: '',
       contactTitle: '',
+      contactEmail: '',
+      contactPhone: '',
       date: new Date().toISOString().split('T')[0],
       // Apply template fields
+      brandName: (sp.brandName as string) || '',
       projectTitle: (sp.projectTitle as string) || '',
       introText: (sp.introText as string) || '',
       currency: (sp.currency as string) || 'PHP',

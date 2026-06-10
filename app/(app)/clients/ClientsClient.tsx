@@ -31,8 +31,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { createClient } from '@/lib/actions/clients'
-import type { ClientListItem, HealthStatus } from '@/lib/queries/clients'
+import type { ClientListItem, ContactListItem, HealthStatus } from '@/lib/queries/clients'
 import { ClientsTableView } from './ClientsTableView'
+import { ContactsTab } from './ContactsTab'
 
 // ─── Health dot ───────────────────────────────────────────────────────────────
 
@@ -242,7 +243,7 @@ function AddClientSheet({
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Add Client</SheetTitle>
+          <SheetTitle>Add Company</SheetTitle>
         </SheetHeader>
         <div className="flex flex-col gap-4 mt-6">
           <div className="space-y-1.5">
@@ -308,7 +309,7 @@ function AddClientSheet({
               onClick={handleSave}
               disabled={isSaving || !form.companyName.trim()}
             >
-              {isSaving ? 'Saving…' : 'Create Client'}
+              {isSaving ? 'Saving…' : 'Create Company'}
             </Button>
           </div>
         </div>
@@ -319,18 +320,33 @@ function AddClientSheet({
 
 // ─── Main page component ──────────────────────────────────────────────────────
 
-type Props = { clients: ClientListItem[] }
+type ClientsTab = 'companies' | 'contacts'
+
+type Props = {
+  clients: ClientListItem[]
+  contacts: ContactListItem[]
+  initialTab?: ClientsTab
+}
 
 type ViewMode = 'grid' | 'table'
 
 const VIEW_PREF_KEY = 'clients_view_preference'
 
-export function ClientsClient({ clients: initial }: Props) {
+export function ClientsClient({ clients: initial, contacts, initialTab = 'companies' }: Props) {
+  const [activeTab, setActiveTab] = useState<ClientsTab>(initialTab)
   const [search, setSearch] = useState('')
   const [healthFilter, setHealthFilter] = useState<'All' | HealthStatus>('All')
   const [sortKey, setSortKey] = useState<SortKey>('lifetimeValue')
   const [addOpen, setAddOpen] = useState(false)
+  const [addContactOpen, setAddContactOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
+
+  function switchTab(tab: ClientsTab) {
+    setActiveTab(tab)
+    // Keep the URL shareable/refreshable without a navigation
+    const url = tab === 'contacts' ? '/clients?tab=contacts' : '/clients'
+    window.history.replaceState(null, '', url)
+  }
 
   // Load persisted view preference (client only)
   useEffect(() => {
@@ -368,6 +384,8 @@ export function ClientsClient({ clients: initial }: Props) {
 
   const sorted = sortClients(filtered, sortKey)
 
+  const companyOptions = initial.map((c) => ({ id: c.id, companyName: c.companyName }))
+
   return (
     <div className="flex flex-col gap-6 p-4 lg:p-6">
       {/* Header */}
@@ -375,25 +393,86 @@ export function ClientsClient({ clients: initial }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {initial.length} client{initial.length !== 1 ? 's' : ''} total
+            {activeTab === 'companies'
+              ? `${initial.length} compan${initial.length !== 1 ? 'ies' : 'y'} total`
+              : `${contacts.length} contact${contacts.length !== 1 ? 's' : ''} total`}
           </p>
         </div>
-        <Button
-          type="button"
-          className="gap-2 min-h-[44px]"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Client
-        </Button>
+        {activeTab === 'companies' ? (
+          <Button
+            type="button"
+            className="gap-2 min-h-[44px]"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Company
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            className="gap-2 min-h-[44px]"
+            onClick={() => setAddContactOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Contact
+          </Button>
+        )}
       </div>
 
+      {/* Tabs */}
+      <div
+        role="tablist"
+        aria-label="Clients sections"
+        className="flex items-center gap-1 border-b border-[var(--color-border)] -mb-2"
+      >
+        {(
+          [
+            { key: 'companies', label: 'Companies', count: initial.length },
+            { key: 'contacts', label: 'Contacts', count: contacts.length },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            onClick={() => switchTab(tab.key)}
+            className={`flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === tab.key
+                ? 'border-[var(--color-accent)] text-[var(--color-accent)]'
+                : 'border-transparent text-[var(--color-muted)] hover:text-slate-700'
+            }`}
+          >
+            {tab.label}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                activeTab === tab.key
+                  ? 'bg-[var(--color-accent-light)] text-[var(--color-accent)]'
+                  : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'contacts' ? (
+        <ContactsTab
+          contacts={contacts}
+          companies={companyOptions}
+          addOpen={addContactOpen}
+          onAddOpen={() => setAddContactOpen(true)}
+          onAddClose={() => setAddContactOpen(false)}
+        />
+      ) : (
+        <>
       {/* Filter bar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
-            placeholder="Search clients…"
+            placeholder="Search companies…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -465,10 +544,10 @@ export function ClientsClient({ clients: initial }: Props) {
             <Users className="h-8 w-8 text-indigo-400" />
           </div>
           <div>
-            <p className="text-lg font-semibold text-slate-800">No clients yet</p>
+            <p className="text-lg font-semibold text-slate-800">No companies yet</p>
             <p className="text-sm text-slate-500 mt-1 max-w-sm">
-              Clients are created automatically when you save a proposal, or you can add
-              one manually.
+              Companies are created automatically when you save a proposal, or you can
+              add one manually.
             </p>
           </div>
           <Button
@@ -476,13 +555,13 @@ export function ClientsClient({ clients: initial }: Props) {
             onClick={() => setAddOpen(true)}
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Client
+            Add Company
           </Button>
         </div>
       ) : sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-2">
           <Building2 className="h-8 w-8 text-slate-300" />
-          <p className="text-slate-500 text-sm">No clients match your filters.</p>
+          <p className="text-slate-500 text-sm">No companies match your filters.</p>
         </div>
       ) : viewMode === 'table' ? (
         <ClientsTableView clients={sorted} />
@@ -492,6 +571,8 @@ export function ClientsClient({ clients: initial }: Props) {
             <ClientCard key={c.id} client={c} />
           ))}
         </div>
+      )}
+        </>
       )}
 
       <AddClientSheet

@@ -36,6 +36,9 @@ export default async function NewProposalPage({ searchParams }: Props) {
         clientName: client.companyName,
         contactName: primary?.contactName ?? '',
         contactTitle: primary?.contactTitle ?? '',
+        department: primary?.department ?? '',
+        contactEmail: primary?.email ?? '',
+        contactPhone: primary?.phone ?? '',
       }
     }
   }

@@ -14,7 +14,7 @@ import {
   proposalApprovedEmail,
   revisionRequestedEmail,
 } from '../email'
-import { upsertClientFromProposal } from './clients'
+import { syncClientFromProposal } from './clients'
 import {
   proposalDraftSchema,
   proposalSubmitSchema,
@@ -173,6 +173,48 @@ async function generateProposalNumber(): Promise<string> {
   return `${prefix}${String(next).padStart(4, '0')}`
 }
 
+// ─── Approver resolution ─────────────────────────────────────────────────────
+// The wizard no longer asks for an approver — proposals course through the
+// creator's pre-defined approver (set in Users), falling back to their team's
+// manager, then any active manager.
+
+async function resolveManagerApprover(creatorId: string): Promise<string | null> {
+  const creator = await prisma.user.findUnique({
+    where: { id: creatorId },
+    select: { teamId: true },
+  })
+  const teamManager = creator?.teamId
+    ? await prisma.user.findFirst({
+        where: { role: 'SALES_MANAGER', isActive: true, teamId: creator.teamId },
+        select: { id: true },
+      })
+    : null
+  if (teamManager) return teamManager.id
+
+  const fallback = await prisma.user.findFirst({
+    where: { role: 'SALES_MANAGER', isActive: true },
+    select: { id: true },
+  })
+  return fallback?.id ?? null
+}
+
+async function resolveDefaultApprover(creatorId: string): Promise<string | null> {
+  const creator = await prisma.user.findUnique({
+    where: { id: creatorId },
+    select: { defaultApproverId: true },
+  })
+
+  if (creator?.defaultApproverId) {
+    const def = await prisma.user.findUnique({
+      where: { id: creator.defaultApproverId },
+      select: { id: true, isActive: true },
+    })
+    if (def?.isActive) return def.id
+  }
+
+  return resolveManagerApprover(creatorId)
+}
+
 // ─── Save draft ──────────────────────────────────────────────────────────────
 
 export async function saveProposalDraft(
@@ -204,6 +246,10 @@ export async function saveProposalDraft(
     clientName: data.clientName || 'Untitled',
     contactName: data.contactName || null,
     contactTitle: data.contactTitle || null,
+    department: data.department || null,
+    contactEmail: data.contactEmail || null,
+    contactPhone: data.contactPhone || null,
+    brandName: data.brandName || null,
     projectTitle: data.projectTitle || 'Untitled Project',
     date: data.date ? new Date(data.date) : new Date(),
     validUntil: data.validUntil ? new Date(data.validUntil) : new Date(),
@@ -315,18 +361,22 @@ export async function saveProposalDraft(
     savedNumber = number
   }
 
-  // Auto-link or create Client record if clientName is set but clientId isn't
-  if (data.clientName && !data.clientId) {
-    upsertClientFromProposal(data.clientName, session.user.id)
-      .then(async (newClientId) => {
-        if (newClientId && savedId) {
-          await prisma.proposal.update({
-            where: { id: savedId },
-            data: { clientId: newClientId },
-          }).catch(() => {/* non-critical */})
-        }
-      })
-      .catch(() => {/* non-critical, don't block save */})
+  // Auto-link or create the Client record and sync the contact person to the
+  // contact book (company rep with department/email/phone)
+  if (data.clientName) {
+    syncClientFromProposal(
+      savedId,
+      data.clientId || null,
+      data.clientName,
+      {
+        contactName: data.contactName,
+        contactTitle: data.contactTitle,
+        department: data.department,
+        email: data.contactEmail,
+        phone: data.contactPhone,
+      },
+      session.user.id,
+    ).catch(() => {/* non-critical, don't block save */})
   }
 
   revalidatePath('/proposals')
@@ -412,7 +462,7 @@ export async function submitProposalForApproval(
     return { error: parsed.error.issues[0]?.message ?? 'Validation failed' }
   }
 
-  // Check below-floor pricing — auto-escalate to SALES_MANAGER if needed
+  // Check below-floor pricing — escalation to SALES_MANAGER if needed
   const hasBelowFloor = raw.lineItems.some(
     (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
   )
@@ -420,68 +470,49 @@ export async function submitProposalForApproval(
     (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
   ).length
 
-  let resolvedApproverId = raw.assignedApproverId || null
+  // Resolve the approver from pre-defined settings (the wizard no longer asks)
+  let resolvedApproverId =
+    raw.assignedApproverId || (await resolveDefaultApprover(session.user.id))
+  if (!resolvedApproverId) {
+    return {
+      error:
+        'No approver is configured. Ask an admin to set your default approver in Users.',
+    }
+  }
   let autoEscalated = false
 
-  if (hasBelowFloor && resolvedApproverId) {
-    const [currentApprover, creator] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: resolvedApproverId },
-        select: { role: true },
-      }),
-      prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { teamId: true },
-      }),
-    ])
+  if (hasBelowFloor) {
+    const currentApprover = await prisma.user.findUnique({
+      where: { id: resolvedApproverId },
+      select: { role: true },
+    })
     // If the approver is not a manager or super admin, auto-reassign
     if (
       currentApprover &&
       currentApprover.role !== 'SALES_MANAGER' &&
       currentApprover.role !== 'SUPER_ADMIN'
     ) {
-      // Find the SALES_MANAGER of the creator's team
-      const teamManager = creator?.teamId
-        ? await prisma.user.findFirst({
-            where: {
-              role: 'SALES_MANAGER',
-              isActive: true,
-              team: { id: creator.teamId },
-            },
-            select: { id: true },
-          })
-        : null
-
-      // Fall back to any active SALES_MANAGER
-      const fallbackManager = teamManager
-        ? null
-        : await prisma.user.findFirst({
-            where: { role: 'SALES_MANAGER', isActive: true },
-            select: { id: true },
-          })
-
-      const managerId = teamManager?.id ?? fallbackManager?.id
+      const managerId = await resolveManagerApprover(session.user.id)
       if (managerId) {
         resolvedApproverId = managerId
-        raw = { ...raw, assignedApproverId: managerId }
         autoEscalated = true
       }
     }
   }
 
-  // Save with version snapshot (uses potentially updated raw with new approverId)
+  raw = { ...raw, assignedApproverId: resolvedApproverId }
+
+  // Save with version snapshot (raw carries the resolved approverId)
   const saveResult = await saveProposalExplicit(proposalId, raw)
   if ('error' in saveResult) return saveResult
 
-  // Transition to PENDING_APPROVAL, also update hasBelowFloorPricing flag and approverId
+  // Transition to PENDING_APPROVAL, also update hasBelowFloorPricing flag
   await prisma.proposal.update({
     where: { id: saveResult.proposalId },
     data: {
       status: 'PENDING_APPROVAL',
       hasBelowFloorPricing: hasBelowFloor,
-      ...(autoEscalated && resolvedApproverId
-        ? { assignedApproverId: resolvedApproverId }
-        : {}),
+      assignedApproverId: resolvedApproverId,
     },
   })
 
@@ -809,6 +840,10 @@ export type ProposalDetail = {
   clientName: string
   contactName: string | null
   contactTitle: string | null
+  department: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  brandName: string | null
   projectTitle: string
   date: string
   validUntil: string
@@ -911,6 +946,10 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     clientName: proposal.clientName,
     contactName: proposal.contactName,
     contactTitle: proposal.contactTitle,
+    department: proposal.department,
+    contactEmail: proposal.contactEmail,
+    contactPhone: proposal.contactPhone,
+    brandName: proposal.brandName,
     projectTitle: proposal.projectTitle,
     date: proposal.date.toISOString(),
     validUntil: proposal.validUntil.toISOString(),
@@ -1033,6 +1072,10 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       clientName: '',
       contactName: source.contactName,
       contactTitle: source.contactTitle,
+      department: source.department,
+      contactEmail: source.contactEmail,
+      contactPhone: source.contactPhone,
+      brandName: source.brandName,
       projectTitle: source.projectTitle,
       date: today,
       validUntil,
@@ -1443,9 +1486,6 @@ export async function submitExistingProposal(
   if (!proposal.projectTitle || proposal.projectTitle.length < 3) {
     return { error: 'Project title is required (min 3 characters)' }
   }
-  if (!proposal.assignedApproverId) {
-    return { error: 'An approver must be assigned before submitting' }
-  }
   if (proposal.lineItems.length === 0) {
     return { error: 'At least one line item is required' }
   }
@@ -1462,11 +1502,26 @@ export async function submitExistingProposal(
     return { error: 'Valid until date must be after the proposal date' }
   }
 
-  // Check below-floor pricing requires SALES_MANAGER approver
+  // Resolve the approver from pre-defined settings if none was assigned yet
+  let approverId =
+    proposal.assignedApproverId ??
+    (await resolveDefaultApprover(proposal.createdById))
+  if (!approverId) {
+    return {
+      error:
+        'No approver is configured. Ask an admin to set a default approver in Users.',
+    }
+  }
+
+  // Below-floor pricing requires a SALES_MANAGER / SUPER_ADMIN approver
   if (proposal.hasBelowFloorPricing) {
-    const approver = await prisma.user.findUnique({ where: { id: proposal.assignedApproverId } })
+    const approver = await prisma.user.findUnique({ where: { id: approverId } })
     if (approver && approver.role !== 'SALES_MANAGER' && approver.role !== 'SUPER_ADMIN') {
-      return { error: 'Below-floor pricing detected. A Sales Manager must be assigned as approver.' }
+      const managerId = await resolveManagerApprover(proposal.createdById)
+      if (!managerId) {
+        return { error: 'Below-floor pricing requires a Sales Manager approver, but none was found.' }
+      }
+      approverId = managerId
     }
   }
 
@@ -1499,14 +1554,18 @@ export async function submitExistingProposal(
 
   await prisma.proposal.update({
     where: { id: proposalId },
-    data: { status: 'PENDING_APPROVAL', version: nextVersion },
+    data: {
+      status: 'PENDING_APPROVAL',
+      version: nextVersion,
+      assignedApproverId: approverId,
+    },
   })
 
   await prisma.approvalEvent.create({
     data: { proposalId, action: 'submitted', actorId: session.user.id },
   })
 
-  const approver = await prisma.user.findUnique({ where: { id: proposal.assignedApproverId } })
+  const approver = await prisma.user.findUnique({ where: { id: approverId } })
   if (approver) {
     await createNotification(
       approver.id,
@@ -1565,6 +1624,10 @@ export type ProposalFormDataExport = {
   clientName: string
   contactName: string
   contactTitle: string
+  department: string
+  contactEmail: string
+  contactPhone: string
+  brandName: string
   projectTitle: string
   date: string
   validUntil: string
@@ -1640,6 +1703,10 @@ export async function getProposalForEdit(
     clientName: proposal.clientName,
     contactName: proposal.contactName ?? '',
     contactTitle: proposal.contactTitle ?? '',
+    department: proposal.department ?? '',
+    contactEmail: proposal.contactEmail ?? '',
+    contactPhone: proposal.contactPhone ?? '',
+    brandName: proposal.brandName ?? '',
     projectTitle: proposal.projectTitle,
     date: proposal.date.toISOString().split('T')[0],
     validUntil: proposal.validUntil.toISOString().split('T')[0],
@@ -1821,6 +1888,10 @@ export async function restoreVersion(
       clientName: String(sp.clientName ?? ''),
       contactName: sp.contactName ? String(sp.contactName) : null,
       contactTitle: sp.contactTitle ? String(sp.contactTitle) : null,
+      department: sp.department ? String(sp.department) : null,
+      contactEmail: sp.contactEmail ? String(sp.contactEmail) : null,
+      contactPhone: sp.contactPhone ? String(sp.contactPhone) : null,
+      brandName: sp.brandName ? String(sp.brandName) : null,
       projectTitle: String(sp.projectTitle ?? ''),
       date: new Date(String(sp.date)),
       validUntil: new Date(String(sp.validUntil)),
