@@ -21,6 +21,7 @@ import {
   List,
   KanbanSquare,
   Columns3,
+  ListFilter,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { duplicateProposal } from '@/lib/actions/proposals'
@@ -220,10 +222,7 @@ export function ProposalsClient({
     return () => clearTimeout(t)
   }, [search, searchParams, pushQuery])
 
-  function toggleStatus(s: ProposalStatus) {
-    const next = new Set(selectedStatuses)
-    if (next.has(s)) next.delete(s)
-    else next.add(s)
+  function commitStatuses(next: Set<ProposalStatus>) {
     setSelectedStatuses(next)
     pushQuery({
       status:
@@ -233,6 +232,30 @@ export function ProposalsClient({
       page: null,
     })
   }
+
+  function toggleStatus(s: ProposalStatus) {
+    const next = new Set(selectedStatuses)
+    if (next.has(s)) next.delete(s)
+    else next.add(s)
+    commitStatuses(next)
+  }
+
+  function selectAllStatuses() {
+    commitStatuses(new Set(ALL_STATUSES))
+  }
+
+  function clearStatuses() {
+    commitStatuses(new Set())
+  }
+
+  const statusSummary =
+    selectedStatuses.size === 0
+      ? 'No statuses'
+      : selectedStatuses.size === ALL_STATUSES.length
+        ? 'All statuses'
+        : selectedStatuses.size === 1
+          ? STATUS_LABELS[Array.from(selectedStatuses)[0]]
+          : `${selectedStatuses.size} statuses`
 
   function changeDateFrom(value: string) {
     setDateFrom(value)
@@ -535,23 +558,73 @@ export function ProposalsClient({
               </Select>
             </div>
           )}
-        </div>
 
-        {/* Status checkboxes — list view only */}
-        {view === 'list' && (
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {ALL_STATUSES.map((s) => (
-              <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
-                <Checkbox
-                  checked={selectedStatuses.has(s)}
-                  onCheckedChange={() => toggleStatus(s)}
-                  id={`status-${s}`}
-                />
-                <span className="text-sm text-slate-700">{STATUS_LABELS[s]}</span>
-              </label>
-            ))}
-          </div>
-        )}
+          {/* Status multi-select — list view only */}
+          {view === 'list' && (
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Status</Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-[200px] justify-between font-normal"
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <ListFilter className="h-4 w-4 text-slate-400 shrink-0" />
+                      <span className="truncate text-slate-700">{statusSummary}</span>
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[240px]">
+                  <div className="flex items-center justify-between px-2 py-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        selectAllStatuses()
+                      }}
+                      className="text-xs font-medium text-indigo-600 hover:underline"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        clearStatuses()
+                      }}
+                      className="text-xs font-medium text-slate-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <DropdownMenuSeparator />
+                  {ALL_STATUSES.map((s) => (
+                    <DropdownMenuItem
+                      key={s}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        toggleStatus(s)
+                      }}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={selectedStatuses.has(s)}
+                        onCheckedChange={() => toggleStatus(s)}
+                        id={`status-${s}`}
+                        aria-label={`Toggle ${STATUS_LABELS[s]}`}
+                      />
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[s]}`}
+                      >
+                        {STATUS_LABELS[s]}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
 
         {/* Kanban: hide columns dropdown */}
         {view === 'kanban' && (
