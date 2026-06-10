@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -10,6 +10,8 @@ import {
   ChevronRight,
   ArrowUpDown,
   Building2,
+  LayoutGrid,
+  List,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -30,6 +32,7 @@ import {
 } from '@/components/ui/select'
 import { createClient } from '@/lib/actions/clients'
 import type { ClientListItem, HealthStatus } from '@/lib/queries/clients'
+import { ClientsTableView } from './ClientsTableView'
 
 // ─── Health dot ───────────────────────────────────────────────────────────────
 
@@ -318,11 +321,44 @@ function AddClientSheet({
 
 type Props = { clients: ClientListItem[] }
 
+type ViewMode = 'grid' | 'table'
+
+const VIEW_PREF_KEY = 'clients_view_preference'
+
 export function ClientsClient({ clients: initial }: Props) {
   const [search, setSearch] = useState('')
   const [healthFilter, setHealthFilter] = useState<'All' | HealthStatus>('All')
   const [sortKey, setSortKey] = useState<SortKey>('lifetimeValue')
   const [addOpen, setAddOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+
+  // Load persisted view preference (client only)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VIEW_PREF_KEY)
+      if (stored === 'table' || stored === 'grid') {
+        setViewMode(stored)
+      }
+    } catch {
+      // localStorage unavailable
+    }
+  }, [])
+
+  function switchView(mode: ViewMode) {
+    if (mode === 'table' && window.innerWidth < 640) {
+      toast({
+        title: 'Table view is optimized for larger screens.',
+        description: 'Switch to card view on mobile.',
+      })
+      return
+    }
+    setViewMode(mode)
+    try {
+      localStorage.setItem(VIEW_PREF_KEY, mode)
+    } catch {
+      // ignore
+    }
+  }
 
   const filtered = initial.filter((c) => {
     const matchSearch = c.companyName.toLowerCase().includes(search.toLowerCase())
@@ -390,6 +426,36 @@ export function ClientsClient({ clients: initial }: Props) {
             <SelectItem value="wonDeals">Won Deals ↓</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* View toggle — hidden on mobile */}
+        <div className="hidden sm:flex items-center rounded-lg border border-[var(--color-border)] overflow-hidden ml-auto">
+          <button
+            type="button"
+            onClick={() => switchView('grid')}
+            aria-label="Card view"
+            aria-pressed={viewMode === 'grid'}
+            className={`flex items-center justify-center w-10 h-10 transition-colors ${
+              viewMode === 'grid'
+                ? 'bg-[var(--color-accent)] text-white'
+                : 'bg-white text-[var(--color-muted)] hover:bg-[var(--color-surface)]'
+            }`}
+          >
+            <LayoutGrid size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => switchView('table')}
+            aria-label="Table view"
+            aria-pressed={viewMode === 'table'}
+            className={`flex items-center justify-center w-10 h-10 transition-colors ${
+              viewMode === 'table'
+                ? 'bg-[var(--color-accent)] text-white'
+                : 'bg-white text-[var(--color-muted)] hover:bg-[var(--color-surface)]'
+            }`}
+          >
+            <List size={16} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -418,6 +484,8 @@ export function ClientsClient({ clients: initial }: Props) {
           <Building2 className="h-8 w-8 text-slate-300" />
           <p className="text-slate-500 text-sm">No clients match your filters.</p>
         </div>
+      ) : viewMode === 'table' ? (
+        <ClientsTableView clients={sorted} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sorted.map((c) => (
