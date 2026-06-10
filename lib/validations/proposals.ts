@@ -109,6 +109,91 @@ export const proposalSubmitSchema = z
     },
   )
 
+// ─── Per-step wizard validation ──────────────────────────────────────────────
+// Gates forward navigation in the proposal wizard: each step's required fields
+// must be filled before the user can advance past it.
+
+export type StepValidationResult = {
+  valid: boolean
+  /** Errors tied to a specific form field — surfaced inline via form.setError */
+  fieldErrors: Partial<Record<keyof ProposalFormData, string>>
+  /** All error messages for the step — shown in the step error summary */
+  messages: string[]
+}
+
+/** Fields owned by each step, used to clear stale manual errors before re-validating */
+export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
+  1: ['clientName', 'projectTitle', 'date', 'validUntil'],
+  2: ['lineItems'],
+  3: [],
+  4: ['paymentTemplateId'],
+  5: ['tcTemplateId'],
+  6: [],
+}
+
+export function validateWizardStep(
+  step: number,
+  data: ProposalFormData,
+): StepValidationResult {
+  const fieldErrors: StepValidationResult['fieldErrors'] = {}
+  const messages: string[] = []
+
+  if (step === 1) {
+    if (!data.clientName || data.clientName.trim().length < 2) {
+      fieldErrors.clientName = 'Client name is required'
+    }
+    if (!data.projectTitle || data.projectTitle.trim().length < 3) {
+      fieldErrors.projectTitle = 'Project title is required'
+    }
+    if (!data.date) {
+      fieldErrors.date = 'Proposal date is required'
+    }
+    if (!data.validUntil) {
+      fieldErrors.validUntil = 'Valid until date is required'
+    } else if (data.date && new Date(data.validUntil) <= new Date(data.date)) {
+      fieldErrors.validUntil = 'Valid until must be after proposal date'
+    }
+    messages.push(...Object.values(fieldErrors))
+  }
+
+  if (step === 2) {
+    if (data.lineItems.length === 0) {
+      messages.push('Add at least one service line item')
+    } else {
+      data.lineItems.forEach((li, idx) => {
+        const name =
+          li.customName || li.serviceName || li.description || `Line item ${idx + 1}`
+        if (!li.description.trim()) messages.push(`${name}: description is required`)
+        if (!li.unit.trim()) messages.push(`${name}: unit is required`)
+        if (li.quantity <= 0) messages.push(`${name}: quantity must be greater than 0`)
+        if (li.unitRate < 0) messages.push(`${name}: rate must be 0 or more`)
+      })
+    }
+  }
+
+  if (step === 3) {
+    if (computeTotal(data) <= 0) {
+      messages.push('Total must be greater than 0 — check line items and discount')
+    }
+  }
+
+  if (step === 4) {
+    if (!data.paymentTemplateId) {
+      fieldErrors.paymentTemplateId = 'Payment terms template is required'
+      messages.push('Select a payment terms template')
+    }
+  }
+
+  if (step === 5) {
+    if (!data.tcTemplateId) {
+      fieldErrors.tcTemplateId = 'Terms & conditions template is required'
+      messages.push('Select a terms & conditions template')
+    }
+  }
+
+  return { valid: messages.length === 0, fieldErrors, messages }
+}
+
 // ─── Pricing helpers ─────────────────────────────────────────────────────────
 
 export function computeSubtotal(

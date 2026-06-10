@@ -12,6 +12,8 @@ import { useForm, type UseFormReturn, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   proposalDraftSchema,
+  validateWizardStep,
+  WIZARD_STEP_FIELDS,
   type ProposalFormData,
 } from '@/lib/validations/proposals'
 import {
@@ -29,12 +31,15 @@ import {
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+export type StepError = { step: number; messages: string[] }
+
 type WizardContextValue = {
   form: UseFormReturn<ProposalFormData>
   currentStep: number
   setStep: (step: number) => void
   nextStep: () => void
   prevStep: () => void
+  stepError: StepError | null
   proposalId: string | null
   proposalNumber: string | null
   saveStatus: SaveStatus
@@ -137,17 +142,55 @@ export function WizardProvider({
     },
   })
 
-  const setStep = useCallback((step: number) => {
-    if (step >= 1 && step <= 6) setCurrentStep(step)
-  }, [])
+  const [stepError, setStepError] = useState<StepError | null>(null)
+
+  // Validates one step's required fields; surfaces inline field errors and
+  // returns whether the step is complete.
+  const validateStep = useCallback(
+    (step: number): boolean => {
+      const fields = WIZARD_STEP_FIELDS[step]
+      if (fields?.length) form.clearErrors(fields)
+
+      const result = validateWizardStep(step, form.getValues())
+      for (const [field, message] of Object.entries(result.fieldErrors)) {
+        form.setError(field as keyof ProposalFormData, { type: 'manual', message })
+      }
+      if (!result.valid) setStepError({ step, messages: result.messages })
+      return result.valid
+    },
+    [form],
+  )
+
+  // Moving backward is always allowed; moving forward requires every step
+  // between the current one and the target to pass validation. On failure,
+  // the user lands on the first incomplete step with its errors shown.
+  const setStep = useCallback(
+    (target: number) => {
+      if (target < 1 || target > 6) return
+      if (target <= currentStep) {
+        setStepError(null)
+        setCurrentStep(target)
+        return
+      }
+      for (let step = currentStep; step < target; step++) {
+        if (!validateStep(step)) {
+          setCurrentStep(step)
+          return
+        }
+      }
+      setStepError(null)
+      setCurrentStep(target)
+    },
+    [currentStep, validateStep],
+  )
 
   const nextStep = useCallback(() => {
-    setCurrentStep((s) => Math.min(s + 1, 6))
-  }, [])
+    setStep(currentStep + 1)
+  }, [setStep, currentStep])
 
   const prevStep = useCallback(() => {
-    setCurrentStep((s) => Math.max(s - 1, 1))
-  }, [])
+    setStep(currentStep - 1)
+  }, [setStep, currentStep])
 
   const saveExplicit = useCallback(async () => {
     setSaveStatus('saving')
@@ -208,6 +251,7 @@ export function WizardProvider({
     setStep,
     nextStep,
     prevStep,
+    stepError,
     proposalId,
     proposalNumber,
     saveStatus,

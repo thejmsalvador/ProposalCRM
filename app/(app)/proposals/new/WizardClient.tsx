@@ -90,6 +90,7 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
     setStep,
     nextStep,
     prevStep,
+    stepError,
     proposalId,
     proposalNumber,
     saveStatus: explicitSaveStatus,
@@ -299,6 +300,24 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
         {currentStep === 5 && <Step5TermsConditions />}
         {currentStep === 6 && <Step6Review />}
       </div>
+
+      {/* Step validation errors */}
+      {stepError && stepError.step === currentStep && (
+        <div
+          role="alert"
+          className="rounded-[var(--radius-sm)] border border-red-200 bg-red-50 px-4 py-3"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-danger)]">
+            <AlertCircle size={16} className="shrink-0" />
+            Complete this step before continuing
+          </div>
+          <ul className="mt-1.5 ml-6 list-disc space-y-0.5 text-sm text-red-700">
+            {stepError.messages.map((msg) => (
+              <li key={msg}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Navigation */}
       {currentStep < 6 && (
