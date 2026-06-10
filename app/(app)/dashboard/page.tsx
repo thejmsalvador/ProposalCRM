@@ -243,14 +243,17 @@ export default async function DashboardPage() {
   }
 
   // Core data — all roles
-  const [statusCounts, pipeline, wonLost, active, expiring, recent] = await Promise.all([
+  const [statusCounts, pipeline, wonLost, expiring, recent] = await Promise.all([
     proposalsByStatus(filter),
     pipelineValue(filter),
     wonLostThisMonth(filter),
-    activeProposalCount(filter),
     expiringProposals(filter),
     recentProposals(filter),
   ])
+
+  // Derived from statusCounts — no extra queries
+  const active = activeProposalCount(statusCounts)
+  const funnel = isManager ? pipelineFunnel(statusCounts) : null
 
   // Manager data
   const managerData = isManager
@@ -259,17 +262,10 @@ export default async function DashboardPage() {
         winRate(filter, 30),
         winRate(filter, 90),
         avgDraftToSent(filter),
-        pipelineFunnel(filter),
       ])
     : null
 
-  const [pendingList, wr30, wr90, avgDays, funnel] = managerData ?? [
-    [],
-    null,
-    null,
-    null,
-    null,
-  ]
+  const [pendingList, wr30, wr90, avgDays] = managerData ?? [[], null, null, null]
 
   // Admin data
   const adminData = isAdmin ? await adminStats() : null

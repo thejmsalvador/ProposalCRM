@@ -40,11 +40,17 @@ export async function pipelineValue(filter: RoleFilter): Promise<number> {
 
 export async function winRate(filter: RoleFilter, days: number): Promise<number | null> {
   const since = new Date(Date.now() - days * 86_400_000)
-  const base = { ...proposalWhere(filter), updatedAt: { gte: since } }
-  const [won, lost] = await Promise.all([
-    prisma.proposal.count({ where: { ...base, status: 'WON' } }),
-    prisma.proposal.count({ where: { ...base, status: 'LOST' } }),
-  ])
+  const groups = await prisma.proposal.groupBy({
+    by: ['status'],
+    where: {
+      ...proposalWhere(filter),
+      updatedAt: { gte: since },
+      status: { in: ['WON', 'LOST'] },
+    },
+    _count: { id: true },
+  })
+  const won = groups.find(g => g.status === 'WON')?._count.id ?? 0
+  const lost = groups.find(g => g.status === 'LOST')?._count.id ?? 0
   const total = won + lost
   return total === 0 ? null : Math.round((won / total) * 100)
 }
@@ -176,13 +182,13 @@ export async function recentProposals(filter: RoleFilter): Promise<RecentProposa
 
 // ─── Active proposal count ────────────────────────────────────────────────────
 
-export async function activeProposalCount(filter: RoleFilter): Promise<number> {
-  return prisma.proposal.count({
-    where: {
-      ...proposalWhere(filter),
-      status: { notIn: ['WON', 'LOST', 'EXPIRED'] },
-    },
-  })
+// Derived from the proposalsByStatus result (same role filter) — no extra query.
+const TERMINAL_STATUSES = ['WON', 'LOST', 'EXPIRED']
+
+export function activeProposalCount(statusCounts: StatusCount[]): number {
+  return statusCounts
+    .filter(c => !TERMINAL_STATUSES.includes(c.status))
+    .reduce((sum, c) => sum + c.count, 0)
 }
 
 // ─── Won / lost this month ────────────────────────────────────────────────────
@@ -192,32 +198,37 @@ export async function wonLostThisMonth(
 ): Promise<{ won: number; lost: number }> {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const base = { ...proposalWhere(filter), updatedAt: { gte: monthStart } }
-  const [won, lost] = await Promise.all([
-    prisma.proposal.count({ where: { ...base, status: 'WON' } }),
-    prisma.proposal.count({ where: { ...base, status: 'LOST' } }),
-  ])
-  return { won, lost }
+  const groups = await prisma.proposal.groupBy({
+    by: ['status'],
+    where: {
+      ...proposalWhere(filter),
+      updatedAt: { gte: monthStart },
+      status: { in: ['WON', 'LOST'] },
+    },
+    _count: { id: true },
+  })
+  return {
+    won: groups.find(g => g.status === 'WON')?._count.id ?? 0,
+    lost: groups.find(g => g.status === 'LOST')?._count.id ?? 0,
+  }
 }
 
 // ─── Pipeline funnel ──────────────────────────────────────────────────────────
 
 export type FunnelStep = { status: string; label: string; count: number }
 
-export async function pipelineFunnel(filter: RoleFilter): Promise<FunnelStep[]> {
-  const steps = [
-    { status: 'DRAFT' as const, label: 'Draft' },
-    { status: 'PENDING_APPROVAL' as const, label: 'Pending' },
-    { status: 'APPROVED' as const, label: 'Approved' },
-    { status: 'SENT' as const, label: 'Sent' },
-    { status: 'WON' as const, label: 'Won' },
-  ]
-  const counts = await Promise.all(
-    steps.map(s =>
-      prisma.proposal.count({ where: { ...proposalWhere(filter), status: s.status } }),
-    ),
-  )
-  return steps.map((s, i) => ({ ...s, count: counts[i] }))
+const FUNNEL_STEPS = [
+  { status: 'DRAFT', label: 'Draft' },
+  { status: 'PENDING_APPROVAL', label: 'Pending' },
+  { status: 'APPROVED', label: 'Approved' },
+  { status: 'SENT', label: 'Sent' },
+  { status: 'WON', label: 'Won' },
+]
+
+// Derived from the proposalsByStatus result (same role filter) — no extra query.
+export function pipelineFunnel(statusCounts: StatusCount[]): FunnelStep[] {
+  const byStatus = new Map(statusCounts.map(c => [c.status, c.count]))
+  return FUNNEL_STEPS.map(s => ({ ...s, count: byStatus.get(s.status) ?? 0 }))
 }
 
 // ─── Admin stats ──────────────────────────────────────────────────────────────
