@@ -2,6 +2,17 @@ import { z } from 'zod'
 
 // ─── Line item schema ────────────────────────────────────────────────────────
 
+// Per-line-item project expense (internal only — never shown to the client or
+// on the PDF). Lenient so blank draft rows don't break auto-save; blank rows are
+// pruned server-side before persisting.
+export const lineItemExpenseSchema = z.object({
+  label: z.string().default(''),
+  // .catch(0) keeps a blank number input (NaN) from breaking auto-save/submit
+  amount: z.number().min(0, 'Expense amount must be 0 or more').catch(0).default(0),
+})
+
+export type LineItemExpense = z.infer<typeof lineItemExpenseSchema>
+
 export const lineItemSchema = z.object({
   id: z.string(), // client-side temp ID
   serviceId: z.string().nullable(),
@@ -14,6 +25,8 @@ export const lineItemSchema = z.object({
   lineTotal: z.number().min(0),
   isOptional: z.boolean().default(false),
   internalNote: z.string().default(''),
+  // Internal project expenses for this line item (not client-facing)
+  expenses: z.array(lineItemExpenseSchema).default([]),
   sortOrder: z.number().int().min(0),
   // UI-only fields (not persisted directly)
   serviceName: z.string().default(''),
@@ -21,6 +34,16 @@ export const lineItemSchema = z.object({
 })
 
 export type LineItemFormData = z.infer<typeof lineItemSchema>
+
+/** Drop blank expense rows (no label and zero amount) before persisting. */
+export function cleanLineItemExpenses(
+  expenses: LineItemExpense[] | undefined | null,
+): LineItemExpense[] {
+  if (!Array.isArray(expenses)) return []
+  return expenses
+    .map((e) => ({ label: (e.label ?? '').trim(), amount: Number(e.amount) || 0 }))
+    .filter((e) => e.label !== '' || e.amount > 0)
+}
 
 // ─── Draft save schema (relaxed — allows partial data) ──────────────────────
 
