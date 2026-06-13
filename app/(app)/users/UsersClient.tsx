@@ -14,6 +14,8 @@ import { TeamsSection } from './TeamsSection'
 const ROLE_LABEL: Record<string, string> = {
   SALES_EXEC: 'Sales Exec',
   SALES_MANAGER: 'Sales Manager',
+  COO: 'COO',
+  CEO: 'CEO',
   ADMIN: 'Admin',
   SUPER_ADMIN: 'Super Admin',
 }
@@ -21,6 +23,8 @@ const ROLE_LABEL: Record<string, string> = {
 const ROLE_BADGE: Record<string, string> = {
   SALES_EXEC: 'bg-slate-100 text-slate-600',
   SALES_MANAGER: 'bg-blue-100 text-blue-700',
+  COO: 'bg-teal-100 text-teal-700',
+  CEO: 'bg-amber-100 text-amber-700',
   ADMIN: 'bg-purple-100 text-purple-700',
   SUPER_ADMIN: 'bg-indigo-100 text-indigo-700',
 }

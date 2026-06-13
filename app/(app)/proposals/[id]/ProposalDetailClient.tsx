@@ -34,6 +34,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
+import { formatCurrency } from '@/lib/validations/proposals'
 import type { ProposalDetail, ProposalVersionEntry, VersionSnapshot } from '@/lib/actions/proposals'
 import {
   approveProposal,
@@ -48,6 +49,7 @@ import {
   getVersionSnapshot,
 } from '@/lib/actions/proposals'
 import { saveAsTemplate } from '@/lib/actions/templates'
+import { engagementLabel } from '@/lib/validations/catalog'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -89,6 +91,7 @@ const ALL_STATUSES = [
 
 const APPROVAL_EVENT_LABELS: Record<string, string> = {
   submitted: 'Submitted for approval',
+  coo_approved: 'Approved by COO',
   approved: 'Approved',
   revision_requested: 'Revision requested',
   rejected: 'Rejected',
@@ -210,8 +213,8 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase tracking-wide">Description</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
+                  <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase tracking-wide">Term</th>
+                  <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase tracking-wide">Item Cost</th>
                   <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase tracking-wide">Total</th>
                 </tr>
               </thead>
@@ -302,6 +305,20 @@ export function ProposalDetailClient({
   const [isPending, startTransition] = useTransition()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
+  // Items are costed in ₱; `currency` is the client-facing currency. For non-PHP
+  // proposals the converted total = ₱ total ÷ rate (rate is ₱ per 1 unit).
+  const cur = proposal.currency
+  const fxRate =
+    cur !== 'PHP' && proposal.exchangeRate != null && parseFloat(proposal.exchangeRate) > 0
+      ? parseFloat(proposal.exchangeRate)
+      : null
+  const convertedTotal = fxRate != null ? parseFloat(proposal.total) / fxRate : null
+  const discountAmt = proposal.discountValue
+    ? proposal.discountType === 'percentage'
+      ? (parseFloat(proposal.subtotal) * parseFloat(proposal.discountValue)) / 100
+      : parseFloat(proposal.discountValue)
+    : 0
+
   // PDF generation
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
   const latestPdfUrl = proposal.versions.find((v) => v.pdfUrl)?.pdfUrl ?? null
@@ -358,6 +375,9 @@ export function ProposalDetailClient({
 
   const status = proposal.status
   const isAssignedApprover = proposal.assignedApprover?.id === currentUser.id
+  // In the two-stage chain, the COO acts first (cooApprovedAt unset), then the CEO.
+  const approvalStage: 'COO' | 'CEO' =
+    proposal.cooApprovedAt == null ? 'COO' : 'CEO'
 
   // ─── Action helpers ──────────────────────────────────────────────────────────
 
@@ -532,7 +552,9 @@ export function ProposalDetailClient({
     canApprove && isAssignedApprover && status === 'PENDING_APPROVAL' ? (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-col gap-3">
         <p className="text-sm text-amber-800 font-medium">
-          This proposal is awaiting your approval.
+          {approvalStage === 'COO'
+            ? 'This proposal is awaiting your review as COO. Approving routes it to the CEO for final sign-off.'
+            : 'This proposal passed COO review and is awaiting your final approval as CEO.'}
         </p>
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
@@ -542,7 +564,7 @@ export function ProposalDetailClient({
             disabled={isPending}
           >
             <CheckCircle2 className="h-4 w-4 mr-1.5" />
-            Approve
+            {approvalStage === 'COO' ? 'Approve & send to CEO' : 'Give final approval'}
           </Button>
           <Button
             size="sm"
@@ -701,16 +723,16 @@ export function ProposalDetailClient({
                     Description
                   </th>
                   <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Unit
+                    Engagement
                   </th>
                   <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Qty
+                    Term
                   </th>
                   <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Unit Rate
+                    Item Cost
                   </th>
                   <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Total
+                    Item Total
                   </th>
                   <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Optional
@@ -733,7 +755,7 @@ export function ProposalDetailClient({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{li.unit}</td>
+                    <td className="px-4 py-3 text-slate-600">{engagementLabel(li.unit)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{li.quantity}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{fmt(li.unitRate)}</td>
                     <td className="px-4 py-3 text-right font-medium text-slate-800">
@@ -765,7 +787,7 @@ export function ProposalDetailClient({
             <span className="text-slate-800 font-medium">{fmt(proposal.subtotal)}</span>
           </div>
 
-          {proposal.discountValue && parseFloat(proposal.discountValue) > 0 && (
+          {discountAmt > 0 && (
             <div className="flex justify-between text-sm py-1.5">
               <span className="text-slate-500">
                 Discount
@@ -773,16 +795,7 @@ export function ProposalDetailClient({
                   ? ` (${proposal.discountValue}%)`
                   : ''}
               </span>
-              <span className="text-red-600">
-                −
-                {proposal.discountType === 'percentage'
-                  ? fmt(
-                      String(
-                        (parseFloat(proposal.subtotal) * parseFloat(proposal.discountValue)) / 100,
-                      ),
-                    )
-                  : fmt(proposal.discountValue)}
-              </span>
+              <span className="text-red-600">−{fmt(String(discountAmt))}</span>
             </div>
           )}
 
@@ -792,7 +805,9 @@ export function ProposalDetailClient({
               <span className="text-slate-700">
                 {fmt(
                   String(
-                    (parseFloat(proposal.subtotal) * parseFloat(proposal.vatRate)) / 100,
+                    ((parseFloat(proposal.subtotal) - discountAmt) *
+                      parseFloat(proposal.vatRate)) /
+                      100,
                   ),
                 )}
               </span>
@@ -801,12 +816,28 @@ export function ProposalDetailClient({
 
           <Separator className="my-2" />
           <div className="flex justify-between text-base font-bold">
-            <span className="text-slate-900">Total</span>
+            <span className="text-slate-900">Total (PHP)</span>
             <span className="text-indigo-700">{fmt(proposal.total)}</span>
           </div>
 
-          {proposal.currency !== 'PHP' && (
-            <p className="text-xs text-slate-400 mt-1 text-right">Currency: {proposal.currency}</p>
+          {cur !== 'PHP' && (
+            <div className="flex justify-between items-baseline text-sm font-semibold pt-1.5">
+              <span className="text-slate-600">Converted Total ({cur})</span>
+              {convertedTotal != null ? (
+                <span className="text-right">
+                  <span className="text-indigo-700 tabular-nums">
+                    {formatCurrency(convertedTotal, cur)}
+                  </span>
+                  <span className="block text-xs font-normal text-slate-400 tabular-nums">
+                    ÷ ₱{fxRate!.toLocaleString('en-PH')} per 1 {cur}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-xs font-normal text-amber-600">
+                  No exchange rate set
+                </span>
+              )}
+            </div>
           )}
         </div>
 
@@ -1142,6 +1173,12 @@ export function ProposalDetailClient({
             <p className="text-right text-2xl font-bold text-indigo-700 mt-2">
               {fmt(proposal.total)}
             </p>
+            {convertedTotal != null && (
+              <p className="text-right text-xs text-slate-400 tabular-nums">
+                Client-facing: {formatCurrency(convertedTotal, cur)} (₱
+                {fxRate!.toLocaleString('en-PH')}/{cur})
+              </p>
+            )}
           </div>
         </div>
 

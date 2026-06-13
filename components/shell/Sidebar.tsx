@@ -78,6 +78,8 @@ function getNavItems(unreadCount: number): NavItem[] {
 const ROLE_LABEL: Record<Role, string> = {
   [Role.SALES_EXEC]: 'Sales Executive',
   [Role.SALES_MANAGER]: 'Sales Manager',
+  [Role.COO]: 'COO',
+  [Role.CEO]: 'CEO',
   [Role.ADMIN]: 'Admin',
   [Role.SUPER_ADMIN]: 'Super Admin',
 }

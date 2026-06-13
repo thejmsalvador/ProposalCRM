@@ -10,12 +10,13 @@ import {
   getTemplateOptions,
 } from '@/lib/actions/catalog'
 import { Button } from '@/components/ui/button'
+import { formatCurrency } from '@/lib/validations/proposals'
+import { engagementLabel } from '@/lib/validations/catalog'
 import { EditServiceButton } from './EditServiceButton'
 
 function formatRate(rate: string | null) {
   if (!rate) return '—'
-  const n = parseFloat(rate)
-  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return formatCurrency(parseFloat(rate))
 }
 
 function formatDate(iso: string) {
@@ -58,6 +59,9 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
 
   if (!service) notFound()
 
+  const itemTotal = parseFloat(service.defaultRate) * service.engagementTerm
+  const expensesTotal = service.estimatedExpenses.reduce((sum, e) => sum + e.amount, 0)
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back link */}
@@ -81,9 +85,7 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
               {service.isActive ? 'Active' : 'Archived'}
             </span>
           </div>
-          <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-accent-light)] text-[var(--color-accent)]">
-            {service.category}
-          </span>
+          <p className="text-sm text-[var(--color-muted)] mt-1">{service.category}</p>
         </div>
         <div className="shrink-0">
           <EditServiceButton
@@ -97,11 +99,17 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
 
       {/* Detail card */}
       <div className="bg-white rounded-xl border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
+        <Row label="Service Category">{service.category}</Row>
         <Row label="Description">{service.description}</Row>
-        <Row label="Unit">{service.unit}</Row>
-        <Row label="Default rate">{formatRate(service.defaultRate)}</Row>
-        <Row label="Min rate">{formatRate(service.minRate)}</Row>
-        <Row label="Max rate">{formatRate(service.maxRate)}</Row>
+        <Row label="Engagement Type">{engagementLabel(service.unit)}</Row>
+        <Row label="Engagement Term">
+          {service.engagementTerm}
+          {service.unit === 'monthly' ? ` month${service.engagementTerm !== 1 ? 's' : ''}` : ''}
+        </Row>
+        <Row label="Item Cost">{formatRate(service.defaultRate)}</Row>
+        <Row label="Item Total">
+          <span className="font-semibold">{formatRate(String(itemTotal))}</span>
+        </Row>
         <Row label="Default payment template">{service.paymentTemplateName ?? '—'}</Row>
         <Row label="Default T&C template">{service.tcTemplateName ?? '—'}</Row>
         {service.internalNotes && (
@@ -112,6 +120,40 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
         <Row label="Created">{formatDate(service.createdAt)}</Row>
         <Row label="Last updated">{formatDate(service.updatedAt)}</Row>
       </div>
+
+      {/* Estimated project expenses — internal only */}
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-sm font-semibold text-[var(--color-primary)]">
+            Estimated Project Expenses
+          </h2>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            Internal only
+          </span>
+        </div>
+        {service.estimatedExpenses.length === 0 ? (
+          <div className="bg-white rounded-xl border border-[var(--color-border)] px-5 py-6 text-center text-sm text-[var(--color-muted)]">
+            No estimated expenses recorded.
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
+            {service.estimatedExpenses.map((e, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
+                <span className="text-[var(--color-primary)]">{e.label}</span>
+                <span className="tabular-nums text-[var(--color-primary)]">
+                  {formatCurrency(e.amount)}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-4 px-5 py-3 text-sm bg-[var(--color-surface)]">
+              <span className="font-medium text-[var(--color-primary)]">Total</span>
+              <span className="font-semibold tabular-nums text-[var(--color-primary)]">
+                {formatCurrency(expensesTotal)}
+              </span>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Default scope of work */}
       <section>
@@ -247,13 +289,13 @@ function DiffSummary({ diff, action }: { diff: unknown; action: string }) {
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  name: 'Name',
-  category: 'Category',
+  name: 'Service name',
+  category: 'Service category',
   description: 'Description',
-  unit: 'Unit',
-  defaultRate: 'Default rate',
-  minRate: 'Min rate',
-  maxRate: 'Max rate',
+  unit: 'Engagement type',
+  engagementTerm: 'Engagement term',
+  estimatedExpenses: 'Estimated project expenses',
+  defaultRate: 'Item cost',
   paymentTplId: 'Payment template',
   tcTemplateId: 'T&C template',
   internalNotes: 'Internal notes',

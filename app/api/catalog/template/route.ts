@@ -10,8 +10,6 @@ const HEADERS = [
   'defaultScope',
   'unit',
   'defaultRate',
-  'minRate',
-  'maxRate',
   'internalNotes',
 ]
 
@@ -22,8 +20,6 @@ const INSTRUCTIONS = [
   'Recommended. Full scope text pre-filled in proposals.',
   'Required. E.g. lump sum, per month, per asset, per campaign',
   'Required. Number only, no currency symbol. E.g. 85000',
-  'Optional. Floor price — triggers warning if quoted below this.',
-  'Optional. Ceiling price for reference.',
   'Optional. Internal only, never shown on proposals.',
 ]
 
@@ -36,8 +32,6 @@ const EXAMPLE_ROWS = [
     'lump sum',
     85000,
     '',
-    '',
-    '',
   ],
   [
     'Social Media Management',
@@ -46,8 +40,6 @@ const EXAMPLE_ROWS = [
     'Includes content calendar, 12 posts per month across 2 platforms, community management.',
     'per month',
     35000,
-    30000,
-    45000,
     '',
   ],
   [
@@ -57,8 +49,6 @@ const EXAMPLE_ROWS = [
     'Pre-production planning, shoot day, post-production including color grading and audio mix.',
     'per project',
     250000,
-    200000,
-    350000,
     'Excludes talent and location fees',
   ],
 ]
@@ -87,7 +77,7 @@ export async function GET(req: NextRequest) {
     const wb = XLSX.utils.book_new()
     const ws: XLSX.WorkSheet = {}
 
-    const colWidths = [30, 20, 40, 50, 20, 15, 15, 15, 40]
+    const colWidths = [30, 20, 40, 50, 20, 15, 40]
 
     // Row 1: headers (bold, gray fill)
     HEADERS.forEach((h, ci) => {
@@ -129,7 +119,7 @@ export async function GET(req: NextRequest) {
       })
     })
 
-    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 4, c: 8 } })
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 4, c: 6 } })
     ws['!cols'] = colWidths.map((w) => ({ wch: w }))
 
     XLSX.utils.book_append_sheet(wb, ws, 'Services')

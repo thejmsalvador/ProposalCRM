@@ -2,16 +2,12 @@ import { notFound } from 'next/navigation'
 import { createHmac } from 'crypto'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
+import { engagementLabel } from '@/lib/validations/catalog'
+import { formatCurrency } from '@/lib/validations/proposals'
 
 type Props = {
   params: { proposalId: string }
   searchParams: { token?: string }
-}
-
-function fmt(value: string | number | null | undefined): string {
-  const n = parseFloat(String(value ?? '0'))
-  if (isNaN(n)) return '₱0.00'
-  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function fmtDate(iso: string | Date): string {
@@ -76,10 +72,30 @@ export default async function PdfPage({ params, searchParams }: Props) {
   const discountValue = proposal.discountValue
     ? parseFloat(proposal.discountValue.toString())
     : null
+  const discountAmt =
+    discountValue !== null && discountValue > 0
+      ? proposal.discountType === 'percentage'
+        ? (subtotal * discountValue) / 100
+        : discountValue
+      : 0
   const vatRate = proposal.vatRate
     ? parseFloat(proposal.vatRate.toString())
     : null
-  const vatAmount = vatRate ? (subtotal * vatRate) / 100 : null
+  const vatAmount = vatRate ? ((subtotal - discountAmt) * vatRate) / 100 : null
+
+  // All amounts are stored in ₱; the client-facing document renders them in the
+  // proposal currency, converted at the manual rate (₱ per 1 unit). Falls back
+  // to ₱ if a non-PHP proposal somehow has no rate.
+  const fxRate =
+    proposal.currency !== 'PHP' && proposal.exchangeRate
+      ? parseFloat(proposal.exchangeRate.toString())
+      : null
+  const displayCurrency = fxRate && fxRate > 0 ? proposal.currency : 'PHP'
+  const money = (value: string | number | null | undefined): string => {
+    const n = parseFloat(String(value ?? '0'))
+    const safe = isNaN(n) ? 0 : n
+    return formatCurrency(fxRate && fxRate > 0 ? safe / fxRate : safe, displayCurrency)
+  }
 
   const css = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -270,11 +286,11 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 </div>
                 <div className="cover-meta-item">
                   <div className="label">Currency</div>
-                  <div className="value">{proposal.currency}</div>
+                  <div className="value">{displayCurrency}</div>
                 </div>
                 <div className="cover-meta-item">
                   <div className="label">Total Investment</div>
-                  <div className="cover-total-value">{fmt(proposal.total.toString())}</div>
+                  <div className="cover-total-value">{money(total)}</div>
                 </div>
               </div>
             </div>
@@ -331,20 +347,20 @@ export default async function PdfPage({ params, searchParams }: Props) {
               <thead>
                 <tr>
                   <th style={{ width: '40%' }}>Service</th>
-                  <th className="right">Unit</th>
-                  <th className="right">Qty</th>
-                  <th className="right">Unit Rate</th>
-                  <th className="right">Total</th>
+                  <th className="right">Engagement</th>
+                  <th className="right">Term</th>
+                  <th className="right">Item Cost</th>
+                  <th className="right">Item Total</th>
                 </tr>
               </thead>
               <tbody>
                 {nonOptionalItems.map((li) => (
                   <tr key={li.id}>
                     <td><strong>{li.description}</strong></td>
-                    <td className="right">{li.unit}</td>
+                    <td className="right">{engagementLabel(li.unit)}</td>
                     <td className="right">{li.quantity.toString()}</td>
-                    <td className="right">{fmt(li.unitRate.toString())}</td>
-                    <td className="right">{fmt(li.lineTotal.toString())}</td>
+                    <td className="right">{money(li.unitRate.toString())}</td>
+                    <td className="right">{money(li.lineTotal.toString())}</td>
                   </tr>
                 ))}
               </tbody>
@@ -355,25 +371,25 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 <tbody>
                   <tr>
                     <td style={{ color: '#64748b' }}>Subtotal</td>
-                    <td className="right">{fmt(subtotal.toString())}</td>
+                    <td className="right">{money(subtotal)}</td>
                   </tr>
-                  {discountValue !== null && discountValue > 0 && (
+                  {discountAmt > 0 && (
                     <tr>
                       <td style={{ color: '#64748b' }}>
-                        Discount{proposal.discountType === 'PERCENTAGE' ? ` (${proposal.discountValue}%)` : ''}
+                        Discount{proposal.discountType === 'percentage' ? ` (${proposal.discountValue}%)` : ''}
                       </td>
-                      <td className="right" style={{ color: '#dc2626' }}>−{fmt(discountValue.toString())}</td>
+                      <td className="right" style={{ color: '#dc2626' }}>−{money(discountAmt)}</td>
                     </tr>
                   )}
                   {vatRate !== null && vatAmount !== null && (
                     <tr>
                       <td style={{ color: '#64748b' }}>VAT ({vatRate}%)</td>
-                      <td className="right">{fmt(vatAmount.toString())}</td>
+                      <td className="right">{money(vatAmount)}</td>
                     </tr>
                   )}
                   <tr className="totals-grand">
-                    <td>Grand Total</td>
-                    <td className="right">{fmt(total.toString())}</td>
+                    <td>Grand Total ({displayCurrency})</td>
+                    <td className="right">{money(total)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -388,20 +404,20 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 <thead>
                   <tr>
                     <th style={{ width: '40%' }}>Service</th>
-                    <th className="right">Unit</th>
-                    <th className="right">Qty</th>
-                    <th className="right">Unit Rate</th>
-                    <th className="right">Total</th>
+                    <th className="right">Engagement</th>
+                    <th className="right">Term</th>
+                    <th className="right">Item Cost</th>
+                    <th className="right">Item Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {optionalItems.map((li) => (
                     <tr key={li.id}>
                       <td><strong>{li.description}</strong></td>
-                      <td className="right">{li.unit}</td>
+                      <td className="right">{engagementLabel(li.unit)}</td>
                       <td className="right">{li.quantity.toString()}</td>
-                      <td className="right">{fmt(li.unitRate.toString())}</td>
-                      <td className="right">{fmt(li.lineTotal.toString())}</td>
+                      <td className="right">{money(li.unitRate.toString())}</td>
+                      <td className="right">{money(li.lineTotal.toString())}</td>
                     </tr>
                   ))}
                 </tbody>

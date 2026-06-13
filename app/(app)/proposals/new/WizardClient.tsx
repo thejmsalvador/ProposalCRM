@@ -157,6 +157,7 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       projectTitle: (sp.projectTitle as string) || '',
       introText: (sp.introText as string) || '',
       currency: (sp.currency as string) || 'PHP',
+      exchangeRate: sp.exchangeRate != null ? parseFloat(String(sp.exchangeRate)) : null,
       discountType: (sp.discountType === 'percentage' || sp.discountType === 'fixed') ? sp.discountType : null,
       discountValue: sp.discountValue ? parseFloat(sp.discountValue as string) : null,
       vatEnabled: !!(sp.vatRate),

@@ -17,6 +17,8 @@ export type Action =
  *
  * SALES_EXEC    – own proposals only; no catalog/user management
  * SALES_MANAGER – can approve and edit any proposal; manages catalog
+ * COO           – first-stage approver in the COO → CEO chain; oversight access
+ * CEO           – second-stage (final) approver; oversight access
  * ADMIN         – full access
  * SUPER_ADMIN   – full access (same set as ADMIN)
  */
@@ -28,6 +30,20 @@ const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     'edit:any_proposal',
     'approve:proposal',
     'manage:catalog',
+  ],
+  [Role.COO]: [
+    'create:proposal',
+    'edit:own_proposal',
+    'edit:any_proposal',
+    'approve:proposal',
+    'view:audit_log',
+  ],
+  [Role.CEO]: [
+    'create:proposal',
+    'edit:own_proposal',
+    'edit:any_proposal',
+    'approve:proposal',
+    'view:audit_log',
   ],
   [Role.ADMIN]: [
     'create:proposal',

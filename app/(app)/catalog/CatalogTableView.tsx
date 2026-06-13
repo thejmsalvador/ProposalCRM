@@ -32,14 +32,14 @@ import {
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { archiveService, restoreService, bulkArchiveServices, bulkRestoreServices } from '@/lib/actions/catalog'
 import type { ServiceListItem } from '@/lib/actions/catalog'
+import { formatCurrency } from '@/lib/validations/proposals'
+import { engagementLabel } from '@/lib/validations/catalog'
 
-type SortKey = 'name' | 'category' | 'unit' | 'defaultRate' | 'minRate' | 'maxRate' | 'status'
+type SortKey = 'name' | 'category' | 'unit' | 'engagementTerm' | 'defaultRate' | 'itemTotal' | 'status'
 type SortDir = 'asc' | 'desc'
 
-function formatRate(rate: string | null) {
-  if (!rate) return '—'
-  const n = parseFloat(rate)
-  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function itemTotalOf(s: ServiceListItem) {
+  return parseFloat(s.defaultRate) * s.engagementTerm
 }
 
 const PAGE_SIZE = 25
@@ -72,10 +72,10 @@ export function CatalogTableView({ services, onEdit }: Props) {
       switch (sortKey) {
         case 'name': av = a.name; bv = b.name; break
         case 'category': av = a.category; bv = b.category; break
-        case 'unit': av = a.unit; bv = b.unit; break
+        case 'unit': av = engagementLabel(a.unit); bv = engagementLabel(b.unit); break
+        case 'engagementTerm': av = a.engagementTerm; bv = b.engagementTerm; break
         case 'defaultRate': av = parseFloat(a.defaultRate); bv = parseFloat(b.defaultRate); break
-        case 'minRate': av = a.minRate ? parseFloat(a.minRate) : -Infinity; bv = b.minRate ? parseFloat(b.minRate) : -Infinity; break
-        case 'maxRate': av = a.maxRate ? parseFloat(a.maxRate) : -Infinity; bv = b.maxRate ? parseFloat(b.maxRate) : -Infinity; break
+        case 'itemTotal': av = itemTotalOf(a); bv = itemTotalOf(b); break
         case 'status': av = a.isActive ? 0 : 1; bv = b.isActive ? 0 : 1; break
       }
       if (av < bv) return sortDir === 'asc' ? -1 : 1
@@ -229,12 +229,12 @@ export function CatalogTableView({ services, onEdit }: Props) {
                   aria-label="Select all services"
                 />
               </TableHead>
-              <SortableHead label="Name" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} />
-              <SortableHead label="Category" sortKey="category" current={sortKey} dir={sortDir} onSort={handleSort} />
-              <SortableHead label="Unit" sortKey="unit" current={sortKey} dir={sortDir} onSort={handleSort} />
-              <SortableHead label="Default Rate" sortKey="defaultRate" current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-              <SortableHead label="Min Rate" sortKey="minRate" current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-              <SortableHead label="Max Rate" sortKey="maxRate" current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHead label="Service Name" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Service Category" sortKey="category" current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Engagement Type" sortKey="unit" current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Term" sortKey="engagementTerm" current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHead label="Item Cost" sortKey="defaultRate" current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHead label="Item Total" sortKey="itemTotal" current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
               <SortableHead label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={handleSort} />
               <TableHead className="w-12" />
             </TableRow>
@@ -270,15 +270,15 @@ export function CatalogTableView({ services, onEdit }: Props) {
                       {svc.name}
                     </Link>
                   </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-accent-light)] text-[var(--color-accent)]">
-                      {svc.category}
-                    </span>
+                  <TableCell className="text-sm text-[var(--color-primary)]">{svc.category}</TableCell>
+                  <TableCell className="text-sm text-[var(--color-muted)]">{engagementLabel(svc.unit)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-[var(--color-muted)]">{svc.engagementTerm}</TableCell>
+                  <TableCell className="text-right tabular-nums text-[var(--color-muted)]">
+                    {formatCurrency(parseFloat(svc.defaultRate))}
                   </TableCell>
-                  <TableCell className="text-sm text-[var(--color-muted)]">{svc.unit}</TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">{formatRate(svc.defaultRate)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-[var(--color-muted)]">{formatRate(svc.minRate)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-[var(--color-muted)]">{formatRate(svc.maxRate)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {formatCurrency(itemTotalOf(svc))}
+                  </TableCell>
                   <TableCell>
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${

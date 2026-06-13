@@ -108,6 +108,8 @@ export function InviteUserDialog({ open, onOpenChange, teams }: Props) {
               <SelectContent>
                 <SelectItem value="SALES_EXEC">Sales Executive</SelectItem>
                 <SelectItem value="SALES_MANAGER">Sales Manager</SelectItem>
+                <SelectItem value="COO">COO</SelectItem>
+                <SelectItem value="CEO">CEO</SelectItem>
                 <SelectItem value="ADMIN">Admin</SelectItem>
               </SelectContent>
             </Select>

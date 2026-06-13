@@ -48,6 +48,8 @@ export const proposalDraftSchema = z.object({
 
   // Step 3
   currency: z.string().default('PHP'),
+  // ₱ per 1 unit of the proposal currency; null when currency is PHP
+  exchangeRate: z.number().nullable().default(null),
   discountType: z.enum(['percentage', 'fixed']).nullable().default(null),
   discountValue: z.number().nullable().default(null),
   discountLabel: z.string().default(''),
@@ -92,6 +94,7 @@ export const proposalSubmitSchema = z
     introText: z.string().default(''),
     lineItems: z.array(lineItemSchema).min(1, 'At least one service is required'),
     currency: z.string().default('PHP'),
+    exchangeRate: z.number().nullable().default(null),
     discountType: z.enum(['percentage', 'fixed']).nullable().default(null),
     discountValue: z.number().nullable().default(null),
     discountLabel: z.string().default(''),
@@ -124,6 +127,13 @@ export const proposalSubmitSchema = z
       path: ['lineItems'],
     },
   )
+  .refine(
+    (d) => d.currency === 'PHP' || (d.exchangeRate != null && d.exchangeRate > 0),
+    {
+      message: 'Exchange rate is required for non-PHP currencies',
+      path: ['exchangeRate'],
+    },
+  )
 
 // ─── Per-step wizard validation ──────────────────────────────────────────────
 // Gates forward navigation in the proposal wizard: each step's required fields
@@ -141,7 +151,7 @@ export type StepValidationResult = {
 export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   1: ['clientName', 'contactEmail', 'projectTitle', 'date', 'validUntil'],
   2: ['lineItems'],
-  3: [],
+  3: ['exchangeRate'],
   4: ['paymentTemplateId'],
   5: ['tcTemplateId'],
   6: [],
@@ -196,6 +206,13 @@ export function validateWizardStep(
   if (step === 3) {
     if (computeTotal(data) <= 0) {
       messages.push('Total must be greater than 0 — check line items and discount')
+    }
+    if (
+      data.currency !== 'PHP' &&
+      (data.exchangeRate == null || data.exchangeRate <= 0)
+    ) {
+      fieldErrors.exchangeRate = `Exchange rate is required for ${data.currency}`
+      messages.push(`Set the ₱ exchange rate for ${data.currency}`)
     }
   }
 

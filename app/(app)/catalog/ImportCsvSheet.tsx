@@ -29,8 +29,6 @@ type ParsedRow = {
   defaultScope: string
   unit: string
   defaultRate: number | null
-  minRate: number | null
-  maxRate: number | null
   internalNotes: string
   status: RowStatus
   errors: string[]
@@ -165,8 +163,6 @@ export function ImportCsvSheet({ open, onOpenChange }: Props) {
       defaultScope: get(raw, 'defaultscope'),
       unit: get(raw, 'unit'),
       defaultRate: parseNum(get(raw, 'defaultrate')),
-      minRate: parseNum(get(raw, 'minrate')),
-      maxRate: parseNum(get(raw, 'maxrate')),
       internalNotes: get(raw, 'internalnotes'),
     }))
 
@@ -200,12 +196,6 @@ export function ImportCsvSheet({ open, onOpenChange }: Props) {
         errors.push(`A service named "${row.name}" already exists in the catalog`)
       }
 
-      if (row.minRate !== null && row.defaultRate !== null && row.minRate > row.defaultRate) {
-        warnings.push('Min rate exceeds default rate — double check this')
-      }
-      if (row.maxRate !== null && row.defaultRate !== null && row.maxRate < row.defaultRate) {
-        warnings.push('Max rate is below default rate — double check this')
-      }
       if (!row.defaultScope) {
         warnings.push('No default scope — you can add it later')
       }
@@ -255,8 +245,6 @@ export function ImportCsvSheet({ open, onOpenChange }: Props) {
       defaultScope: row.defaultScope || undefined,
       unit: row.unit,
       defaultRate: row.defaultRate!,
-      minRate: row.minRate,
-      maxRate: row.maxRate,
       internalNotes: row.internalNotes || null,
     }))
 
@@ -294,13 +282,13 @@ export function ImportCsvSheet({ open, onOpenChange }: Props) {
   // ─── Error report download ────────────────────────────────────────────────
 
   function downloadErrorReport(errors: ImportResult['errors']) {
-    const headers = 'name,category,description,defaultScope,unit,defaultRate,minRate,maxRate,internalNotes,Error'
+    const headers = 'name,category,description,defaultScope,unit,defaultRate,internalNotes,Error'
     const rows = errors.map((e) => {
       const r = e.row
       const vals = [
         r.name, r.category, r.description,
         r.defaultScope ?? '', r.unit,
-        r.defaultRate ?? '', r.minRate ?? '', r.maxRate ?? '',
+        r.defaultRate ?? '',
         r.internalNotes ?? '', e.reason,
       ].map((v) => {
         const s = String(v)
@@ -546,8 +534,6 @@ export function ImportCsvSheet({ open, onOpenChange }: Props) {
                                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs mb-3">
                                     <DetailField label="Description" value={row.description} />
                                     <DetailField label="Default Scope" value={row.defaultScope} />
-                                    <DetailField label="Min Rate" value={row.minRate !== null ? `₱${row.minRate.toLocaleString('en-PH')}` : '—'} />
-                                    <DetailField label="Max Rate" value={row.maxRate !== null ? `₱${row.maxRate.toLocaleString('en-PH')}` : '—'} />
                                     <DetailField label="Internal Notes" value={row.internalNotes || '—'} />
                                   </div>
                                   {row.errors.length > 0 && (

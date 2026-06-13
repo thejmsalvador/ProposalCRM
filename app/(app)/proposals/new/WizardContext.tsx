@@ -130,6 +130,7 @@ export function WizardProvider({
       introText: '',
       lineItems: [],
       currency: systemSettings.defaultCurrency,
+      exchangeRate: null,
       discountType: null,
       discountValue: null,
       discountLabel: '',
