@@ -151,6 +151,8 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       contactTitle: '',
       contactEmail: '',
       contactPhone: '',
+      businessAddress: '',
+      tin: '',
       date: new Date().toISOString().split('T')[0],
       // Apply template fields
       brandName: (sp.brandName as string) || '',

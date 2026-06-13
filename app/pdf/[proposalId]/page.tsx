@@ -265,6 +265,12 @@ export default async function PdfPage({ params, searchParams }: Props) {
                       .join(' · ')}
                   </div>
                 )}
+                {proposal.businessAddress && (
+                  <div className="cover-contact">{proposal.businessAddress}</div>
+                )}
+                {proposal.tin && (
+                  <div className="cover-contact">TIN: {proposal.tin}</div>
+                )}
               </div>
 
               <div>

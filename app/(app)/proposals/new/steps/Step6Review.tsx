@@ -145,6 +145,14 @@ export function Step6Review() {
               {[data.contactEmail, data.contactPhone].filter(Boolean).join(' · ')}
             </p>
           )}
+          {data.businessAddress && (
+            <p className="text-xs text-[var(--color-muted)]">
+              {data.businessAddress}
+            </p>
+          )}
+          {data.tin && (
+            <p className="text-xs text-[var(--color-muted)]">TIN: {data.tin}</p>
+          )}
         </div>
 
         {/* Details grid */}
