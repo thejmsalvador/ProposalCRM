@@ -86,22 +86,62 @@ async function main() {
 
   // ─── Payment Templates ───────────────────────────────────────────────────────
 
+  // Full Payment — the standard terms for collaterals and strategy engagements.
   const paymentTemplate = await prisma.paymentTemplate.upsert({
     where: { id: 'seed-payment-1' },
-    update: {},
+    update: {
+      name: 'Full Payment — 100% on Kick-Off',
+      bodyRichText: `<p><strong>100% Full Payment</strong> &mdash; due upon project kick-off, based on the VAT-inclusive contract amount.</p>
+<p>Once the contract is signed, the Billings Team will issue a Statement of Account (SOA) containing the Studio's bank details via email. An official sales invoice is provided upon settlement of the balance. For documentation purposes, please send proof of payment to finance@sunday.ph upon settlement.</p>`,
+      isDefault: true,
+    },
     create: {
       id: 'seed-payment-1',
-      name: '50/50 Standard',
-      bodyRichText: '<p>50% upon signing, 50% upon final delivery.</p>',
+      name: 'Full Payment — 100% on Kick-Off',
+      bodyRichText: `<p><strong>100% Full Payment</strong> &mdash; due upon project kick-off, based on the VAT-inclusive contract amount.</p>
+<p>Once the contract is signed, the Billings Team will issue a Statement of Account (SOA) containing the Studio's bank details via email. An official sales invoice is provided upon settlement of the balance. For documentation purposes, please send proof of payment to finance@sunday.ph upon settlement.</p>`,
       isDefault: true,
     },
   })
 
+  // Milestone schedule used for Brand Identity Development engagements.
   const paymentTemplate2 = await prisma.paymentTemplate.upsert({
     where: { id: 'seed-payment-2' },
-    update: {},
+    update: {
+      name: 'Milestone — 50% / 30% / 20%',
+      bodyRichText: `<p>Payable in three (3) milestones based on the VAT-inclusive contract amount:</p>
+<ul>
+<li><strong>50% Downpayment</strong> &mdash; due upon project kick-off.</li>
+<li><strong>30% Progress Payment</strong> &mdash; due upon submission of the Visual Identity.</li>
+<li><strong>20% Final Payment</strong> &mdash; due before turnover of final files.</li>
+</ul>
+<p>Once the contract is signed, the Billings Team will issue a Statement of Account (SOA) containing the Studio's bank details via email. An official sales invoice is provided upon settlement of each milestone. For documentation purposes, please send proof of payment to finance@sunday.ph upon settlement.</p>`,
+      isDefault: false,
+    },
     create: {
       id: 'seed-payment-2',
+      name: 'Milestone — 50% / 30% / 20%',
+      bodyRichText: `<p>Payable in three (3) milestones based on the VAT-inclusive contract amount:</p>
+<ul>
+<li><strong>50% Downpayment</strong> &mdash; due upon project kick-off.</li>
+<li><strong>30% Progress Payment</strong> &mdash; due upon submission of the Visual Identity.</li>
+<li><strong>20% Final Payment</strong> &mdash; due before turnover of final files.</li>
+</ul>
+<p>Once the contract is signed, the Billings Team will issue a Statement of Account (SOA) containing the Studio's bank details via email. An official sales invoice is provided upon settlement of each milestone. For documentation purposes, please send proof of payment to finance@sunday.ph upon settlement.</p>`,
+      isDefault: false,
+    },
+  })
+
+  const paymentTemplate3 = await prisma.paymentTemplate.upsert({
+    where: { id: 'seed-payment-3' },
+    update: {
+      name: 'Monthly Retainer',
+      bodyRichText:
+        '<p>Billed monthly on the 1st of each month. Net 15 payment terms. A 2% monthly late fee applies to overdue invoices.</p>',
+      isDefault: false,
+    },
+    create: {
+      id: 'seed-payment-3',
       name: 'Monthly Retainer',
       bodyRichText:
         '<p>Billed monthly on the 1st of each month. Net 15 payment terms. A 2% monthly late fee applies to overdue invoices.</p>',
@@ -109,11 +149,16 @@ async function main() {
     },
   })
 
-  const paymentTemplate3 = await prisma.paymentTemplate.upsert({
-    where: { id: 'seed-payment-3' },
-    update: {},
+  const paymentTemplate4 = await prisma.paymentTemplate.upsert({
+    where: { id: 'seed-payment-4' },
+    update: {
+      name: 'Retainer — 20% Downpayment',
+      bodyRichText:
+        '<p>A 20% downpayment of the total contract value is due upon signing, collected together with the first month of the retainer. The remaining balance is billed monthly across the engagement. Net 15 payment terms.</p>',
+      isDefault: false,
+    },
     create: {
-      id: 'seed-payment-3',
+      id: 'seed-payment-4',
       name: 'Retainer — 20% Downpayment',
       bodyRichText:
         '<p>A 20% downpayment of the total contract value is due upon signing, collected together with the first month of the retainer. The remaining balance is billed monthly across the engagement. Net 15 payment terms.</p>',
@@ -123,145 +168,435 @@ async function main() {
 
   // ─── T&C Template ────────────────────────────────────────────────────────────
 
+  // Service catalog categories. Kept in one place so Services and T&C templates stay in sync.
+  const CATEGORIES = {
+    BRANDING: 'Branding',
+    STRATEGY: 'Strategy',
+    PROPERTY_APPS: 'Property Brand Applications',
+    SALES_MATERIALS: 'Sales Materials',
+  } as const
+
+  // ─── Terms & Conditions ──────────────────────────────────────────────────────
+  //
+  // The source proposals all reuse one monolithic 7-clause T&C. We segregate that
+  // into a single locked "General" master (the universal clauses, applicable to
+  // every engagement) plus three category-tagged supplements that layer on the
+  // terms specific to that kind of work. Each stored template is self-contained
+  // (master clauses + its supplement) so it can be dropped into a proposal as-is.
+
+  const UNIVERSAL_TC = `<h2>Terms &amp; Conditions</h2>
+<h3>1. Acceptance and Use of the Service</h3>
+<ul>
+<li>Affixing of the Client's handwritten and/or electronic signature(s) onto the Contract certifies that the Client agrees to all provisions found under these Terms and Conditions.</li>
+<li>After signing by both the Client and the Studio, the Project shall formally commence and be considered an on-going transaction until Project Closure or its premature termination.</li>
+<li>The Studio shall be permitted to use the Project and the Client's name as part of the Studio's portfolio.</li>
+<li>The Client shall not transfer the rights of this agreement to another person or party without the prior consent of the Studio.</li>
+</ul>
+<h3>2. Project Payment &amp; Penalties</h3>
+<ul>
+<li>The Client shall pay the Studio the Project Cost as indicated in the Payment Terms section of the Contract. Amounts settled by the Client are non-refundable and cannot be transferred to other projects the Client intends to engage the Studio for.</li>
+<li>The Studio reserves the right to withhold project deliverables where the Client fails to settle the project balance by its due date.</li>
+<li><strong>For Clients requesting an invoice:</strong> the balance due must be settled within thirty (30) calendar days of the Studio's issuance of the invoice. Failure to settle within this grace period incurs a monthly penalty of 12% of the invoice cost until the balance is settled in full.</li>
+<li><strong>For Clients who did not request an invoice:</strong> the balance due must be settled within thirty (30) calendar days of the Studio's issuance of the Statement of Account (SOA). Failure to settle within this grace period incurs a monthly penalty of 5% of the billing milestone cost until the balance is settled in full.</li>
+<li>Penalty fees are automatically reflected in the Statement of Account, sent at the end of each monthly penalty cycle. The SOA requires no signature from the Client and serves as official notice of penalty.</li>
+<li>Penalty fees cannot be waived and must be settled in full within thirty (30) calendar days of issuance.</li>
+<li>Failure to settle the remaining balance in full after three (3) monthly penalty charges may result in legal action to recover the outstanding amount.</li>
+<li>The Client must provide the Studio with a copy of BIR Form 2307 within thirty (30) days of receiving the invoice. Should the Client be exempt from declaring Withholding Tax, a BIR document detailing this exemption must be presented to the Studio.</li>
+</ul>
+<h3>3. Project Timeline Extension</h3>
+<ul>
+<li>The Client may extend the project duration by up to a total of six (6) weeks due to unforeseen circumstances such as delays in feedback, dependency on management decisions, or data gathering. The Studio will note extension requests and accommodate them only within this period.</li>
+<li>The Client may request to hold the project beyond six (6) weeks and up to a 12-month period only with justifiable cause and upon settlement of the total project balance. Once the balance is settled, the Studio will hold the project and commit to fulfilling all pending items within the Scope once the Client is ready to continue. The project is considered void once the extension exceeds 12 months, after which a new contract will be provided.</li>
+<li>Justifiable cause may include: a change in the Client's organizational structure, a change in business strategy, or a delay in the Client's product/service launch that affects the Project.</li>
+<li>The Studio reserves the right to reasonably extend the Project deadline where delay is caused by fortuitous events, acts of God, or other analogous circumstances.</li>
+</ul>
+<h3>4. Project Cancellation &amp; Penalties</h3>
+<ul>
+<li>Should the Client pre-terminate or cancel the Project before Project End without justifiable cause, the Client shall pay an early termination fee equal to the next milestone payment due, whether or not that milestone has been completed.</li>
+<li>Where the Client has been non-responsive to the contact person for four (4) weeks across email, call, and text, the Studio reserves the right to pre-terminate or cancel the Contract.</li>
+</ul>
+<h3>5. Other Fees</h3>
+<ul>
+<li><strong>Revision Fees.</strong> Two (2) major revisions are allocated per major milestone. Once output has been accepted and signed off it is considered final; additional major revisions, or revisions after sign-off, are subject to additional remuneration of 20% of the cost of each material.</li>
+<li><strong>Raw or Layered File Fees.</strong> The Studio will not turn over editable or layered files unless specified in the scope of inclusions. Requests for editable source files (.aep, .ai, .psd) are subject to additional remuneration of 20% of the total project cost.</li>
+<li><strong>Production Expenses.</strong> Any expenses not covered in the scope of inclusions will be charged to the Client at the end of the project via a separate contract.</li>
+</ul>
+<h3>6. Privacy, Intellectual Property and Content Ownership</h3>
+<ul>
+<li>The Studio shall not disclose the Client's personal information to any third party, nor use it for any purpose other than those related to the Project and the Contract, except upon the Client's instructions.</li>
+<li>The Studio shall not be held liable for any issue regarding Content, including but not limited to misinterpretation, copyright infringement, and violations of intellectual property laws and statutes.</li>
+<li>The Studio shall not be associated with the Client and/or the ultimate owner of the Project, nor with the Content and ideologies it espouses, aside from the professional relationship bound by the Contract.</li>
+</ul>
+<h3>7. Others</h3>
+<ul>
+<li>Any third-party software or platform included in the Project shall follow its respective warranties, terms of use, and general policies.</li>
+</ul>`
+
+  const BRANDING_SUPPLEMENT = `<h3>8. Brand Assets, Ownership &amp; Licensing</h3>
+<ul>
+<li>Upon full settlement of the Project Cost, ownership of the approved final brand assets (primary logo, approved logo variations, and the finalized visual and verbal identity) transfers to the Client.</li>
+<li>High-resolution rendered files (e.g., PNG, JPEG, PDF) are included in the final turnover. Raw or layered/editable source files (e.g., .ai, .psd, .aep) are NOT included unless explicitly listed under the approved Brand Applications; requests for them are subject to additional remuneration of 20% of the total project cost.</li>
+<li>Brand Book visualizations are provided for reference purposes only. Layered/editable files of these visualizations are not included in the final turnover unless explicitly stated.</li>
+<li>Third-party or licensed typefaces specified in the visual identity are subject to their respective foundry licenses; procurement of commercial font licenses is the responsibility of the Client unless otherwise stated.</li>
+<li>The Client is responsible for any trademark registration of the final logo and brand name. The Studio does not perform trademark clearance or registration as part of this engagement.</li>
+</ul>`
+
+  const STRATEGY_SUPPLEMENT = `<h3>8. Strategic Deliverables &amp; Advisory</h3>
+<ul>
+<li>Strategy deliverables (research, audits, positioning, and roadmaps) are advisory in nature. The Studio does not warrant or guarantee specific business outcomes, sales figures, engagement, or other performance metrics resulting from implementation of the strategy.</li>
+<li>The Client is responsible for the accuracy and completeness of any data, technical information, and market inputs provided to the Studio. The Studio shall not be liable for conclusions drawn from inaccurate or incomplete Client-supplied information.</li>
+<li>Research findings, frameworks, and proprietary methodologies developed by the Studio remain the intellectual property of the Studio; the Client is granted a license to use the delivered strategy for its own business purposes.</li>
+<li>Strategy presentations are delivered in the staged sequence defined in the Scope of Work. Consolidated feedback must be provided within the agreed review windows to keep the timeline on track.</li>
+</ul>`
+
+  const COLLATERALS_SUPPLEMENT = `<h3>8. Production, Output Files &amp; Printing</h3>
+<ul>
+<li>Deliverables are provided as print-ready, high-resolution, production-grade digital files. Unless explicitly stated in the Scope, the Studio's engagement covers design and layout only &mdash; not physical printing, fabrication, installation, or media placement.</li>
+<li>Physical production, printing, fabrication, and on-site installation of any collateral (e.g., banners, billboards, signage, hoardings, booths) are the responsibility of the Client and/or its appointed third-party suppliers.</li>
+<li>Final dimensions, specifications, and site measurements must be provided by the Client. The Studio is not liable for output that does not fit due to incorrect specifications supplied by the Client.</li>
+<li>Colors may vary between on-screen previews and physical print output due to differences in substrate, printer calibration, and production processes. The Studio is not liable for such variances; a physical proof from the printer is recommended prior to mass production.</li>
+<li>Source files (e.g., .ai, .psd, .pdf) are turned over only where explicitly listed in the Scope. Any third-party stock photography, illustrations, or licensed assets remain subject to their respective licenses and are procured at the Client's cost unless otherwise stated.</li>
+</ul>`
+
+  // General master — the universal clauses, applicable to every engagement. Locked.
   const tcTemplate = await prisma.tCTemplate.upsert({
     where: { id: 'seed-tc-1' },
-    update: {},
+    update: {
+      name: 'General Terms & Conditions',
+      bodyRichText: UNIVERSAL_TC,
+      categories: [
+        CATEGORIES.BRANDING,
+        CATEGORIES.STRATEGY,
+        CATEGORIES.PROPERTY_APPS,
+        CATEGORIES.SALES_MATERIALS,
+      ],
+      isLocked: true,
+    },
     create: {
       id: 'seed-tc-1',
-      name: 'Standard Agency T&C',
-      bodyRichText: `<h2>Standard Terms &amp; Conditions</h2>
-<p>1. <strong>Acceptance.</strong> By signing this proposal, the client agrees to these terms.</p>
-<p>2. <strong>Scope.</strong> Work is limited to what is described in this proposal. Changes require a written amendment.</p>
-<p>3. <strong>Payment.</strong> Invoices are due within 15 days of issuance. Late payments incur a 2% monthly fee.</p>
-<p>4. <strong>Intellectual Property.</strong> Full ownership transfers to the client upon receipt of final payment.</p>
-<p>5. <strong>Confidentiality.</strong> Both parties agree to keep project details confidential.</p>
-<p>6. <strong>Termination.</strong> Either party may terminate with 14 days written notice. Work completed to date is billable.</p>`,
-      categories: ['Strategy', 'Digital'],
+      name: 'General Terms & Conditions',
+      bodyRichText: UNIVERSAL_TC,
+      categories: [
+        CATEGORIES.BRANDING,
+        CATEGORIES.STRATEGY,
+        CATEGORIES.PROPERTY_APPS,
+        CATEGORIES.SALES_MATERIALS,
+      ],
+      isLocked: true,
+    },
+  })
+
+  const tcBranding = await prisma.tCTemplate.upsert({
+    where: { id: 'seed-tc-branding' },
+    update: {
+      name: 'Brand Identity & Development Terms',
+      bodyRichText: `${UNIVERSAL_TC}\n${BRANDING_SUPPLEMENT}`,
+      categories: [CATEGORIES.BRANDING],
+    },
+    create: {
+      id: 'seed-tc-branding',
+      name: 'Brand Identity & Development Terms',
+      bodyRichText: `${UNIVERSAL_TC}\n${BRANDING_SUPPLEMENT}`,
+      categories: [CATEGORIES.BRANDING],
+    },
+  })
+
+  const tcStrategy = await prisma.tCTemplate.upsert({
+    where: { id: 'seed-tc-strategy' },
+    update: {
+      name: 'Strategy & Consulting Terms',
+      bodyRichText: `${UNIVERSAL_TC}\n${STRATEGY_SUPPLEMENT}`,
+      categories: [CATEGORIES.STRATEGY],
+    },
+    create: {
+      id: 'seed-tc-strategy',
+      name: 'Strategy & Consulting Terms',
+      bodyRichText: `${UNIVERSAL_TC}\n${STRATEGY_SUPPLEMENT}`,
+      categories: [CATEGORIES.STRATEGY],
+    },
+  })
+
+  const tcCollaterals = await prisma.tCTemplate.upsert({
+    where: { id: 'seed-tc-collaterals' },
+    update: {
+      name: 'Collaterals & Production Terms',
+      bodyRichText: `${UNIVERSAL_TC}\n${COLLATERALS_SUPPLEMENT}`,
+      categories: [CATEGORIES.PROPERTY_APPS, CATEGORIES.SALES_MATERIALS],
+    },
+    create: {
+      id: 'seed-tc-collaterals',
+      name: 'Collaterals & Production Terms',
+      bodyRichText: `${UNIVERSAL_TC}\n${COLLATERALS_SUPPLEMENT}`,
+      categories: [CATEGORIES.PROPERTY_APPS, CATEGORIES.SALES_MATERIALS],
     },
   })
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
-  const brandStrategy = await prisma.service.upsert({
-    where: { id: 'seed-service-1' },
-    update: {},
-    create: {
-      id: 'seed-service-1',
-      name: 'Brand Strategy',
-      category: 'Strategy',
-      description:
-        'Comprehensive brand strategy development including positioning, messaging, and visual identity direction.',
-      defaultScope:
-        'Discovery workshop, competitive analysis, brand positioning document, messaging framework, and presentation.',
-      unit: 'project',
-      defaultRate: 80000,
-      minRate: 60000,
-      maxRate: 120000,
-      tcTemplateId: tcTemplate.id,
-      paymentTplId: paymentTemplate.id,
-    },
+  // Small helper to keep the 14 service upserts readable and consistent.
+  type ServiceSeed = {
+    id: string
+    name: string
+    category: string
+    description: string
+    defaultScope: string
+    unit: string
+    defaultRate: number
+    minRate: number
+    maxRate: number
+    tcTemplateId: string
+    paymentTplId: string
+    internalNotes?: string
+  }
+
+  const seedService = (s: ServiceSeed) =>
+    prisma.service.upsert({
+      where: { id: s.id },
+      update: {
+        name: s.name,
+        category: s.category,
+        description: s.description,
+        defaultScope: s.defaultScope,
+        unit: s.unit,
+        defaultRate: s.defaultRate,
+        minRate: s.minRate,
+        maxRate: s.maxRate,
+        tcTemplateId: s.tcTemplateId,
+        paymentTplId: s.paymentTplId,
+        internalNotes: s.internalNotes ?? null,
+      },
+      create: {
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        description: s.description,
+        defaultScope: s.defaultScope,
+        unit: s.unit,
+        defaultRate: s.defaultRate,
+        minRate: s.minRate,
+        maxRate: s.maxRate,
+        tcTemplateId: s.tcTemplateId,
+        paymentTplId: s.paymentTplId,
+        internalNotes: s.internalNotes ?? null,
+      },
+    })
+
+  // ── Branding ──
+  const brandIdentity = await seedService({
+    id: 'seed-service-brand-identity',
+    name: 'Brand Identity Development',
+    category: CATEGORIES.BRANDING,
+    description:
+      'End-to-end brand identity system — strategy, logo, visual and verbal identity, brand applications, and a full brand guidelines book.',
+    defaultScope:
+      'Brand Discovery Workshop; Brand Strategy/DNA (industry scan, competitive scan, target market profiles, positioning & value proposition, brand narrative); Logo Development (main logo, variations, usage guidelines, high-resolution renders); Tagline Development; Visual Identity (creative direction, primary & secondary color system, typography, graphic elements, image style & art direction, layout samples); Verbal Identity (brand narrative, persona & voice with guardrails, brand vocabulary); Standard Brand Applications (presentation masterslide, email signature, and corporate stationery: ID, business card, letterhead, folder, envelope, lanyard); and a complete Brand Book covering logo, visual, and verbal identity guidelines. Includes two (2) rounds of revisions per phase.',
+    unit: 'project',
+    defaultRate: 350000,
+    minRate: 280000,
+    maxRate: 525000,
+    tcTemplateId: tcBranding.id,
+    paymentTplId: paymentTemplate2.id,
+    internalNotes: 'Ref CE_OTE261475 / CE_OTE261517. 12-week timeline from kick-off. High-res renders only; raw/layered files billed at +20%.',
   })
 
-  const socialMedia = await prisma.service.upsert({
-    where: { id: 'seed-service-2' },
-    update: {},
-    create: {
-      id: 'seed-service-2',
-      name: 'Social Media Management',
-      category: 'Digital',
-      description:
-        'Full-service social media management including content creation, scheduling, and community management.',
-      defaultScope:
-        'Monthly content calendar, 12 posts per month, community management, and monthly performance report.',
-      unit: 'month',
-      defaultRate: 35000,
-      minRate: 25000,
-      maxRate: 60000,
-      tcTemplateId: tcTemplate.id,
-      paymentTplId: paymentTemplate2.id,
-    },
+  // ── Strategy ──
+  const socialStrategy = await seedService({
+    id: 'seed-service-social-strategy',
+    name: 'Social Media Strategy',
+    category: CATEGORIES.STRATEGY,
+    description:
+      "Research-and-planning engagement that establishes the brand's digital foundation and go-to-market strategy.",
+    defaultScope:
+      'Discovery & Strategy Workshop (one alignment session with the marketing team); Market Intelligence (industry study, competitive study); Brand Audit & Situation Review (challenges & opportunities, objectives, brand positioning, target market profile); Strategic Roadmap Development (big idea, communications strategy, channel strategy, content strategy); and a two-part strategy delivery — Research & Positioning presentation followed by a Campaign Strategy & Creatives presentation, plus a feedback presentation. Includes two (2) rounds of revisions.',
+    unit: 'project',
+    defaultRate: 250000,
+    minRate: 200000,
+    maxRate: 375000,
+    tcTemplateId: tcStrategy.id,
+    paymentTplId: paymentTemplate.id,
+    internalNotes: 'Ref CE_OTE261500. 45-day timeline from kick-off. Billed 100% on kick-off.',
   })
 
-  const videoProduction = await prisma.service.upsert({
-    where: { id: 'seed-service-3' },
-    update: {},
-    create: {
-      id: 'seed-service-3',
-      name: 'Video Production',
-      category: 'Creative',
-      description:
-        'End-to-end video production for TVC, digital ads, and corporate films.',
-      defaultScope:
-        'Pre-production planning, filming (2-day shoot), post-production editing, color grading, and final delivery in web and broadcast formats.',
-      unit: 'project',
-      defaultRate: 200000,
-      minRate: 150000,
-      maxRate: 500000,
-      tcTemplateId: tcTemplate.id,
-      paymentTplId: paymentTemplate.id,
-    },
+  // ── Property Brand Applications ──
+  const keyVisualPoster = await seedService({
+    id: 'seed-service-key-visual',
+    name: 'Key Visual / Omnibus Poster',
+    category: CATEGORIES.PROPERTY_APPS,
+    description: 'One key visual / omnibus poster design with a facade mockup and print-ready output.',
+    defaultScope:
+      'One (1) unique key visual / omnibus poster design; graphic design and layout based on provided brand guidelines; 2D digital facade mockup; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'design',
+    defaultRate: 50000,
+    minRate: 40000,
+    maxRate: 75000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
   })
 
-  const influencerMarketing = await prisma.service.upsert({
-    where: { id: 'seed-service-4' },
-    update: {},
-    create: {
-      id: 'seed-service-4',
-      name: 'Influencer Marketing',
-      category: 'Digital',
-      description:
-        'Influencer identification, outreach, campaign management, and performance reporting.',
-      defaultScope:
-        'Influencer shortlisting (10 profiles), negotiation, content brief, campaign execution, and post-campaign report.',
-      unit: 'campaign',
-      defaultRate: 75000,
-      minRate: 50000,
-      maxRate: 200000,
-      tcTemplateId: tcTemplate.id,
-      paymentTplId: paymentTemplate.id,
-    },
+  const lamppostBanners = await seedService({
+    id: 'seed-service-lamppost',
+    name: 'Lamppost Banners',
+    category: CATEGORIES.PROPERTY_APPS,
+    description: 'Set of four lamppost banner designs adapted to client-provided dimensions.',
+    defaultScope:
+      'Four (4) unique lamppost banner designs; graphic design and layout based on provided brand guidelines; format adaptation to client-provided dimensions; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'set',
+    defaultRate: 96000,
+    minRate: 76800,
+    maxRate: 144000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
   })
 
-  const seoAudit = await prisma.service.upsert({
-    where: { id: 'seed-service-5' },
-    update: {},
-    create: {
-      id: 'seed-service-5',
-      name: 'SEO Audit & Strategy',
-      category: 'Strategy',
-      description:
-        'Technical SEO audit, keyword gap analysis, and a 90-day content and link strategy.',
-      defaultScope:
-        'Full technical audit, competitor keyword analysis, content gap report, on-page recommendations, and a prioritised 90-day roadmap.',
-      unit: 'project',
-      defaultRate: 45000,
-      minRate: 30000,
-      maxRate: 80000,
-      tcTemplateId: tcTemplate.id,
-      paymentTplId: paymentTemplate.id,
-    },
+  const billboardDesign = await seedService({
+    id: 'seed-service-billboard',
+    name: 'Billboard Design',
+    category: CATEGORIES.PROPERTY_APPS,
+    description: 'One billboard design with a facade mockup and print-ready output.',
+    defaultScope:
+      'One (1) unique billboard design; graphic design and layout based on provided brand guidelines; 2D digital mockup; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'design',
+    defaultRate: 96000,
+    minRate: 76800,
+    maxRate: 144000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
   })
 
-  // Note: seed-service-1 was repurposed in the live DB into a "Social Media" service.
-  // This is the canonical Brand Strategy service used by the showcase proposal.
-  const brandStrategySvc = await prisma.service.upsert({
-    where: { id: 'seed-service-6' },
-    update: {},
-    create: {
-      id: 'seed-service-6',
-      name: 'Brand Strategy',
-      category: 'Strategy',
-      description:
-        'Comprehensive brand strategy development including positioning, messaging, and visual identity direction.',
-      defaultScope:
-        'Discovery workshop, competitive analysis, brand positioning document, messaging framework, and presentation.',
-      unit: 'one-time',
-      defaultRate: 200000,
-      minRate: 150000,
-      maxRate: 300000,
-      tcTemplateId: tcTemplate.id,
-      paymentTplId: paymentTemplate.id,
-    },
+  const signageFacade = await seedService({
+    id: 'seed-service-signage',
+    name: 'Signage & Facade',
+    category: CATEGORIES.PROPERTY_APPS,
+    description: 'Primary signage / facade design with a property mockup.',
+    defaultScope:
+      'One (1) unique signage/facade design; graphic design and layout based on provided brand guidelines; 2D digital mockup applied to the actual property facade; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'design',
+    defaultRate: 30000,
+    minRate: 24000,
+    maxRate: 45000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const hoardings = await seedService({
+    id: 'seed-service-hoardings',
+    name: 'Hoardings / Board-Ups',
+    category: CATEGORIES.PROPERTY_APPS,
+    description: 'Set of four hoarding / board-up designs for the site perimeter.',
+    defaultScope:
+      'Four (4) unique hoarding/board-up designs; graphic design and layout based on provided brand guidelines; format adaptation to client-provided dimensions; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'set',
+    defaultRate: 120000,
+    minRate: 96000,
+    maxRate: 180000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const wayfinding = await seedService({
+    id: 'seed-service-wayfinding',
+    name: 'Wayfinding / Environmental Graphic Design',
+    category: CATEGORIES.PROPERTY_APPS,
+    description: 'Cohesive wayfinding and environmental graphic system across ten sign types.',
+    defaultScope:
+      'Wayfinding system design across ten (10) sign types — unit & floor identification, room & amenity labeling, directional & wayfinding signage, and parking & regulatory signs; 2D digital mockups applied to site photos or architectural elevations to demonstrate scale and visibility; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'project',
+    defaultRate: 110000,
+    minRate: 88000,
+    maxRate: 165000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  // ── Sales Materials ──
+  const companyProfile = await seedService({
+    id: 'seed-service-company-profile',
+    name: 'Digital Company Profile / Property Overview',
+    category: CATEGORIES.SALES_MATERIALS,
+    description: 'Digital company / property overview presentation (up to 25 pages, 16:9).',
+    defaultScope:
+      'Graphic design and layout based on brand identity; basic animation for transitions; information architecture; content development (all technical information provided by the client); 16:9 standard presentation format; maximum 25 pages; delivered as a static PDF plus Google Slides source (exportable to PPTX/Keynote).',
+    unit: 'project',
+    defaultRate: 80000,
+    minRate: 64000,
+    maxRate: 120000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const brochure = await seedService({
+    id: 'seed-service-brochure',
+    name: 'Brochure Design',
+    category: CATEGORIES.SALES_MATERIALS,
+    description: 'A4 trifold brochure, back-to-back (6 panels).',
+    defaultScope:
+      'Graphic design and layout based on brand identity; information architecture; content development (all technical information provided by the client); A4 trifold, back-to-back, 6 panels; print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'design',
+    defaultRate: 30000,
+    minRate: 24000,
+    maxRate: 45000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const flyer = await seedService({
+    id: 'seed-service-flyer',
+    name: 'One-Page Flyer',
+    category: CATEGORIES.SALES_MATERIALS,
+    description: 'Single-page A4/A5 marketing flyer (visual-led).',
+    defaultScope:
+      'Graphic design and layout based on brand identity; content development (visual-led, not text-heavy); A4/A5 standard flyer; single side (not back-to-back); print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'design',
+    defaultRate: 12000,
+    minRate: 9600,
+    maxRate: 18000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const pullUpBanner = await seedService({
+    id: 'seed-service-pullup',
+    name: 'Pull-Up Banner',
+    category: CATEGORIES.SALES_MATERIALS,
+    description: 'Standard pull-up banner (2.5 x 6 ft).',
+    defaultScope:
+      'Graphic design and layout based on brand identity; standard pull-up banner (2.5 x 6 ft); single panel (not back-to-back); print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'design',
+    defaultRate: 12000,
+    minRate: 9600,
+    maxRate: 18000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const boothDesign = await seedService({
+    id: 'seed-service-booth',
+    name: 'Collapsible Booth Design',
+    category: CATEGORIES.SALES_MATERIALS,
+    description: 'Collapsible exhibition booth design (front, header, two sides).',
+    defaultScope:
+      'Graphic design and layout based on brand identity; standard collapsible booth — front 32" x 32", side panels 31" x 16", header 31.5" x 12"; up to 5 components (1 front, 1 header, 2 sides); print-ready high-resolution files plus editable source files (.AI/.PSD/.PDF).',
+    unit: 'project',
+    defaultRate: 25000,
+    minRate: 20000,
+    maxRate: 37500,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
+  })
+
+  const newsletter = await seedService({
+    id: 'seed-service-newsletter',
+    name: 'Newsletter Design',
+    category: CATEGORIES.SALES_MATERIALS,
+    description: 'Omnibus property newsletter design with copywriting (up to 500 words).',
+    defaultScope:
+      'Omnibus newsletter focused on property overview and USPs; graphic design and layout (dimensions provided by the client, width up to 2000px); content writing up to five hundred (500) words covering header, about the property, value proposition, unit overview, call-to-action, and footer; up to two (2) revisions. Excludes raw file turnover, emailer integration, client database, and development.',
+    unit: 'design',
+    defaultRate: 40000,
+    minRate: 32000,
+    maxRate: 60000,
+    tcTemplateId: tcCollaterals.id,
+    paymentTplId: paymentTemplate.id,
   })
 
   // ─── System Settings ─────────────────────────────────────────────────────────
@@ -382,37 +717,37 @@ async function main() {
       clientName: 'Acme Corp',
       contactName: 'Maria Santos',
       contactTitle: 'CEO',
-      projectTitle: 'Brand Refresh 2026',
+      projectTitle: 'Brand Identity & Launch Strategy',
       date: new Date('2026-03-01'),
       validUntil: new Date('2026-03-31'),
       status: ProposalStatus.DRAFT,
       createdById: juan.id,
       assignedApproverId: manager.id,
-      subtotal: 115000,
+      subtotal: 600000,
       vatRate: 12,
-      total: 128800,
-      paymentTemplateId: paymentTemplate.id,
-      tcTemplateId: tcTemplate.id,
+      total: 672000,
+      paymentTemplateId: paymentTemplate2.id,
+      tcTemplateId: tcBranding.id,
       lineItems: {
         create: [
           {
-            serviceId: brandStrategy.id,
-            description: 'Brand Strategy',
-            scopeOfWork: brandStrategy.defaultScope,
+            serviceId: brandIdentity.id,
+            description: 'Brand Identity Development',
+            scopeOfWork: brandIdentity.defaultScope,
             unit: 'project',
             quantity: 1,
-            unitRate: 80000,
-            lineTotal: 80000,
+            unitRate: 350000,
+            lineTotal: 350000,
             sortOrder: 1,
           },
           {
-            serviceId: socialMedia.id,
-            description: 'Social Media Management',
-            scopeOfWork: socialMedia.defaultScope,
-            unit: 'month',
+            serviceId: socialStrategy.id,
+            description: 'Social Media Strategy',
+            scopeOfWork: socialStrategy.defaultScope,
+            unit: 'project',
             quantity: 1,
-            unitRate: 35000,
-            lineTotal: 35000,
+            unitRate: 250000,
+            lineTotal: 250000,
             sortOrder: 2,
           },
         ],
@@ -430,38 +765,48 @@ async function main() {
       clientName: 'BuildRight Construction',
       contactName: 'Carlo Mendoza',
       contactTitle: 'Owner',
-      projectTitle: 'Q2 Digital Campaign',
+      projectTitle: 'Sales Collateral Suite',
       date: new Date('2026-03-05'),
       validUntil: new Date('2026-04-04'),
       status: ProposalStatus.PENDING_APPROVAL,
       createdById: juan.id,
       assignedApproverId: manager.id,
-      subtotal: 110000,
+      subtotal: 122000,
       vatRate: 12,
-      total: 123200,
+      total: 136640,
       paymentTemplateId: paymentTemplate.id,
-      tcTemplateId: tcTemplate.id,
+      tcTemplateId: tcCollaterals.id,
       lineItems: {
         create: [
           {
-            serviceId: socialMedia.id,
-            description: 'Social Media Management',
-            scopeOfWork: socialMedia.defaultScope,
-            unit: 'month',
-            quantity: 2,
-            unitRate: 35000,
-            lineTotal: 70000,
+            serviceId: companyProfile.id,
+            description: 'Digital Company Profile / Property Overview',
+            scopeOfWork: companyProfile.defaultScope,
+            unit: 'project',
+            quantity: 1,
+            unitRate: 80000,
+            lineTotal: 80000,
             sortOrder: 1,
           },
           {
-            serviceId: influencerMarketing.id,
-            description: 'Influencer Marketing Campaign',
-            scopeOfWork: influencerMarketing.defaultScope,
-            unit: 'campaign',
+            serviceId: brochure.id,
+            description: 'Brochure Design',
+            scopeOfWork: brochure.defaultScope,
+            unit: 'design',
             quantity: 1,
-            unitRate: 40000,
-            lineTotal: 40000,
+            unitRate: 30000,
+            lineTotal: 30000,
             sortOrder: 2,
+          },
+          {
+            serviceId: flyer.id,
+            description: 'One-Page Flyer',
+            scopeOfWork: flyer.defaultScope,
+            unit: 'design',
+            quantity: 1,
+            unitRate: 12000,
+            lineTotal: 12000,
+            sortOrder: 3,
           },
         ],
       },
@@ -479,51 +824,61 @@ async function main() {
       clientName: 'Acme Corp',
       contactName: 'Maria Santos',
       contactTitle: 'CEO',
-      projectTitle: 'Digital Transformation Campaign',
+      projectTitle: 'Property Brand Applications Rollout',
       date: new Date('2026-03-10'),
       validUntil: new Date('2026-04-09'),
       status: ProposalStatus.APPROVED,
       createdById: juan.id,
       assignedApproverId: manager.id,
-      subtotal: 320000,
+      subtotal: 352000,
       vatRate: 12,
-      total: 358400,
+      total: 394240,
       introText:
-        '<p>Thank you for the opportunity to partner with Acme Corp on this landmark digital transformation initiative.</p>',
+        '<p>Thank you for the opportunity to partner with Acme Corp on the on-site brand application rollout for this development.</p>',
       paymentTemplateId: paymentTemplate.id,
-      tcTemplateId: tcTemplate.id,
+      tcTemplateId: tcCollaterals.id,
       lineItems: {
         create: [
           {
-            serviceId: brandStrategy.id,
-            description: 'Brand Strategy',
-            scopeOfWork: brandStrategy.defaultScope,
-            unit: 'project',
+            serviceId: keyVisualPoster.id,
+            description: 'Key Visual / Omnibus Poster',
+            scopeOfWork: keyVisualPoster.defaultScope,
+            unit: 'design',
             quantity: 1,
-            unitRate: 80000,
-            lineTotal: 80000,
+            unitRate: 50000,
+            lineTotal: 50000,
             sortOrder: 1,
           },
           {
-            serviceId: videoProduction.id,
-            description: 'TVC Production',
-            scopeOfWork: videoProduction.defaultScope,
-            unit: 'project',
+            serviceId: billboardDesign.id,
+            description: 'Billboard Design',
+            scopeOfWork: billboardDesign.defaultScope,
+            unit: 'design',
             quantity: 1,
-            unitRate: 200000,
-            lineTotal: 200000,
+            unitRate: 96000,
+            lineTotal: 96000,
             sortOrder: 2,
           },
           {
-            serviceId: socialMedia.id,
-            description: 'Social Media Management',
-            scopeOfWork: socialMedia.defaultScope,
-            unit: 'month',
-            quantity: 2,
-            unitRate: 20000,
-            lineTotal: 40000,
-            isOptional: true,
+            serviceId: wayfinding.id,
+            description: 'Wayfinding / Environmental Graphic Design',
+            scopeOfWork: wayfinding.defaultScope,
+            unit: 'project',
+            quantity: 1,
+            unitRate: 110000,
+            lineTotal: 110000,
             sortOrder: 3,
+          },
+          {
+            serviceId: lamppostBanners.id,
+            description: 'Lamppost Banners',
+            scopeOfWork: lamppostBanners.defaultScope,
+            unit: 'set',
+            quantity: 1,
+            unitRate: 96000,
+            lineTotal: 96000,
+            isOptional: true,
+            sortOrder: 4,
           },
         ],
       },
@@ -542,10 +897,11 @@ async function main() {
       createdById: juan.id,
       changeSummary: 'Initial proposal draft.',
       snapshotJson: {
-        proposal: { clientName: 'Acme Corp', projectTitle: 'Digital Transformation Campaign', subtotal: '280000', total: '313600', currency: 'PHP' },
+        proposal: { clientName: 'Acme Corp', projectTitle: 'Property Brand Applications Rollout', subtotal: '256000', total: '286720', currency: 'PHP' },
         lineItems: [
-          { description: 'Brand Strategy', quantity: '1', unitRate: '80000', lineTotal: '80000', unit: 'project', isOptional: false },
-          { description: 'TVC Production', quantity: '1', unitRate: '200000', lineTotal: '200000', unit: 'project', isOptional: false },
+          { description: 'Key Visual / Omnibus Poster', quantity: '1', unitRate: '50000', lineTotal: '50000', unit: 'design', isOptional: false },
+          { description: 'Billboard Design', quantity: '1', unitRate: '96000', lineTotal: '96000', unit: 'design', isOptional: false },
+          { description: 'Wayfinding / Environmental Graphic Design', quantity: '1', unitRate: '110000', lineTotal: '110000', unit: 'project', isOptional: false },
         ],
       },
     },
@@ -560,13 +916,14 @@ async function main() {
       versionNumber: 2,
       status: ProposalStatus.APPROVED,
       createdById: juan.id,
-      changeSummary: 'Added optional Social Media Management line item. Subtotal increased from ₱280,000 to ₱320,000.',
+      changeSummary: 'Added optional Lamppost Banners line item. Subtotal increased from ₱256,000 to ₱352,000.',
       snapshotJson: {
-        proposal: { clientName: 'Acme Corp', projectTitle: 'Digital Transformation Campaign', subtotal: '320000', total: '358400', currency: 'PHP' },
+        proposal: { clientName: 'Acme Corp', projectTitle: 'Property Brand Applications Rollout', subtotal: '352000', total: '394240', currency: 'PHP' },
         lineItems: [
-          { description: 'Brand Strategy', quantity: '1', unitRate: '80000', lineTotal: '80000', unit: 'project', isOptional: false },
-          { description: 'TVC Production', quantity: '1', unitRate: '200000', lineTotal: '200000', unit: 'project', isOptional: false },
-          { description: 'Social Media Management', quantity: '2', unitRate: '20000', lineTotal: '40000', unit: 'month', isOptional: true },
+          { description: 'Key Visual / Omnibus Poster', quantity: '1', unitRate: '50000', lineTotal: '50000', unit: 'design', isOptional: false },
+          { description: 'Billboard Design', quantity: '1', unitRate: '96000', lineTotal: '96000', unit: 'design', isOptional: false },
+          { description: 'Wayfinding / Environmental Graphic Design', quantity: '1', unitRate: '110000', lineTotal: '110000', unit: 'project', isOptional: false },
+          { description: 'Lamppost Banners', quantity: '1', unitRate: '96000', lineTotal: '96000', unit: 'set', isOptional: true },
         ],
       },
     },
@@ -594,27 +951,27 @@ async function main() {
       clientName: 'Acme Corp',
       contactName: 'Maria Santos',
       contactTitle: 'CEO',
-      projectTitle: 'Summer Campaign 2026',
+      projectTitle: 'Social Media Strategy',
       date: new Date('2026-02-01'),
       validUntil: new Date('2026-03-01'),
       status: ProposalStatus.WON,
       createdById: juan.id,
       assignedApproverId: manager.id,
-      subtotal: 75000,
+      subtotal: 250000,
       vatRate: 12,
-      total: 84000,
+      total: 280000,
       paymentTemplateId: paymentTemplate.id,
-      tcTemplateId: tcTemplate.id,
+      tcTemplateId: tcStrategy.id,
       lineItems: {
         create: [
           {
-            serviceId: influencerMarketing.id,
-            description: 'Influencer Marketing Campaign',
-            scopeOfWork: influencerMarketing.defaultScope,
-            unit: 'campaign',
+            serviceId: socialStrategy.id,
+            description: 'Social Media Strategy',
+            scopeOfWork: socialStrategy.defaultScope,
+            unit: 'project',
             quantity: 1,
-            unitRate: 75000,
-            lineTotal: 75000,
+            unitRate: 250000,
+            lineTotal: 250000,
             sortOrder: 1,
           },
         ],
@@ -632,67 +989,79 @@ async function main() {
       clientName: 'Acme Corp',
       contactName: 'Maria Santos',
       contactTitle: 'CEO',
-      projectTitle: 'SEO & Content Strategy',
+      projectTitle: 'Sales Collaterals Package',
       date: new Date('2026-02-10'),
       validUntil: new Date('2026-03-10'),
       status: ProposalStatus.LOST,
       lostReason: 'Budget',
       createdById: juan.id,
       assignedApproverId: manager.id,
-      subtotal: 45000,
+      subtotal: 70000,
       vatRate: 12,
-      total: 50400,
+      total: 78400,
       paymentTemplateId: paymentTemplate.id,
-      tcTemplateId: tcTemplate.id,
+      tcTemplateId: tcCollaterals.id,
       lineItems: {
         create: [
           {
-            serviceId: seoAudit.id,
-            description: 'SEO Audit & Strategy',
-            scopeOfWork: seoAudit.defaultScope,
-            unit: 'project',
+            serviceId: newsletter.id,
+            description: 'Newsletter Design',
+            scopeOfWork: newsletter.defaultScope,
+            unit: 'design',
             quantity: 1,
-            unitRate: 45000,
-            lineTotal: 45000,
+            unitRate: 40000,
+            lineTotal: 40000,
             sortOrder: 1,
+          },
+          {
+            serviceId: brochure.id,
+            description: 'Brochure Design',
+            scopeOfWork: brochure.defaultScope,
+            unit: 'design',
+            quantity: 1,
+            unitRate: 30000,
+            lineTotal: 30000,
+            sortOrder: 2,
           },
         ],
       },
     },
   })
 
-  // 6. APPROVED — FreshBite (one-time setup fee + monthly retainer)
-  // Demonstrates the mixed-billing payment schedule: the ₱300,000 one-time setup is
-  // billed upfront in Month 1, while the ₱600,000 retainer is spread evenly across
-  // the 6-month engagement (₱100,000/mo). Uses the "Monthly Retainer" payment
-  // template so the terms read "Billed monthly…".
-  const retainerProposal = await prisma.proposal.upsert({
-    where: { number: 'PROP-2026-03-0004' },
+  // ─── Payment-schedule demo proposals ──────────────────────────────────────────
+  // Exercise the PDF payment-schedule breakdown. Percentage milestones are already
+  // demoed by PROP-2026-03-0001 (uses the "Milestone — 50/30/20" template); these
+  // two cover the monthly and downpayment paths. Line-item `unit: 'monthly'` drives
+  // the engagement length regardless of the underlying service's default unit.
+
+  // A. One-time fee + monthly retainer (fee billed upfront in Month 1).
+  const psMonthly = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0010' },
     update: {},
     create: {
-      number: 'PROP-2026-03-0004',
-      clientId: freshbite.id,
-      clientName: 'FreshBite Food Group',
-      contactName: 'Ana Villanueva',
-      contactTitle: 'Brand Manager',
+      number: 'PROP-2026-03-0010',
+      clientId: acme.id,
+      clientName: 'Acme Corp',
+      contactName: 'Maria Santos',
+      contactTitle: 'CEO',
       projectTitle: 'Brand Launch & Always-On Social',
-      date: new Date('2026-03-15'),
-      validUntil: new Date('2026-04-14'),
+      date: new Date('2026-03-18'),
+      validUntil: new Date('2026-04-17'),
       status: ProposalStatus.APPROVED,
       createdById: juan.id,
       assignedApproverId: manager.id,
       subtotal: 900000,
       total: 900000,
       introText:
-        '<p>A one-time brand foundation sprint followed by a six-month always-on social media retainer.</p>',
-      paymentTemplateId: paymentTemplate2.id, // "Monthly Retainer"
+        '<p>A one-time brand foundation sprint followed by a six-month always-on social retainer.</p>',
+      paymentTemplateId: paymentTemplate3.id, // Monthly Retainer
       tcTemplateId: tcTemplate.id,
       lineItems: {
         create: [
           {
-            serviceId: brandStrategy.id,
-            description: 'Brand Strategy & Launch Setup',
-            scopeOfWork: brandStrategy.defaultScope,
+            serviceId: brandIdentity.id,
+            description: 'Brand Identity Development',
+            scopeOfWork: brandIdentity.defaultScope,
             unit: 'one-time',
             quantity: 1,
             unitRate: 300000,
@@ -700,9 +1069,9 @@ async function main() {
             sortOrder: 1,
           },
           {
-            serviceId: socialMedia.id,
+            serviceId: socialStrategy.id,
             description: 'Always-On Social Media Retainer',
-            scopeOfWork: socialMedia.defaultScope,
+            scopeOfWork: socialStrategy.defaultScope,
             unit: 'monthly',
             quantity: 6,
             unitRate: 100000,
@@ -713,27 +1082,23 @@ async function main() {
       },
     },
   })
-
   await prisma.approvalEvent.upsert({
-    where: { id: 'seed-event-3' },
+    where: { id: 'seed-event-ps-1' },
     update: {},
-    create: { id: 'seed-event-3', proposalId: retainerProposal.id, action: 'submitted', actorId: juan.id },
+    create: { id: 'seed-event-ps-1', proposalId: psMonthly.id, action: 'submitted', actorId: juan.id },
   })
   await prisma.approvalEvent.upsert({
-    where: { id: 'seed-event-4' },
+    where: { id: 'seed-event-ps-2' },
     update: {},
-    create: { id: 'seed-event-4', proposalId: retainerProposal.id, action: 'approved', actorId: manager.id, comment: 'Approved — retainer terms confirmed.' },
+    create: { id: 'seed-event-ps-2', proposalId: psMonthly.id, action: 'approved', actorId: manager.id, comment: 'Approved.' },
   })
 
-  // 7. APPROVED — Acme Corp (pure retainer with 20% downpayment)
-  // Demonstrates the downpayment payment schedule: 20% of the ₱600,000 grand total
-  // (₱120,000) is collected upfront with Month 1, and the remaining ₱480,000 is
-  // billed evenly across the 6-month engagement (₱80,000/mo). Month 1 = ₱200,000.
-  const downpaymentProposal = await prisma.proposal.upsert({
-    where: { number: 'PROP-2026-03-0005' },
+  // B. Pure retainer with a 20% downpayment (downpayment + Month 1 upfront).
+  const psDownpayment = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0011' },
     update: {},
     create: {
-      number: 'PROP-2026-03-0005',
+      number: 'PROP-2026-03-0011',
       clientId: acme.id,
       clientName: 'Acme Corp',
       contactName: 'Maria Santos',
@@ -746,16 +1111,15 @@ async function main() {
       assignedApproverId: manager.id,
       subtotal: 600000,
       total: 600000,
-      introText:
-        '<p>A six-month always-on social media retainer with a standard 20% downpayment.</p>',
-      paymentTemplateId: paymentTemplate3.id, // "Retainer — 20% Downpayment"
+      introText: '<p>A six-month always-on social media retainer with a standard 20% downpayment.</p>',
+      paymentTemplateId: paymentTemplate4.id, // Retainer — 20% Downpayment
       tcTemplateId: tcTemplate.id,
       lineItems: {
         create: [
           {
-            serviceId: socialMedia.id,
+            serviceId: socialStrategy.id,
             description: 'Always-On Social Media Retainer',
-            scopeOfWork: socialMedia.defaultScope,
+            scopeOfWork: socialStrategy.defaultScope,
             unit: 'monthly',
             quantity: 6,
             unitRate: 100000,
@@ -766,123 +1130,45 @@ async function main() {
       },
     },
   })
-
   await prisma.approvalEvent.upsert({
-    where: { id: 'seed-event-5' },
+    where: { id: 'seed-event-ps-3' },
     update: {},
-    create: { id: 'seed-event-5', proposalId: downpaymentProposal.id, action: 'submitted', actorId: juan.id },
+    create: { id: 'seed-event-ps-3', proposalId: psDownpayment.id, action: 'submitted', actorId: juan.id },
   })
   await prisma.approvalEvent.upsert({
-    where: { id: 'seed-event-6' },
+    where: { id: 'seed-event-ps-4' },
     update: {},
-    create: { id: 'seed-event-6', proposalId: downpaymentProposal.id, action: 'approved', actorId: manager.id, comment: 'Approved — standard retainer downpayment.' },
-  })
-
-  // 8. APPROVED — BuildRight (full showcase: all 5 services, discount + VAT, T&C, 50/50 terms)
-  // A complete, presentation-ready proposal that exercises every seeded catalog item:
-  // all five services (four billed + one optional add-on), the Standard Agency T&C,
-  // the 50/50 payment template, an executive summary, plus a discount and VAT line.
-  const showcaseProposal = await prisma.proposal.upsert({
-    where: { number: 'PROP-2026-03-0006' },
-    update: {},
-    create: {
-      number: 'PROP-2026-03-0006',
-      clientId: buildright.id,
-      clientName: 'BuildRight Construction',
-      contactName: 'Carlo Mendoza',
-      contactTitle: 'Owner',
-      projectTitle: 'Integrated Marketing Program 2026',
-      date: new Date('2026-03-25'),
-      validUntil: new Date('2026-04-24'),
-      status: ProposalStatus.APPROVED,
-      createdById: juan.id,
-      assignedApproverId: manager.id,
-      subtotal: 1200000,
-      discountType: 'percentage',
-      discountValue: 10,
-      vatRate: 12,
-      total: 1209600, // (1,200,000 − 10%) × 1.12 = 1,080,000 × 1.12
-      introText:
-        '<p>BuildRight Construction is entering a pivotal growth year, and this integrated program brings brand, content, video, and performance under one roof. The plan below pairs a foundational brand sprint and flagship video production with an always-on social retainer and a measurement-driven SEO baseline.</p><p>Our goal is a coherent market presence that compounds over the engagement — from launch through sustained monthly execution.</p>',
-      paymentTemplateId: paymentTemplate.id, // "50/50 Standard"
-      tcTemplateId: tcTemplate.id, // "Standard Agency T&C"
-      lineItems: {
-        create: [
-          {
-            serviceId: brandStrategySvc.id,
-            description: 'Brand Strategy & Positioning',
-            scopeOfWork: brandStrategySvc.defaultScope,
-            unit: 'one-time',
-            quantity: 1,
-            unitRate: 200000,
-            lineTotal: 200000,
-            sortOrder: 1,
-          },
-          {
-            serviceId: videoProduction.id,
-            description: 'Flagship TVC / Video Production',
-            scopeOfWork: videoProduction.defaultScope,
-            unit: 'one-time',
-            quantity: 1,
-            unitRate: 250000,
-            lineTotal: 250000,
-            sortOrder: 2,
-          },
-          {
-            serviceId: influencerMarketing.id,
-            description: 'Influencer Marketing Campaign',
-            scopeOfWork: influencerMarketing.defaultScope,
-            unit: 'one-time',
-            quantity: 1,
-            unitRate: 150000,
-            lineTotal: 150000,
-            sortOrder: 3,
-          },
-          {
-            serviceId: socialMedia.id,
-            description: 'Always-On Social Media Retainer',
-            scopeOfWork: socialMedia.defaultScope,
-            unit: 'monthly',
-            quantity: 6,
-            unitRate: 100000,
-            lineTotal: 600000,
-            sortOrder: 4,
-          },
-          {
-            serviceId: seoAudit.id,
-            description: 'SEO Audit & Strategy',
-            scopeOfWork: seoAudit.defaultScope,
-            unit: 'one-time',
-            quantity: 1,
-            unitRate: 80000,
-            lineTotal: 80000,
-            isOptional: true,
-            sortOrder: 5,
-          },
-        ],
-      },
-    },
-  })
-
-  await prisma.approvalEvent.upsert({
-    where: { id: 'seed-event-7' },
-    update: {},
-    create: { id: 'seed-event-7', proposalId: showcaseProposal.id, action: 'submitted', actorId: juan.id },
-  })
-  await prisma.approvalEvent.upsert({
-    where: { id: 'seed-event-8' },
-    update: {},
-    create: { id: 'seed-event-8', proposalId: showcaseProposal.id, action: 'approved', actorId: manager.id, comment: 'Approved — full integrated program.' },
+    create: { id: 'seed-event-ps-4', proposalId: psDownpayment.id, action: 'approved', actorId: manager.id, comment: 'Approved.' },
   })
 
   console.log('Seed complete:', {
     users: [admin.email, manager.email, juan.email, coo.email, ceo.email],
     team: team.name,
     clients: ['Acme Corp', 'BuildRight Construction', 'FreshBite Food Group'],
-    services: [brandStrategy.name, socialMedia.name, videoProduction.name, influencerMarketing.name, seoAudit.name],
-    paymentTemplates: [paymentTemplate.name, paymentTemplate2.name, paymentTemplate3.name],
-    tcTemplate: tcTemplate.name,
-    proposals: 8,
+    services: [
+      brandIdentity.name,
+      socialStrategy.name,
+      keyVisualPoster.name,
+      lamppostBanners.name,
+      billboardDesign.name,
+      signageFacade.name,
+      hoardings.name,
+      wayfinding.name,
+      companyProfile.name,
+      brochure.name,
+      flyer.name,
+      pullUpBanner.name,
+      boothDesign.name,
+      newsletter.name,
+    ],
+    paymentTemplates: [
+      paymentTemplate.name,
+      paymentTemplate2.name,
+      paymentTemplate3.name,
+      paymentTemplate4.name,
+    ],
+    tcTemplates: [tcTemplate.name, tcBranding.name, tcStrategy.name, tcCollaterals.name],
+    proposals: 7,
   })
 }
 
