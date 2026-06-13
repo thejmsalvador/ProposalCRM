@@ -44,6 +44,7 @@ export async function saveAsTemplate(
       projectTitle: proposal.projectTitle,
       introText: proposal.introText,
       currency: proposal.currency,
+      exchangeRate: proposal.exchangeRate != null ? String(proposal.exchangeRate) : null,
       discountType: proposal.discountType,
       discountValue: proposal.discountValue ? String(proposal.discountValue) : null,
       vatRate: proposal.vatRate ? String(proposal.vatRate) : null,

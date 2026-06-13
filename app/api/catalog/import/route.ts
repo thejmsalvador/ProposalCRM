@@ -12,8 +12,6 @@ export type ImportRow = {
   defaultScope?: string
   unit: string
   defaultRate: number
-  minRate?: number | null
-  maxRate?: number | null
   internalNotes?: string | null
 }
 
@@ -85,8 +83,6 @@ export async function POST(req: NextRequest) {
         defaultScope: row.defaultScope?.trim() ?? '',
         unit: row.unit.trim(),
         defaultRate: row.defaultRate,
-        minRate: row.minRate ?? null,
-        maxRate: row.maxRate ?? null,
         internalNotes: row.internalNotes?.trim() || null,
         isActive: true,
       })),

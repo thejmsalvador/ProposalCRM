@@ -13,6 +13,8 @@ enum Role {
   SALES_EXEC
   SALES_MANAGER
   ADMIN
+  COO
+  CEO
   SUPER_ADMIN
 }
 
@@ -72,6 +74,10 @@ model Service {
   defaultRate     Decimal   @db.Decimal(12, 2)
   minRate         Decimal?  @db.Decimal(12, 2)
   maxRate         Decimal?  @db.Decimal(12, 2)
+  engagementTerm  Int       @default(1)
+  currency        String    @default("PHP")
+  exchangeRate    Decimal?  @db.Decimal(12, 6)
+  estimatedExpenses Json?
   tcTemplateId    String?
   paymentTplId    String?
   isActive        Boolean   @default(true)
@@ -162,7 +168,12 @@ model Proposal {
   status                ProposalStatus @default(DRAFT)
   createdById           String
   assignedApproverId    String?
+  cooApprovedAt         DateTime?
+  cooApprovedById       String?
+  ceoApprovedAt         DateTime?
+  ceoApprovedById       String?
   currency              String         @default("PHP")
+  exchangeRate          Decimal?       @db.Decimal(12, 6)
   subtotal              Decimal        @db.Decimal(12, 2)
   discountType          String?
   discountValue         Decimal?       @db.Decimal(12, 2)

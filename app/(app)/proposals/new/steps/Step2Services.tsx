@@ -33,9 +33,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/validations/proposals'
+import { engagementLabel, ENGAGEMENT_TYPES } from '@/lib/validations/catalog'
 import type { LineItemFormData } from '@/lib/validations/proposals'
 import type { ServiceOption } from '@/lib/actions/proposals'
 
@@ -58,6 +66,9 @@ export function Step2Services() {
 
   const addService = useCallback(
     (service: ServiceOption) => {
+      // Quantity carries the engagement term so lineTotal = cost × term = Item Total
+      const cost = parseFloat(service.defaultRate)
+      const term = service.engagementTerm > 0 ? service.engagementTerm : 1
       const newItem: LineItemFormData = {
         id: crypto.randomUUID(),
         serviceId: service.id,
@@ -65,9 +76,9 @@ export function Step2Services() {
         description: service.description,
         scopeOfWork: service.defaultScope,
         unit: service.unit,
-        quantity: 1,
-        unitRate: parseFloat(service.defaultRate),
-        lineTotal: parseFloat(service.defaultRate),
+        quantity: term,
+        unitRate: cost,
+        lineTotal: Math.round(cost * term * 100) / 100,
         isOptional: false,
         internalNote: '',
         sortOrder: fields.length,
@@ -88,7 +99,7 @@ export function Step2Services() {
       customName: '',
       description: '',
       scopeOfWork: '',
-      unit: 'project',
+      unit: 'one-time',
       quantity: 1,
       unitRate: 0,
       lineTotal: 0,
@@ -194,8 +205,17 @@ export function Step2Services() {
                       >
                         <div>
                           <p className="text-sm font-medium">{service.name}</p>
-                          <p className="text-xs text-[var(--color-muted)]">
-                            {service.unit} · {formatCurrency(parseFloat(service.defaultRate))}
+                          <p className="text-xs text-[var(--color-muted)] tabular-nums">
+                            {engagementLabel(service.unit)} ·{' '}
+                            {formatCurrency(parseFloat(service.defaultRate))}
+                            {service.engagementTerm > 1
+                              ? ` × ${service.engagementTerm} months`
+                              : ''}
+                            {' = '}
+                            {formatCurrency(
+                              parseFloat(service.defaultRate) *
+                                (service.engagementTerm > 0 ? service.engagementTerm : 1),
+                            )}
                           </p>
                         </div>
                         {alreadyAdded && (
@@ -332,8 +352,9 @@ function SortableLineItemCard({
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{serviceName}</p>
             {!expanded && (
-              <p className="text-xs text-[var(--color-muted)]">
-                {quantity} × {formatCurrency(unitRate)} = {formatCurrency(lineTotal)}
+              <p className="text-xs text-[var(--color-muted)] tabular-nums">
+                {engagementLabel(item?.unit ?? '')} · {formatCurrency(unitRate)} × {quantity} ={' '}
+                {formatCurrency(lineTotal)}
               </p>
             )}
           </div>
@@ -412,25 +433,51 @@ function SortableLineItemCard({
               />
             </div>
 
-            {/* Unit */}
+            {/* Engagement Type */}
             <div className="space-y-1.5">
-              <Label htmlFor={`unit-${index}`}>Unit</Label>
-              <Input
-                id={`unit-${index}`}
-                {...register(`lineItems.${index}.unit`)}
-                readOnly={!isCustom}
-                className={cn(!isCustom && 'bg-slate-50')}
-              />
+              <Label htmlFor={`unit-${index}`}>Engagement Type</Label>
+              {isCustom ? (
+                <Select
+                  value={
+                    item?.unit === 'one-time' || item?.unit === 'monthly' ? item.unit : ''
+                  }
+                  onValueChange={(v) => {
+                    setValue(`lineItems.${index}.unit`, v)
+                    if (v === 'one-time') {
+                      setValue(`lineItems.${index}.quantity`, 1)
+                      updateLineTotal(1, unitRate)
+                    }
+                  }}
+                >
+                  <SelectTrigger id={`unit-${index}`} className="min-h-[44px]">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ENGAGEMENT_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id={`unit-${index}`}
+                  value={engagementLabel(item?.unit ?? '')}
+                  readOnly
+                  className="bg-slate-50"
+                />
+              )}
             </div>
 
-            {/* Quantity */}
+            {/* Engagement Term */}
             <div className="space-y-1.5">
-              <Label htmlFor={`quantity-${index}`}>Quantity</Label>
+              <Label htmlFor={`quantity-${index}`}>Engagement Term</Label>
               <Input
                 id={`quantity-${index}`}
                 type="number"
-                step="0.01"
-                min="0.01"
+                step="1"
+                min="1"
                 {...register(`lineItems.${index}.quantity`, {
                   valueAsNumber: true,
                   onChange: (e) => {
@@ -439,11 +486,14 @@ function SortableLineItemCard({
                   },
                 })}
               />
+              <p className="text-xs text-[var(--color-muted)]">
+                {item?.unit === 'monthly' ? 'Number of months.' : 'Defaults to 1 for one-time.'}
+              </p>
             </div>
 
-            {/* Unit Rate */}
+            {/* Item Cost */}
             <div className="space-y-1.5">
-              <Label htmlFor={`unitRate-${index}`}>Unit Rate</Label>
+              <Label htmlFor={`unitRate-${index}`}>Item Cost</Label>
               <Input
                 id={`unitRate-${index}`}
                 type="number"
@@ -459,15 +509,16 @@ function SortableLineItemCard({
               />
             </div>
 
-            {/* Line Total (read-only) */}
+            {/* Item Total (read-only) */}
             <div className="space-y-1.5">
-              <Label htmlFor={`lineTotal-${index}`}>Line Total</Label>
+              <Label htmlFor={`lineTotal-${index}`}>Item Total</Label>
               <Input
                 id={`lineTotal-${index}`}
                 value={formatCurrency(lineTotal)}
                 readOnly
                 className="bg-slate-50 font-medium"
               />
+              <p className="text-xs text-[var(--color-muted)]">Item Cost × Engagement Term</p>
             </div>
           </div>
 

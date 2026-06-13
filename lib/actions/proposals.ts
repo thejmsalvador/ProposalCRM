@@ -38,6 +38,7 @@ export type ServiceOption = {
   description: string
   defaultScope: string
   unit: string
+  engagementTerm: number
   defaultRate: string
   minRate: string | null
   maxRate: string | null
@@ -99,6 +100,7 @@ export async function getWizardData(): Promise<{
           description: true,
           defaultScope: true,
           unit: true,
+          engagementTerm: true,
           defaultRate: true,
           minRate: true,
           maxRate: true,
@@ -131,6 +133,7 @@ export async function getWizardData(): Promise<{
       description: s.description,
       defaultScope: s.defaultScope,
       unit: s.unit,
+      engagementTerm: s.engagementTerm,
       defaultRate: String(s.defaultRate),
       minRate: s.minRate != null ? String(s.minRate) : null,
       maxRate: s.maxRate != null ? String(s.maxRate) : null,
@@ -174,45 +177,28 @@ async function generateProposalNumber(): Promise<string> {
 }
 
 // ─── Approver resolution ─────────────────────────────────────────────────────
-// The wizard no longer asks for an approver — proposals course through the
-// creator's pre-defined approver (set in Users), falling back to their team's
-// manager, then any active manager.
+// ─── Two-stage approval routing (COO reviews first, then CEO) ─────────────────
+//
+// Every submission by a non-SUPER_ADMIN routes to the COO first; once the COO
+// approves it advances to the CEO. The proposal is only fully APPROVED (and PDF
+// generation unlocked) after the CEO signs off.
 
-async function resolveManagerApprover(creatorId: string): Promise<string | null> {
-  const creator = await prisma.user.findUnique({
-    where: { id: creatorId },
-    select: { teamId: true },
-  })
-  const teamManager = creator?.teamId
-    ? await prisma.user.findFirst({
-        where: { role: 'SALES_MANAGER', isActive: true, teamId: creator.teamId },
-        select: { id: true },
-      })
-    : null
-  if (teamManager) return teamManager.id
-
-  const fallback = await prisma.user.findFirst({
-    where: { role: 'SALES_MANAGER', isActive: true },
+async function resolveCOO(): Promise<string | null> {
+  const coo = await prisma.user.findFirst({
+    where: { role: 'COO', isActive: true },
     select: { id: true },
+    orderBy: { createdAt: 'asc' },
   })
-  return fallback?.id ?? null
+  return coo?.id ?? null
 }
 
-async function resolveDefaultApprover(creatorId: string): Promise<string | null> {
-  const creator = await prisma.user.findUnique({
-    where: { id: creatorId },
-    select: { defaultApproverId: true },
+async function resolveCEO(): Promise<string | null> {
+  const ceo = await prisma.user.findFirst({
+    where: { role: 'CEO', isActive: true },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
   })
-
-  if (creator?.defaultApproverId) {
-    const def = await prisma.user.findUnique({
-      where: { id: creator.defaultApproverId },
-      select: { id: true, isActive: true },
-    })
-    if (def?.isActive) return def.id
-  }
-
-  return resolveManagerApprover(creatorId)
+  return ceo?.id ?? null
 }
 
 // ─── Save draft ──────────────────────────────────────────────────────────────
@@ -256,6 +242,7 @@ export async function saveProposalDraft(
     assignedApproverId: data.assignedApproverId || null,
     introText: data.introText || null,
     currency: data.currency,
+    exchangeRate: data.currency === 'PHP' ? null : data.exchangeRate ?? null,
     subtotal,
     discountType: data.discountType,
     discountValue: data.discountValue,
@@ -470,34 +457,23 @@ export async function submitProposalForApproval(
     (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
   ).length
 
-  // Resolve the approver from pre-defined settings (the wizard no longer asks)
-  let resolvedApproverId =
-    raw.assignedApproverId || (await resolveDefaultApprover(session.user.id))
-  if (!resolvedApproverId) {
-    return {
-      error:
-        'No approver is configured. Ask an admin to set your default approver in Users.',
-    }
-  }
-  let autoEscalated = false
+  // A SUPER_ADMIN submitting their own proposal auto-approves it — no separate
+  // approver or approval chain is needed.
+  const isSelfApprove = session.user.role === 'SUPER_ADMIN'
 
-  if (hasBelowFloor) {
-    const currentApprover = await prisma.user.findUnique({
-      where: { id: resolvedApproverId },
-      select: { role: true },
-    })
-    // If the approver is not a manager or super admin, auto-reassign
-    if (
-      currentApprover &&
-      currentApprover.role !== 'SALES_MANAGER' &&
-      currentApprover.role !== 'SUPER_ADMIN'
-    ) {
-      const managerId = await resolveManagerApprover(session.user.id)
-      if (managerId) {
-        resolvedApproverId = managerId
-        autoEscalated = true
+  // Everyone else routes into the COO → CEO approval chain, starting with the COO.
+  let resolvedApproverId: string
+  if (isSelfApprove) {
+    resolvedApproverId = session.user.id
+  } else {
+    const cooId = await resolveCOO()
+    if (!cooId) {
+      return {
+        error:
+          'No COO is configured to review proposals. Ask an admin to assign the COO role in Users.',
       }
     }
+    resolvedApproverId = cooId
   }
 
   raw = { ...raw, assignedApproverId: resolvedApproverId }
@@ -506,15 +482,53 @@ export async function submitProposalForApproval(
   const saveResult = await saveProposalExplicit(proposalId, raw)
   if ('error' in saveResult) return saveResult
 
-  // Transition to PENDING_APPROVAL, also update hasBelowFloorPricing flag
+  // Transition status, also update hasBelowFloorPricing flag. SUPER_ADMIN
+  // submissions go straight to APPROVED; everyone else enters the COO stage with
+  // a clean approval slate (important when re-submitting after a revision).
+  const now = new Date()
   await prisma.proposal.update({
     where: { id: saveResult.proposalId },
     data: {
-      status: 'PENDING_APPROVAL',
+      status: isSelfApprove ? 'APPROVED' : 'PENDING_APPROVAL',
       hasBelowFloorPricing: hasBelowFloor,
       assignedApproverId: resolvedApproverId,
+      cooApprovedAt: isSelfApprove ? now : null,
+      cooApprovedById: isSelfApprove ? session.user.id : null,
+      ceoApprovedAt: isSelfApprove ? now : null,
+      ceoApprovedById: isSelfApprove ? session.user.id : null,
     },
   })
+
+  if (isSelfApprove) {
+    await prisma.approvalEvent.createMany({
+      data: [
+        {
+          proposalId: saveResult.proposalId,
+          action: 'submitted',
+          actorId: session.user.id,
+        },
+        {
+          proposalId: saveResult.proposalId,
+          action: 'approved',
+          actorId: session.user.id,
+          comment: 'Auto-approved on submission by Super Admin.',
+        },
+      ],
+    })
+    await createNotification(
+      session.user.id,
+      `${saveResult.proposalNumber} has been approved. You can now generate the PDF.`,
+      `/proposals/${saveResult.proposalId}`,
+    )
+    await logAudit(
+      'Proposal',
+      saveResult.proposalId,
+      'submitted_and_auto_approved',
+      session.user.id,
+    )
+    revalidatePath('/proposals')
+    return saveResult
+  }
 
   // Create approval event
   await prisma.approvalEvent.create({
@@ -525,19 +539,16 @@ export async function submitProposalForApproval(
     },
   })
 
-  // Notify + email the assigned approver
-  const notifyApproverId = resolvedApproverId ?? raw.assignedApproverId
+  // Notify + email the COO (first-stage approver)
+  const notifyApproverId = resolvedApproverId
   if (notifyApproverId) {
     const belowFloorNote = hasBelowFloor
       ? ` Note: This proposal contains below-floor pricing on ${belowFloorCount} line item${belowFloorCount > 1 ? 's' : ''}.`
       : ''
-    const autoEscalateNote = autoEscalated
-      ? ' (Auto-assigned: below-floor pricing requires manager approval.)'
-      : ''
 
     await createNotification(
       notifyApproverId,
-      `Proposal ${saveResult.proposalNumber} has been submitted for your approval by ${session.user.name}.${belowFloorNote}${autoEscalateNote}`,
+      `Proposal ${saveResult.proposalNumber} has been submitted for COO review by ${session.user.name}.${belowFloorNote}`,
       `/proposals/${saveResult.proposalId}`,
     )
     const approverUser = await prisma.user.findUnique({
@@ -849,6 +860,7 @@ export type ProposalDetail = {
   validUntil: string
   status: string
   currency: string
+  exchangeRate: string | null
   subtotal: string
   discountType: string | null
   discountValue: string | null
@@ -866,6 +878,8 @@ export type ProposalDetail = {
   updatedAt: string
   createdBy: { id: string; name: string; email: string }
   assignedApprover: { id: string; name: string } | null
+  cooApprovedAt: string | null
+  ceoApprovedAt: string | null
   paymentTemplate: { id: string; name: string; bodyRichText: string } | null
   tcTemplate: { id: string; name: string; bodyRichText: string } | null
   lineItems: {
@@ -955,6 +969,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     validUntil: proposal.validUntil.toISOString(),
     status: proposal.status,
     currency: proposal.currency,
+    exchangeRate: proposal.exchangeRate != null ? String(proposal.exchangeRate) : null,
     subtotal: String(proposal.subtotal),
     discountType: proposal.discountType,
     discountValue: proposal.discountValue != null ? String(proposal.discountValue) : null,
@@ -976,6 +991,8 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       email: proposal.createdBy.email,
     },
     assignedApprover: proposal.assignedApprover,
+    cooApprovedAt: proposal.cooApprovedAt?.toISOString() ?? null,
+    ceoApprovedAt: proposal.ceoApprovedAt?.toISOString() ?? null,
     paymentTemplate: proposal.paymentTemplate,
     tcTemplate: proposal.tcTemplate,
     lineItems: proposal.lineItems.map((li) => ({
@@ -1082,6 +1099,7 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       createdById: session.user.id,
       assignedApproverId: source.assignedApproverId,
       currency: source.currency,
+      exchangeRate: source.exchangeRate,
       subtotal: source.subtotal,
       discountType: source.discountType,
       discountValue: source.discountValue,
@@ -1159,36 +1177,126 @@ export async function approveProposal(
   })
   if (!proposal) return { error: 'Proposal not found' }
   if (proposal.status !== 'PENDING_APPROVAL') return { error: 'Proposal is not pending approval' }
-  if (proposal.assignedApproverId !== session.user.id && session.user.role !== 'SUPER_ADMIN') {
-    return { error: 'You are not the assigned approver' }
+
+  const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+  if (proposal.assignedApproverId !== session.user.id && !isSuperAdmin) {
+    return { error: 'You are not the assigned approver for this stage' }
   }
 
-  await prisma.proposal.update({ where: { id: proposalId }, data: { status: 'APPROVED' } })
+  const now = new Date()
+  // Stage 1 = awaiting COO (cooApprovedAt unset); Stage 2 = awaiting CEO.
+  const isCooStage = proposal.cooApprovedAt == null
 
+  // A SUPER_ADMIN can finalise the whole chain in one action (override).
+  if (isSuperAdmin) {
+    await prisma.proposal.update({
+      where: { id: proposalId },
+      data: {
+        status: 'APPROVED',
+        cooApprovedAt: proposal.cooApprovedAt ?? now,
+        cooApprovedById: proposal.cooApprovedById ?? session.user.id,
+        ceoApprovedAt: now,
+        ceoApprovedById: session.user.id,
+      },
+    })
+    await prisma.approvalEvent.create({
+      data: { proposalId, action: 'approved', actorId: session.user.id },
+    })
+    await notifyFinalApproval(proposal.createdById, proposal.createdBy, proposal.number, proposalId)
+    await logAudit('Proposal', proposalId, 'approved', session.user.id)
+    revalidatePath(`/proposals/${proposalId}`)
+    revalidatePath('/proposals')
+    return { success: true }
+  }
+
+  if (isCooStage) {
+    // COO approves → advance to CEO for final sign-off.
+    const ceoId = await resolveCEO()
+    if (!ceoId) {
+      return {
+        error:
+          'No CEO is configured to give final approval. Ask an admin to assign the CEO role in Users.',
+      }
+    }
+
+    await prisma.proposal.update({
+      where: { id: proposalId },
+      data: {
+        cooApprovedAt: now,
+        cooApprovedById: session.user.id,
+        assignedApproverId: ceoId,
+      },
+    })
+    await prisma.approvalEvent.create({
+      data: { proposalId, action: 'coo_approved', actorId: session.user.id },
+    })
+
+    // Notify the CEO (action needed) and the creator (progress update).
+    await createNotification(
+      ceoId,
+      `${proposal.number} passed COO review and is ready for your final approval.`,
+      `/proposals/${proposalId}`,
+    )
+    await createNotification(
+      proposal.createdById,
+      `${proposal.number} was approved by the COO and is now awaiting CEO approval.`,
+      `/proposals/${proposalId}`,
+    )
+    const ceo = await prisma.user.findUnique({
+      where: { id: ceoId },
+      select: { email: true, name: true },
+    })
+    if (ceo) {
+      const tpl = approvalRequestEmail({
+        approverName: ceo.name,
+        senderName: session.user.name,
+        proposalNumber: proposal.number,
+        proposalId,
+      })
+      await sendEmail(ceo.email, tpl.subject, tpl.html)
+    }
+
+    await logAudit('Proposal', proposalId, 'coo_approved', session.user.id)
+    revalidatePath(`/proposals/${proposalId}`)
+    revalidatePath('/proposals')
+    return { success: true }
+  }
+
+  // CEO stage → final approval, unlocks PDF generation.
+  await prisma.proposal.update({
+    where: { id: proposalId },
+    data: { status: 'APPROVED', ceoApprovedAt: now, ceoApprovedById: session.user.id },
+  })
   await prisma.approvalEvent.create({
     data: { proposalId, action: 'approved', actorId: session.user.id },
   })
-
-  await createNotification(
-    proposal.createdById,
-    `${proposal.number} has been approved. You can now generate the PDF.`,
-    `/proposals/${proposalId}`,
-  )
-
-  const creator = proposal.createdBy
-  if (creator) {
-    const tpl = proposalApprovedEmail({
-      creatorName: creator.name,
-      proposalNumber: proposal.number,
-      proposalId,
-    })
-    await sendEmail(creator.email, tpl.subject, tpl.html)
-  }
-
+  await notifyFinalApproval(proposal.createdById, proposal.createdBy, proposal.number, proposalId)
   await logAudit('Proposal', proposalId, 'approved', session.user.id)
   revalidatePath(`/proposals/${proposalId}`)
   revalidatePath('/proposals')
   return { success: true }
+}
+
+// Notify + email the creator that their proposal is fully approved.
+async function notifyFinalApproval(
+  creatorId: string,
+  creator: { email: string; name: string } | null,
+  proposalNumber: string,
+  proposalId: string,
+): Promise<void> {
+  await createNotification(
+    creatorId,
+    `${proposalNumber} has been fully approved (COO + CEO). You can now generate the PDF.`,
+    `/proposals/${proposalId}`,
+  )
+  if (creator) {
+    const tpl = proposalApprovedEmail({
+      creatorName: creator.name,
+      proposalNumber,
+      proposalId,
+    })
+    await sendEmail(creator.email, tpl.subject, tpl.html)
+  }
 }
 
 // ─── Request revision ────────────────────────────────────────────────────────
@@ -1206,10 +1314,20 @@ export async function requestRevision(
   if (!proposal) return { error: 'Proposal not found' }
   if (proposal.status !== 'PENDING_APPROVAL') return { error: 'Proposal is not pending approval' }
   if (proposal.assignedApproverId !== session.user.id && session.user.role !== 'SUPER_ADMIN') {
-    return { error: 'You are not the assigned approver' }
+    return { error: 'You are not the assigned approver for this stage' }
   }
 
-  await prisma.proposal.update({ where: { id: proposalId }, data: { status: 'REVISION_REQUIRED' } })
+  // Reset the COO → CEO chain so a re-submission starts fresh at the COO stage.
+  await prisma.proposal.update({
+    where: { id: proposalId },
+    data: {
+      status: 'REVISION_REQUIRED',
+      cooApprovedAt: null,
+      cooApprovedById: null,
+      ceoApprovedAt: null,
+      ceoApprovedById: null,
+    },
+  })
 
   await prisma.approvalEvent.create({
     data: { proposalId, action: 'revision_requested', actorId: session.user.id, comment },
@@ -1257,12 +1375,19 @@ export async function rejectProposal(
   if (!proposal) return { error: 'Proposal not found' }
   if (proposal.status !== 'PENDING_APPROVAL') return { error: 'Proposal is not pending approval' }
   if (proposal.assignedApproverId !== session.user.id && session.user.role !== 'SUPER_ADMIN') {
-    return { error: 'You are not the assigned approver' }
+    return { error: 'You are not the assigned approver for this stage' }
   }
 
   await prisma.proposal.update({
     where: { id: proposalId },
-    data: { status: 'LOST', lostReason: `Rejected internally: ${reason}` },
+    data: {
+      status: 'LOST',
+      lostReason: `Rejected internally: ${reason}`,
+      cooApprovedAt: null,
+      cooApprovedById: null,
+      ceoApprovedAt: null,
+      ceoApprovedById: null,
+    },
   })
 
   await prisma.approvalEvent.create({
@@ -1502,27 +1627,24 @@ export async function submitExistingProposal(
     return { error: 'Valid until date must be after the proposal date' }
   }
 
-  // Resolve the approver from pre-defined settings if none was assigned yet
-  let approverId =
-    proposal.assignedApproverId ??
-    (await resolveDefaultApprover(proposal.createdById))
-  if (!approverId) {
-    return {
-      error:
-        'No approver is configured. Ask an admin to set a default approver in Users.',
-    }
-  }
+  // A SUPER_ADMIN submitting their own proposal auto-approves it — no separate
+  // approver or approval chain is needed.
+  const isSelfApprove = session.user.role === 'SUPER_ADMIN'
 
-  // Below-floor pricing requires a SALES_MANAGER / SUPER_ADMIN approver
-  if (proposal.hasBelowFloorPricing) {
-    const approver = await prisma.user.findUnique({ where: { id: approverId } })
-    if (approver && approver.role !== 'SALES_MANAGER' && approver.role !== 'SUPER_ADMIN') {
-      const managerId = await resolveManagerApprover(proposal.createdById)
-      if (!managerId) {
-        return { error: 'Below-floor pricing requires a Sales Manager approver, but none was found.' }
+  // Everyone else (re)enters the COO → CEO chain at the COO stage. We always
+  // route to the COO on submit, even after a revision, so the chain restarts.
+  let approverId: string
+  if (isSelfApprove) {
+    approverId = session.user.id
+  } else {
+    const cooId = await resolveCOO()
+    if (!cooId) {
+      return {
+        error:
+          'No COO is configured to review proposals. Ask an admin to assign the COO role in Users.',
       }
-      approverId = managerId
     }
+    approverId = cooId
   }
 
   // Create version snapshot
@@ -1548,33 +1670,62 @@ export async function submitExistingProposal(
       } as Prisma.InputJsonValue,
       createdById: session.user.id,
       changeSummary,
-      status: 'PENDING_APPROVAL',
+      status: isSelfApprove ? 'APPROVED' : 'PENDING_APPROVAL',
     },
   })
 
+  const now = new Date()
   await prisma.proposal.update({
     where: { id: proposalId },
     data: {
-      status: 'PENDING_APPROVAL',
+      status: isSelfApprove ? 'APPROVED' : 'PENDING_APPROVAL',
       version: nextVersion,
       assignedApproverId: approverId,
+      cooApprovedAt: isSelfApprove ? now : null,
+      cooApprovedById: isSelfApprove ? session.user.id : null,
+      ceoApprovedAt: isSelfApprove ? now : null,
+      ceoApprovedById: isSelfApprove ? session.user.id : null,
     },
   })
 
-  await prisma.approvalEvent.create({
-    data: { proposalId, action: 'submitted', actorId: session.user.id },
-  })
-
-  const approver = await prisma.user.findUnique({ where: { id: approverId } })
-  if (approver) {
+  if (isSelfApprove) {
+    await prisma.approvalEvent.createMany({
+      data: [
+        { proposalId, action: 'submitted', actorId: session.user.id },
+        {
+          proposalId,
+          action: 'approved',
+          actorId: session.user.id,
+          comment: 'Auto-approved on submission by Super Admin.',
+        },
+      ],
+    })
     await createNotification(
-      approver.id,
-      `${proposal.number} has been submitted for your approval by ${session.user.name}.`,
+      proposal.createdById,
+      `${proposal.number} has been approved. You can now generate the PDF.`,
       `/proposals/${proposalId}`,
     )
+  } else {
+    await prisma.approvalEvent.create({
+      data: { proposalId, action: 'submitted', actorId: session.user.id },
+    })
+
+    const approver = await prisma.user.findUnique({ where: { id: approverId } })
+    if (approver) {
+      await createNotification(
+        approver.id,
+        `${proposal.number} has been submitted for COO review by ${session.user.name}.`,
+        `/proposals/${proposalId}`,
+      )
+    }
   }
 
-  await logAudit('Proposal', proposalId, 'submitted_for_approval', session.user.id)
+  await logAudit(
+    'Proposal',
+    proposalId,
+    isSelfApprove ? 'submitted_and_auto_approved' : 'submitted_for_approval',
+    session.user.id,
+  )
   revalidatePath(`/proposals/${proposalId}`)
   revalidatePath('/proposals')
   return { success: true }
@@ -1650,6 +1801,7 @@ export type ProposalFormDataExport = {
     serviceMinRate: number | null
   }[]
   currency: string
+  exchangeRate: number | null
   discountType: 'percentage' | 'fixed' | null
   discountValue: number | null
   discountLabel: string
@@ -1729,6 +1881,7 @@ export async function getProposalForEdit(
       serviceMinRate: li.service?.minRate != null ? Number(li.service.minRate) : null,
     })),
     currency: proposal.currency,
+    exchangeRate: proposal.exchangeRate != null ? Number(proposal.exchangeRate) : null,
     discountType: proposal.discountType as 'percentage' | 'fixed' | null,
     discountValue: proposal.discountValue != null ? Number(proposal.discountValue) : null,
     discountLabel: '',
@@ -1896,6 +2049,8 @@ export async function restoreVersion(
       date: new Date(String(sp.date)),
       validUntil: new Date(String(sp.validUntil)),
       currency: String(sp.currency ?? 'PHP'),
+      exchangeRate:
+        sp.exchangeRate != null ? new Prisma.Decimal(String(sp.exchangeRate)) : null,
       subtotal: new Prisma.Decimal(String(sp.subtotal ?? '0')),
       discountType: sp.discountType ? String(sp.discountType) : null,
       discountValue: sp.discountValue != null ? new Prisma.Decimal(String(sp.discountValue)) : null,

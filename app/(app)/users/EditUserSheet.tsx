@@ -119,6 +119,8 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
               <SelectContent>
                 <SelectItem value="SALES_EXEC">Sales Executive</SelectItem>
                 <SelectItem value="SALES_MANAGER">Sales Manager</SelectItem>
+                <SelectItem value="COO">COO</SelectItem>
+                <SelectItem value="CEO">CEO</SelectItem>
                 <SelectItem value="ADMIN">Admin</SelectItem>
                 <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
               </SelectContent>

@@ -14,6 +14,7 @@ import {
   computeTotal,
   formatCurrency,
 } from '@/lib/validations/proposals'
+import { engagementLabel } from '@/lib/validations/catalog'
 
 type CheckItem = {
   label: string
@@ -46,12 +47,28 @@ export function Step6Review() {
   const discount = computeDiscount(subtotal, data.discountType, data.discountValue)
   const total = computeTotal(data)
 
+  // Items are costed in ₱; non-PHP proposals get a client-facing converted
+  // total = ₱ total ÷ rate (rate is ₱ per 1 unit of the currency).
+  const exRate =
+    data.currency !== 'PHP' && data.exchangeRate != null && data.exchangeRate > 0
+      ? data.exchangeRate
+      : null
+  const convertedTotal = exRate != null ? total / exRate : null
+
   // Validation checklist
   const checks: CheckItem[] = [
     { label: 'Client name provided', passed: data.clientName.length >= 2 },
     { label: 'Project title provided', passed: data.projectTitle.length >= 3 },
     { label: 'At least one service line item', passed: data.lineItems.length > 0 },
     { label: 'Total greater than 0', passed: total > 0 },
+    ...(data.currency !== 'PHP'
+      ? [
+          {
+            label: `Exchange rate set for ${data.currency}`,
+            passed: data.exchangeRate != null && data.exchangeRate > 0,
+          },
+        ]
+      : []),
     { label: 'Payment terms selected', passed: !!data.paymentTemplateId },
     { label: 'Terms & conditions selected', passed: !!data.tcTemplateId },
   ]
@@ -164,10 +181,10 @@ export function Step6Review() {
                 <thead>
                   <tr className="border-b border-[var(--color-border)]">
                     <th className="text-left py-2 pr-4 font-medium text-[var(--color-muted)]">Service</th>
-                    <th className="text-right py-2 px-2 font-medium text-[var(--color-muted)]">Qty</th>
-                    <th className="text-right py-2 px-2 font-medium text-[var(--color-muted)]">Unit</th>
-                    <th className="text-right py-2 px-2 font-medium text-[var(--color-muted)]">Rate</th>
-                    <th className="text-right py-2 pl-2 font-medium text-[var(--color-muted)]">Total</th>
+                    <th className="text-right py-2 px-2 font-medium text-[var(--color-muted)]">Type</th>
+                    <th className="text-right py-2 px-2 font-medium text-[var(--color-muted)]">Term</th>
+                    <th className="text-right py-2 px-2 font-medium text-[var(--color-muted)]">Item Cost</th>
+                    <th className="text-right py-2 pl-2 font-medium text-[var(--color-muted)]">Item Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,10 +200,10 @@ export function Step6Review() {
                           </Badge>
                         )}
                       </td>
+                      <td className="text-right py-2 px-2">{engagementLabel(li.unit)}</td>
                       <td className="text-right py-2 px-2">{li.quantity}</td>
-                      <td className="text-right py-2 px-2">{li.unit}</td>
-                      <td className="text-right py-2 px-2">{formatCurrency(li.unitRate, data.currency)}</td>
-                      <td className="text-right py-2 pl-2 font-medium">{formatCurrency(li.lineTotal, data.currency)}</td>
+                      <td className="text-right py-2 px-2">{formatCurrency(li.unitRate)}</td>
+                      <td className="text-right py-2 pl-2 font-medium">{formatCurrency(li.lineTotal)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -199,24 +216,37 @@ export function Step6Review() {
         <div className="px-6 py-4 border-t border-[var(--color-border)] bg-slate-50 space-y-1.5">
           <div className="flex justify-between text-sm">
             <span>Subtotal</span>
-            <span className="font-medium">{formatCurrency(subtotal, data.currency)}</span>
+            <span className="font-medium">{formatCurrency(subtotal)}</span>
           </div>
           {discount > 0 && (
             <div className="flex justify-between text-sm text-[var(--color-danger)]">
               <span>{data.discountLabel || 'Discount'}</span>
-              <span>-{formatCurrency(discount, data.currency)}</span>
+              <span>-{formatCurrency(discount)}</span>
             </div>
           )}
           {data.vatEnabled && (
             <div className="flex justify-between text-sm">
               <span>VAT ({data.vatRate}%)</span>
-              <span>{formatCurrency((subtotal - discount) * (data.vatRate / 100), data.currency)}</span>
+              <span>{formatCurrency((subtotal - discount) * (data.vatRate / 100))}</span>
             </div>
           )}
           <div className="flex justify-between text-base font-bold pt-2 border-t border-[var(--color-border)]">
-            <span>Total</span>
-            <span className="text-[var(--color-accent)]">{formatCurrency(total, data.currency)}</span>
+            <span>Total (PHP)</span>
+            <span className="text-[var(--color-accent)]">{formatCurrency(total)}</span>
           </div>
+          {convertedTotal != null && exRate != null && (
+            <div className="flex justify-between items-baseline text-sm font-semibold">
+              <span>Converted Total ({data.currency})</span>
+              <span className="text-right">
+                <span className="text-[var(--color-accent)] tabular-nums">
+                  {formatCurrency(convertedTotal, data.currency)}
+                </span>
+                <span className="block text-xs font-normal text-[var(--color-muted)] tabular-nums">
+                  ÷ ₱{exRate.toLocaleString('en-PH')} per 1 {data.currency}
+                </span>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Payment Terms */}

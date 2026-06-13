@@ -4,7 +4,6 @@ import { useWizard } from '../WizardContext'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -23,11 +22,24 @@ const CURRENCIES = [
   { value: 'PHP', label: 'PHP (₱)' },
   { value: 'USD', label: 'USD ($)' },
   { value: 'EUR', label: 'EUR (€)' },
+  { value: 'GBP', label: 'GBP (£)' },
+  { value: 'JPY', label: 'JPY (¥)' },
+  { value: 'AUD', label: 'AUD (A$)' },
+  { value: 'CAD', label: 'CAD (C$)' },
+  { value: 'SGD', label: 'SGD (S$)' },
+  { value: 'HKD', label: 'HKD (HK$)' },
+  { value: 'CNY', label: 'CNY (¥)' },
+  { value: 'AED', label: 'AED (د.إ)' },
 ]
 
 export function Step3Pricing() {
   const { form } = useWizard()
-  const { register, setValue, watch } = form
+  const {
+    register,
+    setValue,
+    watch,
+    formState: { errors },
+  } = form
 
   const lineItems = watch('lineItems') ?? []
   const discountType = watch('discountType')
@@ -36,12 +48,20 @@ export function Step3Pricing() {
   const vatEnabled = watch('vatEnabled')
   const vatRate = watch('vatRate')
   const currency = watch('currency')
+  const exchangeRate = watch('exchangeRate')
 
   const subtotal = computeSubtotal(lineItems)
   const discount = computeDiscount(subtotal, discountType, discountValue)
   const afterDiscount = subtotal - discount
   const vatAmount = vatEnabled ? afterDiscount * (vatRate / 100) : 0
   const total = computeTotal({ lineItems, discountType, discountValue, vatEnabled, vatRate })
+
+  // Items are always costed in ₱. For non-PHP proposals the client-facing
+  // Converted Grand Total = ₱ total ÷ rate (rate is ₱ per 1 unit of currency).
+  const convertedTotal =
+    currency !== 'PHP' && exchangeRate != null && exchangeRate > 0
+      ? total / exchangeRate
+      : null
 
   const optionalTotal = lineItems
     .filter((li) => li.isOptional)
@@ -63,14 +83,14 @@ export function Step3Pricing() {
         {/* Subtotal */}
         <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
           <span className="text-sm font-medium">Subtotal</span>
-          <span className="text-sm font-semibold">{formatCurrency(subtotal, currency)}</span>
+          <span className="text-sm font-semibold">{formatCurrency(subtotal)}</span>
         </div>
 
         {/* Optional items note */}
         {optionalTotal > 0 && (
           <div className="flex items-center justify-between px-4 py-2 text-xs text-[var(--color-muted)] border-t border-[var(--color-border)]">
             <span>Optional add-ons (not in subtotal)</span>
-            <span>{formatCurrency(optionalTotal, currency)}</span>
+            <span>{formatCurrency(optionalTotal)}</span>
           </div>
         )}
 
@@ -136,7 +156,7 @@ export function Step3Pricing() {
                 {discountType === 'percentage' ? ` (${discountValue}%)` : ''}
               </span>
               <span className="text-[var(--color-danger)] font-medium">
-                -{formatCurrency(discount, currency)}
+                -{formatCurrency(discount)}
               </span>
             </div>
           )}
@@ -146,7 +166,7 @@ export function Step3Pricing() {
         {discount > 0 && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-[var(--color-border)] text-sm">
             <span className="text-[var(--color-muted)]">After Discount</span>
-            <span className="font-medium">{formatCurrency(afterDiscount, currency)}</span>
+            <span className="font-medium">{formatCurrency(afterDiscount)}</span>
           </div>
         )}
 
@@ -182,53 +202,105 @@ export function Step3Pricing() {
                 VAT ({vatRate}%)
               </span>
               <span className="font-medium">
-                +{formatCurrency(vatAmount, currency)}
+                +{formatCurrency(vatAmount)}
               </span>
             </div>
           )}
         </div>
 
-        {/* Grand Total */}
+        {/* Grand Total — items are always costed in ₱ */}
         <div className="flex items-center justify-between px-4 py-4 border-t-2 border-[var(--color-primary)] bg-slate-50">
           <span className="text-base font-bold text-[var(--color-primary)]">
-            Grand Total
+            Grand Total (PHP)
           </span>
           <span className="text-xl font-bold text-[var(--color-accent)]">
-            {formatCurrency(total, currency)}
+            {formatCurrency(total)}
           </span>
         </div>
+
+        {/* Converted Grand Total — client-facing figure for non-PHP proposals */}
+        {currency !== 'PHP' && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-accent-light)]">
+            <div>
+              <span className="text-sm font-bold text-[var(--color-primary)]">
+                Converted Grand Total ({currency})
+              </span>
+              <p className="text-xs text-[var(--color-muted)]">
+                Shown to the client on the proposal PDF.
+              </p>
+            </div>
+            {convertedTotal != null ? (
+              <div className="text-right">
+                <span className="text-lg font-bold text-[var(--color-accent)] tabular-nums">
+                  {formatCurrency(convertedTotal, currency)}
+                </span>
+                <p className="text-xs text-[var(--color-muted)] tabular-nums">
+                  {formatCurrency(total)} ÷ ₱{exchangeRate!.toLocaleString('en-PH')} per 1{' '}
+                  {currency}
+                </p>
+              </div>
+            ) : (
+              <span className="text-sm font-medium text-amber-700">
+                Set an exchange rate below
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Currency selector */}
-      <div className="space-y-1.5">
-        <Label htmlFor="currency">Currency</Label>
-        <Select
-          value={currency}
-          onValueChange={(val) => setValue('currency', val)}
-        >
-          <SelectTrigger id="currency" className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CURRENCIES.map((c) => (
-              <SelectItem key={c.value} value={c.value}>
-                {c.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Currency + exchange rate */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="currency">Client-facing Currency</Label>
+          <p className="text-xs text-[var(--color-muted)]">
+            The currency presented to the client on the proposal PDF. Items are always costed
+            in ₱.
+          </p>
+          <Select
+            value={currency}
+            onValueChange={(val) => {
+              setValue('currency', val)
+              if (val === 'PHP') setValue('exchangeRate', null)
+            }}
+          >
+            <SelectTrigger id="currency" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {currency !== 'PHP' && (
+          <div className="space-y-1.5">
+            <Label htmlFor="exchangeRate">Exchange Rate (₱ per 1 {currency})</Label>
+            <Input
+              id="exchangeRate"
+              type="number"
+              step="any"
+              min="0"
+              placeholder={`₱ per 1 ${currency}`}
+              {...register('exchangeRate', {
+                setValueAs: (v) => (v === '' || v === null ? null : Number(v)),
+              })}
+            />
+            <p className="text-xs text-[var(--color-muted)]">
+              Converts the ₱ Grand Total into {currency} for the client-facing proposal.
+            </p>
+            {errors.exchangeRate && (
+              <p className="text-xs text-[var(--color-danger)]">
+                {errors.exchangeRate.message}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Pricing Notes */}
-      <div className="space-y-1.5">
-        <Label htmlFor="pricingNotes">Pricing Notes</Label>
-        <Textarea
-          id="pricingNotes"
-          placeholder="Any additional notes about pricing (visible to client)..."
-          {...register('pricingNotes')}
-          rows={3}
-        />
-      </div>
     </div>
   )
 }

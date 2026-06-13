@@ -5,7 +5,7 @@ import { getSession } from '../auth'
 import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { logAudit } from '../audit'
-import { serviceSchema, type ServiceInput } from '../validations/catalog'
+import { serviceSchema, type ServiceInput, type ExpenseItem } from '../validations/catalog'
 
 // ─── Serialisable types ───────────────────────────────────────────────────────
 
@@ -16,9 +16,9 @@ export type ServiceListItem = {
   description: string
   defaultScope: string
   unit: string
+  engagementTerm: number
+  estimatedExpenses: ExpenseItem[]
   defaultRate: string
-  minRate: string | null
-  maxRate: string | null
   isActive: boolean
   internalNotes: string | null
   paymentTplId: string | null
@@ -133,9 +133,9 @@ export async function createService(
       description: data.description,
       defaultScope: data.defaultScope,
       unit: data.unit,
+      engagementTerm: data.engagementTerm,
+      estimatedExpenses: data.estimatedExpenses ?? [],
       defaultRate: data.defaultRate,
-      minRate: data.minRate ?? null,
-      maxRate: data.maxRate ?? null,
       paymentTplId: data.paymentTplId || null,
       tcTemplateId: data.tcTemplateId || null,
       internalNotes: data.internalNotes || null,
@@ -176,9 +176,9 @@ export async function updateService(
       description: data.description,
       defaultScope: data.defaultScope,
       unit: data.unit,
+      engagementTerm: data.engagementTerm,
+      estimatedExpenses: data.estimatedExpenses ?? [],
       defaultRate: data.defaultRate,
-      minRate: data.minRate ?? null,
-      maxRate: data.maxRate ?? null,
       paymentTplId: data.paymentTplId || null,
       tcTemplateId: data.tcTemplateId || null,
       internalNotes: data.internalNotes || null,
@@ -325,9 +325,9 @@ function toListItem(s: {
   description: string
   defaultScope: string
   unit: string
+  engagementTerm: number
+  estimatedExpenses: unknown
   defaultRate: unknown
-  minRate: unknown
-  maxRate: unknown
   isActive: boolean
   internalNotes: string | null
   paymentTplId: string | null
@@ -344,9 +344,9 @@ function toListItem(s: {
     description: s.description,
     defaultScope: s.defaultScope,
     unit: s.unit,
+    engagementTerm: s.engagementTerm,
+    estimatedExpenses: parseExpenses(s.estimatedExpenses),
     defaultRate: String(s.defaultRate),
-    minRate: s.minRate != null ? String(s.minRate) : null,
-    maxRate: s.maxRate != null ? String(s.maxRate) : null,
     isActive: s.isActive,
     internalNotes: s.internalNotes,
     paymentTplId: s.paymentTplId,
@@ -358,15 +358,26 @@ function toListItem(s: {
   }
 }
 
+function parseExpenses(raw: unknown): ExpenseItem[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((e) => {
+    if (e && typeof e === 'object' && 'label' in e && 'amount' in e) {
+      const item = e as { label: unknown; amount: unknown }
+      return [{ label: String(item.label), amount: Number(item.amount) }]
+    }
+    return []
+  })
+}
+
 function serializeForDiff(s: Record<string, unknown>) {
   return {
     name: s.name,
     category: s.category,
     description: s.description,
     unit: s.unit,
+    engagementTerm: s.engagementTerm != null ? String(s.engagementTerm) : null,
+    estimatedExpenses: JSON.stringify(parseExpenses(s.estimatedExpenses)),
     defaultRate: String(s.defaultRate),
-    minRate: s.minRate != null ? String(s.minRate) : null,
-    maxRate: s.maxRate != null ? String(s.maxRate) : null,
     paymentTplId: s.paymentTplId,
     tcTemplateId: s.tcTemplateId,
     internalNotes: s.internalNotes,
