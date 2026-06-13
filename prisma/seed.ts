@@ -109,6 +109,18 @@ async function main() {
     },
   })
 
+  const paymentTemplate3 = await prisma.paymentTemplate.upsert({
+    where: { id: 'seed-payment-3' },
+    update: {},
+    create: {
+      id: 'seed-payment-3',
+      name: 'Retainer — 20% Downpayment',
+      bodyRichText:
+        '<p>A 20% downpayment of the total contract value is due upon signing, collected together with the first month of the retainer. The remaining balance is billed monthly across the engagement. Net 15 payment terms.</p>',
+      isDefault: false,
+    },
+  })
+
   // ─── T&C Template ────────────────────────────────────────────────────────────
 
   const tcTemplate = await prisma.tCTemplate.upsert({
@@ -225,6 +237,28 @@ async function main() {
       defaultRate: 45000,
       minRate: 30000,
       maxRate: 80000,
+      tcTemplateId: tcTemplate.id,
+      paymentTplId: paymentTemplate.id,
+    },
+  })
+
+  // Note: seed-service-1 was repurposed in the live DB into a "Social Media" service.
+  // This is the canonical Brand Strategy service used by the showcase proposal.
+  const brandStrategySvc = await prisma.service.upsert({
+    where: { id: 'seed-service-6' },
+    update: {},
+    create: {
+      id: 'seed-service-6',
+      name: 'Brand Strategy',
+      category: 'Strategy',
+      description:
+        'Comprehensive brand strategy development including positioning, messaging, and visual identity direction.',
+      defaultScope:
+        'Discovery workshop, competitive analysis, brand positioning document, messaging framework, and presentation.',
+      unit: 'one-time',
+      defaultRate: 200000,
+      minRate: 150000,
+      maxRate: 300000,
       tcTemplateId: tcTemplate.id,
       paymentTplId: paymentTemplate.id,
     },
@@ -627,14 +661,228 @@ async function main() {
     },
   })
 
+  // 6. APPROVED — FreshBite (one-time setup fee + monthly retainer)
+  // Demonstrates the mixed-billing payment schedule: the ₱300,000 one-time setup is
+  // billed upfront in Month 1, while the ₱600,000 retainer is spread evenly across
+  // the 6-month engagement (₱100,000/mo). Uses the "Monthly Retainer" payment
+  // template so the terms read "Billed monthly…".
+  const retainerProposal = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0004' },
+    update: {},
+    create: {
+      number: 'PROP-2026-03-0004',
+      clientId: freshbite.id,
+      clientName: 'FreshBite Food Group',
+      contactName: 'Ana Villanueva',
+      contactTitle: 'Brand Manager',
+      projectTitle: 'Brand Launch & Always-On Social',
+      date: new Date('2026-03-15'),
+      validUntil: new Date('2026-04-14'),
+      status: ProposalStatus.APPROVED,
+      createdById: juan.id,
+      assignedApproverId: manager.id,
+      subtotal: 900000,
+      total: 900000,
+      introText:
+        '<p>A one-time brand foundation sprint followed by a six-month always-on social media retainer.</p>',
+      paymentTemplateId: paymentTemplate2.id, // "Monthly Retainer"
+      tcTemplateId: tcTemplate.id,
+      lineItems: {
+        create: [
+          {
+            serviceId: brandStrategy.id,
+            description: 'Brand Strategy & Launch Setup',
+            scopeOfWork: brandStrategy.defaultScope,
+            unit: 'one-time',
+            quantity: 1,
+            unitRate: 300000,
+            lineTotal: 300000,
+            sortOrder: 1,
+          },
+          {
+            serviceId: socialMedia.id,
+            description: 'Always-On Social Media Retainer',
+            scopeOfWork: socialMedia.defaultScope,
+            unit: 'monthly',
+            quantity: 6,
+            unitRate: 100000,
+            lineTotal: 600000,
+            sortOrder: 2,
+          },
+        ],
+      },
+    },
+  })
+
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-3' },
+    update: {},
+    create: { id: 'seed-event-3', proposalId: retainerProposal.id, action: 'submitted', actorId: juan.id },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-4' },
+    update: {},
+    create: { id: 'seed-event-4', proposalId: retainerProposal.id, action: 'approved', actorId: manager.id, comment: 'Approved — retainer terms confirmed.' },
+  })
+
+  // 7. APPROVED — Acme Corp (pure retainer with 20% downpayment)
+  // Demonstrates the downpayment payment schedule: 20% of the ₱600,000 grand total
+  // (₱120,000) is collected upfront with Month 1, and the remaining ₱480,000 is
+  // billed evenly across the 6-month engagement (₱80,000/mo). Month 1 = ₱200,000.
+  const downpaymentProposal = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0005' },
+    update: {},
+    create: {
+      number: 'PROP-2026-03-0005',
+      clientId: acme.id,
+      clientName: 'Acme Corp',
+      contactName: 'Maria Santos',
+      contactTitle: 'CEO',
+      projectTitle: 'Always-On Social Retainer 2026',
+      date: new Date('2026-03-20'),
+      validUntil: new Date('2026-04-19'),
+      status: ProposalStatus.APPROVED,
+      createdById: juan.id,
+      assignedApproverId: manager.id,
+      subtotal: 600000,
+      total: 600000,
+      introText:
+        '<p>A six-month always-on social media retainer with a standard 20% downpayment.</p>',
+      paymentTemplateId: paymentTemplate3.id, // "Retainer — 20% Downpayment"
+      tcTemplateId: tcTemplate.id,
+      lineItems: {
+        create: [
+          {
+            serviceId: socialMedia.id,
+            description: 'Always-On Social Media Retainer',
+            scopeOfWork: socialMedia.defaultScope,
+            unit: 'monthly',
+            quantity: 6,
+            unitRate: 100000,
+            lineTotal: 600000,
+            sortOrder: 1,
+          },
+        ],
+      },
+    },
+  })
+
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-5' },
+    update: {},
+    create: { id: 'seed-event-5', proposalId: downpaymentProposal.id, action: 'submitted', actorId: juan.id },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-6' },
+    update: {},
+    create: { id: 'seed-event-6', proposalId: downpaymentProposal.id, action: 'approved', actorId: manager.id, comment: 'Approved — standard retainer downpayment.' },
+  })
+
+  // 8. APPROVED — BuildRight (full showcase: all 5 services, discount + VAT, T&C, 50/50 terms)
+  // A complete, presentation-ready proposal that exercises every seeded catalog item:
+  // all five services (four billed + one optional add-on), the Standard Agency T&C,
+  // the 50/50 payment template, an executive summary, plus a discount and VAT line.
+  const showcaseProposal = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0006' },
+    update: {},
+    create: {
+      number: 'PROP-2026-03-0006',
+      clientId: buildright.id,
+      clientName: 'BuildRight Construction',
+      contactName: 'Carlo Mendoza',
+      contactTitle: 'Owner',
+      projectTitle: 'Integrated Marketing Program 2026',
+      date: new Date('2026-03-25'),
+      validUntil: new Date('2026-04-24'),
+      status: ProposalStatus.APPROVED,
+      createdById: juan.id,
+      assignedApproverId: manager.id,
+      subtotal: 1200000,
+      discountType: 'percentage',
+      discountValue: 10,
+      vatRate: 12,
+      total: 1209600, // (1,200,000 − 10%) × 1.12 = 1,080,000 × 1.12
+      introText:
+        '<p>BuildRight Construction is entering a pivotal growth year, and this integrated program brings brand, content, video, and performance under one roof. The plan below pairs a foundational brand sprint and flagship video production with an always-on social retainer and a measurement-driven SEO baseline.</p><p>Our goal is a coherent market presence that compounds over the engagement — from launch through sustained monthly execution.</p>',
+      paymentTemplateId: paymentTemplate.id, // "50/50 Standard"
+      tcTemplateId: tcTemplate.id, // "Standard Agency T&C"
+      lineItems: {
+        create: [
+          {
+            serviceId: brandStrategySvc.id,
+            description: 'Brand Strategy & Positioning',
+            scopeOfWork: brandStrategySvc.defaultScope,
+            unit: 'one-time',
+            quantity: 1,
+            unitRate: 200000,
+            lineTotal: 200000,
+            sortOrder: 1,
+          },
+          {
+            serviceId: videoProduction.id,
+            description: 'Flagship TVC / Video Production',
+            scopeOfWork: videoProduction.defaultScope,
+            unit: 'one-time',
+            quantity: 1,
+            unitRate: 250000,
+            lineTotal: 250000,
+            sortOrder: 2,
+          },
+          {
+            serviceId: influencerMarketing.id,
+            description: 'Influencer Marketing Campaign',
+            scopeOfWork: influencerMarketing.defaultScope,
+            unit: 'one-time',
+            quantity: 1,
+            unitRate: 150000,
+            lineTotal: 150000,
+            sortOrder: 3,
+          },
+          {
+            serviceId: socialMedia.id,
+            description: 'Always-On Social Media Retainer',
+            scopeOfWork: socialMedia.defaultScope,
+            unit: 'monthly',
+            quantity: 6,
+            unitRate: 100000,
+            lineTotal: 600000,
+            sortOrder: 4,
+          },
+          {
+            serviceId: seoAudit.id,
+            description: 'SEO Audit & Strategy',
+            scopeOfWork: seoAudit.defaultScope,
+            unit: 'one-time',
+            quantity: 1,
+            unitRate: 80000,
+            lineTotal: 80000,
+            isOptional: true,
+            sortOrder: 5,
+          },
+        ],
+      },
+    },
+  })
+
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-7' },
+    update: {},
+    create: { id: 'seed-event-7', proposalId: showcaseProposal.id, action: 'submitted', actorId: juan.id },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-8' },
+    update: {},
+    create: { id: 'seed-event-8', proposalId: showcaseProposal.id, action: 'approved', actorId: manager.id, comment: 'Approved — full integrated program.' },
+  })
+
   console.log('Seed complete:', {
     users: [admin.email, manager.email, juan.email, coo.email, ceo.email],
     team: team.name,
     clients: ['Acme Corp', 'BuildRight Construction', 'FreshBite Food Group'],
     services: [brandStrategy.name, socialMedia.name, videoProduction.name, influencerMarketing.name, seoAudit.name],
-    paymentTemplates: [paymentTemplate.name, paymentTemplate2.name],
+    paymentTemplates: [paymentTemplate.name, paymentTemplate2.name, paymentTemplate3.name],
     tcTemplate: tcTemplate.name,
-    proposals: 5,
+    proposals: 8,
   })
 }
 
