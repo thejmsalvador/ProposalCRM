@@ -1156,6 +1156,13 @@ export function ProposalDetailClient({
                   .join(' · ')}
               </p>
             )}
+            {(proposal.businessAddress || proposal.tin) && (
+              <p className="text-xs text-slate-400">
+                {[proposal.businessAddress, proposal.tin && `TIN: ${proposal.tin}`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
             <div className="flex flex-wrap gap-4 text-xs text-slate-500 mt-1">
               {proposal.brandName && <span>Brand: {proposal.brandName}</span>}
               <span>Created by {proposal.createdBy.name}</span>

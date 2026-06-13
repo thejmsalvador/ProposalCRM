@@ -256,6 +256,26 @@ export function Step1ClientDetails() {
               {...register('contactPhone')}
             />
           </div>
+
+          {/* Business Address */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="businessAddress">Business Address</Label>
+            <Input
+              id="businessAddress"
+              placeholder="e.g. 123 Ayala Ave, Makati City, Metro Manila"
+              {...register('businessAddress')}
+            />
+          </div>
+
+          {/* TIN Number */}
+          <div className="space-y-1.5">
+            <Label htmlFor="tin">TIN Number</Label>
+            <Input
+              id="tin"
+              placeholder="e.g. 123-456-789-000"
+              {...register('tin')}
+            />
+          </div>
         </div>
       </section>
 

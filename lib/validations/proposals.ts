@@ -33,6 +33,8 @@ export const proposalDraftSchema = z.object({
   contactTitle: z.string().default(''),
   contactEmail: z.string().default(''),
   contactPhone: z.string().default(''),
+  businessAddress: z.string().default(''),
+  tin: z.string().default(''),
   // Step 1 — Project Details
   brandName: z.string().default(''),
   projectTitle: z.string().default(''),
@@ -85,6 +87,8 @@ export const proposalSubmitSchema = z
       .or(z.literal(''))
       .default(''),
     contactPhone: z.string().default(''),
+    businessAddress: z.string().default(''),
+    tin: z.string().default(''),
     brandName: z.string().default(''),
     projectTitle: z.string().min(3, 'Project title is required'),
     date: z.string().min(1, 'Proposal date is required'),

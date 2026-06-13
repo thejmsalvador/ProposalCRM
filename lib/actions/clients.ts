@@ -330,6 +330,8 @@ type ProposalContactInfo = {
   department: string
   email: string
   phone: string
+  /** Company-level business address — synced onto the Client record. */
+  businessAddress: string
 }
 
 export async function syncClientFromProposal(
@@ -350,12 +352,26 @@ export async function syncClientFromProposal(
       existing?.id ??
       (
         await prisma.client.create({
-          data: { companyName: companyName.trim(), createdById },
+          data: {
+            companyName: companyName.trim(),
+            createdById,
+            address: contact.businessAddress.trim() || null,
+          },
         })
       ).id
 
     await prisma.proposal
       .update({ where: { id: proposalId }, data: { clientId: resolvedClientId } })
+      .catch(() => {/* non-critical */})
+  }
+
+  // Keep the company's business address current when one is provided
+  if (resolvedClientId && contact.businessAddress.trim()) {
+    await prisma.client
+      .update({
+        where: { id: resolvedClientId },
+        data: { address: contact.businessAddress.trim() },
+      })
       .catch(() => {/* non-critical */})
   }
 

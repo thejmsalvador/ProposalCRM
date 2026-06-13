@@ -235,6 +235,8 @@ export async function saveProposalDraft(
     department: data.department || null,
     contactEmail: data.contactEmail || null,
     contactPhone: data.contactPhone || null,
+    businessAddress: data.businessAddress || null,
+    tin: data.tin || null,
     brandName: data.brandName || null,
     projectTitle: data.projectTitle || 'Untitled Project',
     date: data.date ? new Date(data.date) : new Date(),
@@ -361,6 +363,7 @@ export async function saveProposalDraft(
         department: data.department,
         email: data.contactEmail,
         phone: data.contactPhone,
+        businessAddress: data.businessAddress,
       },
       session.user.id,
     ).catch(() => {/* non-critical, don't block save */})
@@ -854,6 +857,8 @@ export type ProposalDetail = {
   department: string | null
   contactEmail: string | null
   contactPhone: string | null
+  businessAddress: string | null
+  tin: string | null
   brandName: string | null
   projectTitle: string
   date: string
@@ -963,6 +968,8 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     department: proposal.department,
     contactEmail: proposal.contactEmail,
     contactPhone: proposal.contactPhone,
+    businessAddress: proposal.businessAddress,
+    tin: proposal.tin,
     brandName: proposal.brandName,
     projectTitle: proposal.projectTitle,
     date: proposal.date.toISOString(),
@@ -1092,6 +1099,8 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       department: source.department,
       contactEmail: source.contactEmail,
       contactPhone: source.contactPhone,
+      businessAddress: source.businessAddress,
+      tin: source.tin,
       brandName: source.brandName,
       projectTitle: source.projectTitle,
       date: today,
@@ -1778,6 +1787,8 @@ export type ProposalFormDataExport = {
   department: string
   contactEmail: string
   contactPhone: string
+  businessAddress: string
+  tin: string
   brandName: string
   projectTitle: string
   date: string
@@ -1858,6 +1869,8 @@ export async function getProposalForEdit(
     department: proposal.department ?? '',
     contactEmail: proposal.contactEmail ?? '',
     contactPhone: proposal.contactPhone ?? '',
+    businessAddress: proposal.businessAddress ?? '',
+    tin: proposal.tin ?? '',
     brandName: proposal.brandName ?? '',
     projectTitle: proposal.projectTitle,
     date: proposal.date.toISOString().split('T')[0],
@@ -2044,6 +2057,8 @@ export async function restoreVersion(
       department: sp.department ? String(sp.department) : null,
       contactEmail: sp.contactEmail ? String(sp.contactEmail) : null,
       contactPhone: sp.contactPhone ? String(sp.contactPhone) : null,
+      businessAddress: sp.businessAddress ? String(sp.businessAddress) : null,
+      tin: sp.tin ? String(sp.tin) : null,
       brandName: sp.brandName ? String(sp.brandName) : null,
       projectTitle: String(sp.projectTitle ?? ''),
       date: new Date(String(sp.date)),

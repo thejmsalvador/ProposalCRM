@@ -39,6 +39,7 @@ export default async function NewProposalPage({ searchParams }: Props) {
         department: primary?.department ?? '',
         contactEmail: primary?.email ?? '',
         contactPhone: primary?.phone ?? '',
+        businessAddress: client.address ?? '',
       }
     }
   }

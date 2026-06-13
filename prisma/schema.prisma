@@ -161,6 +161,8 @@ model Proposal {
   department            String?
   contactEmail          String?
   contactPhone          String?
+  businessAddress       String?
+  tin                   String?
   brandName             String?
   projectTitle          String
   date                  DateTime

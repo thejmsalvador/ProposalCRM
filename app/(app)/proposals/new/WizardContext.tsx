@@ -122,6 +122,8 @@ export function WizardProvider({
       contactTitle: '',
       contactEmail: '',
       contactPhone: '',
+      businessAddress: '',
+      tin: '',
       brandName: '',
       projectTitle: '',
       date: today,
