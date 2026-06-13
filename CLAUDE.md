@@ -691,6 +691,8 @@ Make seed idempotent using `upsert`. Include:
 - 1 SUPER_ADMIN: `admin@agency.com` / `Admin1234!`
 - 1 SALES_EXEC: `juan@agency.com` / `Sales1234!`
 - 1 SALES_MANAGER: `manager@agency.com` / `Manager1234!`
+- 1 COO: `coo@agency.com` / `Coo1234!` (first-stage approver in the COO → CEO chain)
+- 1 CEO: `ceo@agency.com` / `Ceo1234!` (second-stage / final approver)
 - 1 Team: "Sales Team", manager = manager user
 - 3 Services across 2 categories (Strategy + Digital)
 - 2 PaymentTemplates (one set as default)
@@ -701,7 +703,7 @@ Make seed idempotent using `upsert`. Include:
 - ProposalVersion history on the APPROVED proposal (at least v1 and v2)
 
 Also create these users in **Supabase Auth Dashboard** manually (Auth is separate from Prisma):
-`admin@agency.com`, `juan@agency.com`, `manager@agency.com`
+`admin@agency.com`, `juan@agency.com`, `manager@agency.com`, `coo@agency.com`, `ceo@agency.com`
 
 ---
 

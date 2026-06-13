@@ -44,6 +44,30 @@ async function main() {
     },
   })
 
+  // First-stage approver in the COO → CEO chain
+  const coo = await prisma.user.upsert({
+    where: { email: 'coo@agency.com' },
+    update: { role: Role.COO, isActive: true },
+    create: {
+      name: 'Olivia Operations',
+      email: 'coo@agency.com',
+      role: Role.COO,
+      jobTitle: 'Chief Operating Officer',
+    },
+  })
+
+  // Second-stage (final) approver in the COO → CEO chain
+  const ceo = await prisma.user.upsert({
+    where: { email: 'ceo@agency.com' },
+    update: { role: Role.CEO, isActive: true },
+    create: {
+      name: 'Ethan Executive',
+      email: 'ceo@agency.com',
+      role: Role.CEO,
+      jobTitle: 'Chief Executive Officer',
+    },
+  })
+
   // ─── Team ────────────────────────────────────────────────────────────────────
 
   const team = await prisma.team.upsert({
@@ -604,7 +628,7 @@ async function main() {
   })
 
   console.log('Seed complete:', {
-    users: [admin.email, manager.email, juan.email],
+    users: [admin.email, manager.email, juan.email, coo.email, ceo.email],
     team: team.name,
     clients: ['Acme Corp', 'BuildRight Construction', 'FreshBite Food Group'],
     services: [brandStrategy.name, socialMedia.name, videoProduction.name, influencerMarketing.name, seoAudit.name],
