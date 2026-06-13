@@ -48,7 +48,7 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
-/** Strip HTML tags and decode the handful of entities our rich-text editor emits. */
+/** Strip HTML tags and decode the entities our rich-text editor emits. */
 export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, ' ')
@@ -56,6 +56,10 @@ export function stripHtml(html: string): string {
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
+    .replace(/&mdash;|&#8212;/gi, '—')
+    .replace(/&ndash;|&#8211;/gi, '–')
+    .replace(/&rsquo;|&#8217;/gi, '’')
+    .replace(/&[a-z0-9#]+;/gi, ' ') // drop any remaining entities
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -98,8 +102,9 @@ type Milestone = { percent: number; label: string | null }
  */
 function parsePercentMilestones(text: string): Milestone[] | null {
   // Form 1: explicit percent signs, each optionally trailed by a label phrase,
-  //   e.g. "50% upon signing, 50% upon final delivery".
-  const pctRe = /(\d{1,3}(?:\.\d+)?)\s*%\s*([^.,;%\d]*)/g
+  //   e.g. "50% upon signing, 50% upon final delivery" or "50% Downpayment — due …".
+  //   The label stops at sentence punctuation, dashes, colons, the next percent, or a digit.
+  const pctRe = /(\d{1,3}(?:\.\d+)?)\s*%\s*([^.,;:%\d–—-]*)/g
   const withSigns: Milestone[] = []
   let m: RegExpExecArray | null
   while ((m = pctRe.exec(text)) !== null) {
