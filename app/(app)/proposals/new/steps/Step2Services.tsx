@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ChevronUp,
   StickyNote,
+  Wallet,
+  X,
 } from 'lucide-react'
 import { useWizard } from '../WizardContext'
 import { Input } from '@/components/ui/input'
@@ -81,6 +83,8 @@ export function Step2Services() {
         lineTotal: Math.round(cost * term * 100) / 100,
         isOptional: false,
         internalNote: '',
+        // Seed internal project expenses from the catalog service (editable here)
+        expenses: service.estimatedExpenses.map((e) => ({ ...e })),
         sortOrder: fields.length,
         serviceName: service.name,
         serviceMinRate: service.minRate ? parseFloat(service.minRate) : null,
@@ -105,6 +109,7 @@ export function Step2Services() {
       lineTotal: 0,
       isOptional: false,
       internalNote: '',
+      expenses: [],
       sortOrder: fields.length,
       serviceName: '',
       serviceMinRate: null,
@@ -300,9 +305,15 @@ function SortableLineItemCard({
     transition,
   }
 
-  const { register, setValue, watch } = form
+  const { register, setValue, watch, control } = form
   const [expanded, setExpanded] = useState(true)
   const [showInternalNote, setShowInternalNote] = useState(false)
+
+  const {
+    fields: expenseFields,
+    append: appendExpense,
+    remove: removeExpense,
+  } = useFieldArray({ control, name: `lineItems.${index}.expenses` })
 
   const item = watch(`lineItems.${index}`)
   const isCustom = !item?.serviceId
@@ -312,6 +323,11 @@ function SortableLineItemCard({
   const lineTotal = quantity * unitRate
   const isBelowFloor =
     item?.serviceMinRate != null && unitRate < item.serviceMinRate
+
+  const expensesTotal = (item?.expenses ?? []).reduce(
+    (sum, e) => sum + (Number.isFinite(e?.amount) ? e.amount : 0),
+    0,
+  )
 
   // Auto-compute lineTotal
   const updateLineTotal = useCallback(
@@ -519,6 +535,92 @@ function SortableLineItemCard({
                 className="bg-slate-50 font-medium"
               />
               <p className="text-xs text-[var(--color-muted)]">Item Cost × Engagement Term</p>
+            </div>
+          </div>
+
+          {/* Project Expenses (internal only) */}
+          <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-slate-50/60 p-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <Wallet size={15} className="mt-0.5 text-[var(--color-muted)] shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-[var(--color-primary)]">
+                  Project Expenses
+                </p>
+                <p className="text-xs text-[var(--color-muted)]">
+                  Internal guide only — never shown to the client or on the PDF. Used to
+                  track project cost and profitability.
+                </p>
+              </div>
+            </div>
+
+            {expenseFields.length > 0 && (
+              <div className="space-y-2">
+                {expenseFields.map((expenseField, i) => (
+                  <div key={expenseField.id} className="flex gap-2 items-start">
+                    <div className="flex-1 space-y-1">
+                      <Label
+                        htmlFor={`expense-label-${index}-${i}`}
+                        className="sr-only"
+                      >
+                        Expense {i + 1} description
+                      </Label>
+                      <Input
+                        id={`expense-label-${index}-${i}`}
+                        placeholder="e.g. Media buy, talent fee…"
+                        {...register(`lineItems.${index}.expenses.${i}.label`)}
+                      />
+                    </div>
+                    <div className="w-32 sm:w-36 space-y-1">
+                      <Label
+                        htmlFor={`expense-amount-${index}-${i}`}
+                        className="sr-only"
+                      >
+                        Expense {i + 1} amount
+                      </Label>
+                      <Input
+                        id={`expense-amount-${index}-${i}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        {...register(`lineItems.${index}.expenses.${i}.amount`, {
+                          setValueAs: (v) =>
+                            v === '' || v == null ? 0 : Number(v),
+                        })}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeExpense(i)}
+                      className="min-h-[40px] min-w-[40px] flex items-center justify-center text-[var(--color-muted)] hover:text-[var(--color-danger)] transition-colors shrink-0"
+                      aria-label={`Remove expense ${i + 1}`}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 min-h-[36px] bg-white"
+                onClick={() => appendExpense({ label: '', amount: 0 })}
+              >
+                <Plus size={14} />
+                Add expense
+              </Button>
+              {expensesTotal > 0 && (
+                <p className="text-xs text-[var(--color-muted)] tabular-nums">
+                  Total expenses:{' '}
+                  <span className="font-semibold text-[var(--color-primary)]">
+                    {formatCurrency(expensesTotal)}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
 

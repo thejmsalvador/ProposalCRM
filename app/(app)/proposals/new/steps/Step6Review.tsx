@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X, Loader2, AlertTriangle } from 'lucide-react'
+import { Check, X, Loader2, AlertTriangle, Wallet } from 'lucide-react'
 import { useWizard } from '../WizardContext'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -78,6 +78,12 @@ export function Step6Review() {
   const hasBelowFloor = data.lineItems.some(
     (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
   )
+
+  // Internal project expenses (sum per line item + overall total)
+  const lineExpenseTotal = (li: (typeof data.lineItems)[number]) =>
+    (li.expenses ?? []).reduce((s, e) => s + (Number.isFinite(e.amount) ? e.amount : 0), 0)
+  const itemsWithExpenses = data.lineItems.filter((li) => lineExpenseTotal(li) > 0)
+  const expensesTotal = data.lineItems.reduce((s, li) => s + lineExpenseTotal(li), 0)
 
   // Lookup references
   const paymentTemplate = paymentTemplates.find((p) => p.id === data.paymentTemplateId)
@@ -293,6 +299,52 @@ export function Step6Review() {
           </div>
         )}
       </div>
+
+      {/* Internal project expenses summary (never shown to client) */}
+      {expensesTotal > 0 && (
+        <div className="rounded-[var(--radius-md)] border border-slate-200 bg-slate-50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Wallet size={15} className="text-[var(--color-muted)]" />
+            <h4 className="text-sm font-semibold text-[var(--color-primary)]">
+              Project Expenses
+            </h4>
+            <Badge variant="secondary" className="text-xs">
+              Internal only
+            </Badge>
+          </div>
+          <p className="text-xs text-[var(--color-muted)]">
+            Declared cost estimates — not shown to the client or on the PDF.
+          </p>
+          <div className="space-y-1.5">
+            {itemsWithExpenses.map((li, idx) => (
+              <div key={idx} className="flex justify-between text-sm tabular-nums">
+                <span className="text-[var(--color-muted)]">
+                  {li.serviceName || li.customName || li.description}
+                </span>
+                <span>{formatCurrency(lineExpenseTotal(li))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between text-sm font-semibold pt-2 border-t border-slate-200 tabular-nums">
+            <span>Total project expenses</span>
+            <span>{formatCurrency(expensesTotal)}</span>
+          </div>
+          <div className="flex justify-between text-sm tabular-nums">
+            <span className="text-[var(--color-muted)]">
+              Est. gross margin (subtotal − expenses)
+            </span>
+            <span
+              className={
+                subtotal - expensesTotal >= 0
+                  ? 'text-[var(--color-success)] font-medium'
+                  : 'text-[var(--color-danger)] font-medium'
+              }
+            >
+              {formatCurrency(subtotal - expensesTotal)}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Validation checklist */}
       <div className="space-y-3">

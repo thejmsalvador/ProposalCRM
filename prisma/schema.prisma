@@ -222,6 +222,7 @@ model ProposalLineItem {
   lineTotal    Decimal  @db.Decimal(12, 2)
   isOptional   Boolean  @default(false)
   internalNote String?
+  expenses     Json?
   sortOrder    Int
 
   proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)

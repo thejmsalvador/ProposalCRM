@@ -20,7 +20,9 @@ import {
   proposalSubmitSchema,
   computeSubtotal,
   computeTotal,
+  cleanLineItemExpenses,
   type ProposalFormData,
+  type LineItemExpense,
 } from '../validations/proposals'
 
 // ─── Serialisable types ──────────────────────────────────────────────────────
@@ -42,6 +44,21 @@ export type ServiceOption = {
   defaultRate: string
   minRate: string | null
   maxRate: string | null
+  // Internal estimated project expenses — seeds the line item's expenses when
+  // the service is added to a proposal. Never client-facing.
+  estimatedExpenses: LineItemExpense[]
+}
+
+/** Parse a stored Json expenses value into a typed {label, amount}[] array. */
+function parseLineItemExpenses(raw: unknown): LineItemExpense[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((e) => {
+    if (e && typeof e === 'object' && 'label' in e && 'amount' in e) {
+      const item = e as { label: unknown; amount: unknown }
+      return [{ label: String(item.label), amount: Number(item.amount) || 0 }]
+    }
+    return []
+  })
 }
 
 export type PaymentTemplateOption = {
@@ -104,6 +121,7 @@ export async function getWizardData(): Promise<{
           defaultRate: true,
           minRate: true,
           maxRate: true,
+          estimatedExpenses: true,
         },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
       }),
@@ -137,6 +155,7 @@ export async function getWizardData(): Promise<{
       defaultRate: String(s.defaultRate),
       minRate: s.minRate != null ? String(s.minRate) : null,
       maxRate: s.maxRate != null ? String(s.maxRate) : null,
+      estimatedExpenses: parseLineItemExpenses(s.estimatedExpenses),
     })),
     paymentTemplates: paymentTemplates.map((p) => ({
       id: p.id,
@@ -305,6 +324,7 @@ export async function saveProposalDraft(
           lineTotal: li.lineTotal,
           isOptional: li.isOptional,
           internalNote: li.internalNote || null,
+          expenses: cleanLineItemExpenses(li.expenses) as Prisma.InputJsonValue,
           sortOrder: idx,
         })),
       })
@@ -339,6 +359,7 @@ export async function saveProposalDraft(
           lineTotal: li.lineTotal,
           isOptional: li.isOptional,
           internalNote: li.internalNote || null,
+          expenses: cleanLineItemExpenses(li.expenses) as Prisma.InputJsonValue,
           sortOrder: idx,
         })),
       })
@@ -899,6 +920,7 @@ export type ProposalDetail = {
     lineTotal: string
     isOptional: boolean
     internalNote: string | null
+    expenses: LineItemExpense[]
     sortOrder: number
   }[]
   approvalEvents: {
@@ -1014,6 +1036,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       lineTotal: String(li.lineTotal),
       isOptional: li.isOptional,
       internalNote: li.internalNote,
+      expenses: parseLineItemExpenses(li.expenses),
       sortOrder: li.sortOrder,
     })),
     approvalEvents: proposal.approvalEvents.map((e) => ({
@@ -1140,6 +1163,7 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
         lineTotal: li.lineTotal,
         isOptional: li.isOptional,
         internalNote: li.internalNote,
+        expenses: parseLineItemExpenses(li.expenses) as Prisma.InputJsonValue,
         sortOrder: li.sortOrder,
       })),
     })
@@ -1807,6 +1831,7 @@ export type ProposalFormDataExport = {
     lineTotal: number
     isOptional: boolean
     internalNote: string
+    expenses: LineItemExpense[]
     sortOrder: number
     serviceName: string
     serviceMinRate: number | null
@@ -1889,6 +1914,7 @@ export async function getProposalForEdit(
       lineTotal: Number(li.lineTotal),
       isOptional: li.isOptional,
       internalNote: li.internalNote ?? '',
+      expenses: parseLineItemExpenses(li.expenses),
       sortOrder: li.sortOrder,
       serviceName: li.service?.name ?? '',
       serviceMinRate: li.service?.minRate != null ? Number(li.service.minRate) : null,
@@ -2098,6 +2124,7 @@ export async function restoreVersion(
       lineTotal: new Prisma.Decimal(String(li.lineTotal ?? '0')),
       isOptional: Boolean(li.isOptional),
       internalNote: li.internalNote ? String(li.internalNote) : null,
+      expenses: parseLineItemExpenses(li.expenses) as Prisma.InputJsonValue,
       sortOrder: Number(li.sortOrder ?? 0),
     })),
   })

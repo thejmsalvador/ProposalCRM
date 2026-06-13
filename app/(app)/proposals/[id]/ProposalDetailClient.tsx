@@ -18,6 +18,7 @@ import {
   RotateCcw,
   GitBranch,
   Bookmark,
+  Wallet,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -752,6 +753,35 @@ export function ProposalDetailClient({
                       {li.scopeOfWork && (
                         <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">
                           {li.scopeOfWork}
+                        </div>
+                      )}
+                      {li.expenses.length > 0 && (
+                        <div className="mt-1.5 rounded-md bg-slate-50 border border-slate-200 px-2 py-1.5">
+                          <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            <Wallet className="h-3 w-3" />
+                            Project Expenses · Internal
+                          </div>
+                          <ul className="mt-1 space-y-0.5">
+                            {li.expenses.map((e, ei) => (
+                              <li
+                                key={ei}
+                                className="flex justify-between gap-3 text-xs text-slate-600 tabular-nums"
+                              >
+                                <span>{e.label || 'Expense'}</span>
+                                <span>{formatCurrency(e.amount)}</span>
+                              </li>
+                            ))}
+                            {li.expenses.length > 1 && (
+                              <li className="flex justify-between gap-3 text-xs font-medium text-slate-700 tabular-nums border-t border-slate-200 pt-0.5 mt-0.5">
+                                <span>Total</span>
+                                <span>
+                                  {formatCurrency(
+                                    li.expenses.reduce((s, e) => s + e.amount, 0),
+                                  )}
+                                </span>
+                              </li>
+                            )}
+                          </ul>
                         </div>
                       )}
                     </td>
