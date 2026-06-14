@@ -80,8 +80,11 @@ export async function POST(req: NextRequest) {
       await page.emulateMediaType('print')
       const buf = await page.pdf({
         format: 'A4',
-        margin: { top: '15mm', right: '15mm', bottom: '20mm', left: '15mm' },
+        // Margins are handled in CSS (each .sheet is a full A4 page) so the
+        // full-bleed cover and per-page footers reach the paper edge.
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
         printBackground: true,
+        preferCSSPageSize: true,
       })
       await browser.close()
       pdfBuffer = Buffer.from(buf)
@@ -97,8 +100,10 @@ export async function POST(req: NextRequest) {
       await page.emulateMediaType('print')
       const buf = await page.pdf({
         format: 'A4',
-        margin: { top: '15mm', right: '15mm', bottom: '20mm', left: '15mm' },
+        // Margins handled in CSS — see note above.
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
         printBackground: true,
+        preferCSSPageSize: true,
       })
       await browser.close()
       pdfBuffer = Buffer.from(buf)

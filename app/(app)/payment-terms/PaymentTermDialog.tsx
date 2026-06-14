@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useTransition } from 'react'
-import { useForm, Controller, type Resolver } from 'react-hook-form'
+import { useEffect, useMemo, useTransition } from 'react'
+import { useForm, Controller, useWatch, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Archive, RotateCcw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
@@ -25,11 +25,24 @@ import {
   restorePaymentTerm,
 } from '@/lib/actions/payment-terms'
 import type { PaymentTermListItem } from '@/lib/actions/payment-terms'
+import { computePaymentSchedule, stripHtml } from '@/lib/payment-schedule'
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   template: PaymentTermListItem | null
+}
+
+// Sample figures used purely to illustrate how a template breaks down in the editor.
+const PREVIEW_TOTAL = 1_000_000
+const PREVIEW_MONTHS = 12
+
+function peso(n: number): string {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    maximumFractionDigits: 2,
+  }).format(n)
 }
 
 export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
@@ -58,6 +71,19 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
       )
     }
   }, [open, template, reset])
+
+  // Live schedule preview: recomputed from the terms text as the author edits it,
+  // against a sample total so the resulting breakdown shape is visible while writing.
+  const bodyValue = useWatch({ control, name: 'bodyRichText' })
+  const previewSchedule = useMemo(
+    () =>
+      computePaymentSchedule({
+        paymentText: stripHtml(bodyValue || ''),
+        total: PREVIEW_TOTAL,
+        engagementMonths: PREVIEW_MONTHS,
+      }),
+    [bodyValue],
+  )
 
   async function onSubmit(data: PaymentTermInput) {
     const result = isEdit
@@ -141,6 +167,53 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
             {errors.bodyRichText && (
               <p className="text-xs text-[var(--color-danger)]">{errors.bodyRichText.message}</p>
             )}
+          </div>
+
+          {/* Schedule preview */}
+          <div className="space-y-1.5">
+            <Label>Schedule preview</Label>
+            <p className="text-xs text-[var(--color-muted)]">
+              How this template breaks down a sample {peso(PREVIEW_TOTAL)} total
+              {previewSchedule?.kind === 'monthly' ? ` over a ${PREVIEW_MONTHS}-month engagement` : ''}.
+              Proposals compute this from their own grand total.
+            </p>
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+              {previewSchedule ? (
+                <div className="space-y-1.5">
+                  {previewSchedule.installments.map((inst, i) => (
+                    <div key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="text-[var(--color-primary)]">
+                        {inst.label}
+                        {inst.percent != null && (
+                          <span className="text-[var(--color-muted)]"> · {inst.percent}%</span>
+                        )}
+                        {inst.downpaymentAmount ? (
+                          <span className="text-[var(--color-muted)]">
+                            {' '}
+                            (incl. {inst.downpaymentPercent}% downpayment)
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="font-medium tabular-nums whitespace-nowrap">
+                        {peso(inst.amount)}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex items-baseline justify-between gap-3 border-t border-[var(--color-border)] pt-1.5 text-sm font-semibold text-[var(--color-primary)]">
+                    <span>Total</span>
+                    <span className="tabular-nums whitespace-nowrap">{peso(previewSchedule.total)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--color-muted)]">
+                  No automatic schedule detected — the terms will display as written. Mention a
+                  percentage split (e.g. <span className="font-medium">50/50</span> or{' '}
+                  <span className="font-medium">50-30-20</span>),{' '}
+                  <span className="font-medium">monthly</span> billing, or a{' '}
+                  <span className="font-medium">20% downpayment</span> to generate one.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Set as default */}

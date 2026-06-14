@@ -132,6 +132,40 @@ async function main() {
     },
   })
 
+  const paymentTemplate3 = await prisma.paymentTemplate.upsert({
+    where: { id: 'seed-payment-3' },
+    update: {
+      name: 'Monthly Retainer',
+      bodyRichText:
+        '<p>Billed monthly on the 1st of each month. Net 15 payment terms. A 2% monthly late fee applies to overdue invoices.</p>',
+      isDefault: false,
+    },
+    create: {
+      id: 'seed-payment-3',
+      name: 'Monthly Retainer',
+      bodyRichText:
+        '<p>Billed monthly on the 1st of each month. Net 15 payment terms. A 2% monthly late fee applies to overdue invoices.</p>',
+      isDefault: false,
+    },
+  })
+
+  const paymentTemplate4 = await prisma.paymentTemplate.upsert({
+    where: { id: 'seed-payment-4' },
+    update: {
+      name: 'Retainer — 20% Downpayment',
+      bodyRichText:
+        '<p>A 20% downpayment of the total contract value is due upon signing, collected together with the first month of the retainer. The remaining balance is billed monthly across the engagement. Net 15 payment terms.</p>',
+      isDefault: false,
+    },
+    create: {
+      id: 'seed-payment-4',
+      name: 'Retainer — 20% Downpayment',
+      bodyRichText:
+        '<p>A 20% downpayment of the total contract value is due upon signing, collected together with the first month of the retainer. The remaining balance is billed monthly across the engagement. Net 15 payment terms.</p>',
+      isDefault: false,
+    },
+  })
+
   // ─── T&C Template ────────────────────────────────────────────────────────────
 
   // Service catalog categories. Kept in one place so Services and T&C templates stay in sync.
@@ -994,6 +1028,119 @@ async function main() {
     },
   })
 
+  // ─── Payment-schedule demo proposals ──────────────────────────────────────────
+  // Exercise the PDF payment-schedule breakdown. Percentage milestones are already
+  // demoed by PROP-2026-03-0001 (uses the "Milestone — 50/30/20" template); these
+  // two cover the monthly and downpayment paths. Line-item `unit: 'monthly'` drives
+  // the engagement length regardless of the underlying service's default unit.
+
+  // A. One-time fee + monthly retainer (fee billed upfront in Month 1).
+  const psMonthly = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0010' },
+    update: {},
+    create: {
+      number: 'PROP-2026-03-0010',
+      clientId: acme.id,
+      clientName: 'Acme Corp',
+      contactName: 'Maria Santos',
+      contactTitle: 'CEO',
+      projectTitle: 'Brand Launch & Always-On Social',
+      date: new Date('2026-03-18'),
+      validUntil: new Date('2026-04-17'),
+      status: ProposalStatus.APPROVED,
+      createdById: juan.id,
+      assignedApproverId: manager.id,
+      subtotal: 900000,
+      total: 900000,
+      introText:
+        '<p>A one-time brand foundation sprint followed by a six-month always-on social retainer.</p>',
+      paymentTemplateId: paymentTemplate3.id, // Monthly Retainer
+      tcTemplateId: tcTemplate.id,
+      lineItems: {
+        create: [
+          {
+            serviceId: brandIdentity.id,
+            description: 'Brand Identity Development',
+            scopeOfWork: brandIdentity.defaultScope,
+            unit: 'one-time',
+            quantity: 1,
+            unitRate: 300000,
+            lineTotal: 300000,
+            sortOrder: 1,
+          },
+          {
+            serviceId: socialStrategy.id,
+            description: 'Always-On Social Media Retainer',
+            scopeOfWork: socialStrategy.defaultScope,
+            unit: 'monthly',
+            quantity: 6,
+            unitRate: 100000,
+            lineTotal: 600000,
+            sortOrder: 2,
+          },
+        ],
+      },
+    },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-ps-1' },
+    update: {},
+    create: { id: 'seed-event-ps-1', proposalId: psMonthly.id, action: 'submitted', actorId: juan.id },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-ps-2' },
+    update: {},
+    create: { id: 'seed-event-ps-2', proposalId: psMonthly.id, action: 'approved', actorId: manager.id, comment: 'Approved.' },
+  })
+
+  // B. Pure retainer with a 20% downpayment (downpayment + Month 1 upfront).
+  const psDownpayment = await prisma.proposal.upsert({
+    where: { number: 'PROP-2026-03-0011' },
+    update: {},
+    create: {
+      number: 'PROP-2026-03-0011',
+      clientId: acme.id,
+      clientName: 'Acme Corp',
+      contactName: 'Maria Santos',
+      contactTitle: 'CEO',
+      projectTitle: 'Always-On Social Retainer 2026',
+      date: new Date('2026-03-20'),
+      validUntil: new Date('2026-04-19'),
+      status: ProposalStatus.APPROVED,
+      createdById: juan.id,
+      assignedApproverId: manager.id,
+      subtotal: 600000,
+      total: 600000,
+      introText: '<p>A six-month always-on social media retainer with a standard 20% downpayment.</p>',
+      paymentTemplateId: paymentTemplate4.id, // Retainer — 20% Downpayment
+      tcTemplateId: tcTemplate.id,
+      lineItems: {
+        create: [
+          {
+            serviceId: socialStrategy.id,
+            description: 'Always-On Social Media Retainer',
+            scopeOfWork: socialStrategy.defaultScope,
+            unit: 'monthly',
+            quantity: 6,
+            unitRate: 100000,
+            lineTotal: 600000,
+            sortOrder: 1,
+          },
+        ],
+      },
+    },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-ps-3' },
+    update: {},
+    create: { id: 'seed-event-ps-3', proposalId: psDownpayment.id, action: 'submitted', actorId: juan.id },
+  })
+  await prisma.approvalEvent.upsert({
+    where: { id: 'seed-event-ps-4' },
+    update: {},
+    create: { id: 'seed-event-ps-4', proposalId: psDownpayment.id, action: 'approved', actorId: manager.id, comment: 'Approved.' },
+  })
+
   console.log('Seed complete:', {
     users: [admin.email, manager.email, juan.email, coo.email, ceo.email],
     team: team.name,
@@ -1014,9 +1161,14 @@ async function main() {
       boothDesign.name,
       newsletter.name,
     ],
-    paymentTemplates: [paymentTemplate.name, paymentTemplate2.name],
+    paymentTemplates: [
+      paymentTemplate.name,
+      paymentTemplate2.name,
+      paymentTemplate3.name,
+      paymentTemplate4.name,
+    ],
     tcTemplates: [tcTemplate.name, tcBranding.name, tcStrategy.name, tcCollaterals.name],
-    proposals: 5,
+    proposals: 7,
   })
 }
 
