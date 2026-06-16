@@ -64,6 +64,67 @@ export function stripHtml(html: string): string {
     .trim()
 }
 
+// ─── Manual milestone schedule ───────────────────────────────────────────────
+// A proposal can carry an explicit, hand-authored payment breakdown instead of
+// (or alongside) the prose terms above. Each milestone names a trigger, a free-
+// text due date, and a share of the grand total. The peso amount is always
+// derived from the share so it stays in sync with the proposal total.
+
+export type PaymentMilestone = {
+  /** Milestone name, e.g. "Downpayment". */
+  label: string
+  /** Free-text due date / trigger, e.g. "Before the start of the project". */
+  dueDate: string
+  /** Share of the grand total, 0–100. */
+  percent: number
+}
+
+/** Tolerance (in percentage points) for a milestone set to count as a full 100%. */
+export const MILESTONE_PERCENT_TOLERANCE = 0.01
+
+/** Sum of milestone percentages, rounded to 2dp. */
+export function milestonesPercentTotal(milestones: { percent: number }[]): number {
+  return round2(milestones.reduce((sum, m) => sum + (Number(m.percent) || 0), 0))
+}
+
+/** True when the milestone percentages add up to 100% (within tolerance). */
+export function milestonesSumTo100(milestones: { percent: number }[]): boolean {
+  if (milestones.length === 0) return false
+  return Math.abs(milestonesPercentTotal(milestones) - 100) <= MILESTONE_PERCENT_TOLERANCE
+}
+
+/**
+ * Peso amount for each milestone, derived from its share of `total`. Rounding
+ * drift lands on the last row so the amounts sum to `total` exactly.
+ */
+export function computeMilestoneAmounts(
+  milestones: { percent: number }[],
+  total: number,
+): number[] {
+  return amountsFromPercents(
+    total,
+    milestones.map((m) => Number(m.percent) || 0),
+  )
+}
+
+/** Parse a stored Json value into typed milestones, dropping malformed entries. */
+export function parsePaymentMilestones(raw: unknown): PaymentMilestone[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((m) => {
+    if (m && typeof m === 'object' && 'percent' in m) {
+      const o = m as Record<string, unknown>
+      return [
+        {
+          label: String(o.label ?? ''),
+          dueDate: String(o.dueDate ?? ''),
+          percent: Number(o.percent) || 0,
+        },
+      ]
+    }
+    return []
+  })
+}
+
 function ordinal(n: number): string {
   const suffix = ['th', 'st', 'nd', 'rd']
   const v = n % 100

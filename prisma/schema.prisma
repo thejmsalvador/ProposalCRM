@@ -94,6 +94,7 @@ model PaymentTemplate {
   id           String    @id @default(cuid())
   name         String
   bodyRichText String    @db.Text
+  milestones   Json?
   isDefault    Boolean   @default(false)
   isArchived   Boolean   @default(false)
   createdAt    DateTime  @default(now())
@@ -185,6 +186,7 @@ model Proposal {
   introText             String?        @db.Text
   paymentTemplateId     String?
   paymentTermsOverride  String?        @db.Text
+  paymentMilestones     Json?
   tcTemplateId          String?
   tcOverride            String?        @db.Text
   confidentialWatermark Boolean        @default(false)

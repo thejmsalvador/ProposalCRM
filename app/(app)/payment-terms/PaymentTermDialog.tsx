@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useTransition } from 'react'
-import { useForm, Controller, useWatch, type Resolver } from 'react-hook-form'
+import { useEffect, useTransition } from 'react'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Archive, RotateCcw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
+import { MilestoneEditor } from '@/components/proposals/MilestoneEditor'
 import { paymentTermSchema, type PaymentTermInput } from '@/lib/validations/payment-terms'
 import {
   createPaymentTerm,
@@ -25,7 +26,6 @@ import {
   restorePaymentTerm,
 } from '@/lib/actions/payment-terms'
 import type { PaymentTermListItem } from '@/lib/actions/payment-terms'
-import { computePaymentSchedule, stripHtml } from '@/lib/payment-schedule'
 
 type Props = {
   open: boolean
@@ -33,9 +33,9 @@ type Props = {
   template: PaymentTermListItem | null
 }
 
-// Sample figures used purely to illustrate how a template breaks down in the editor.
+// Sample figure used purely to illustrate the ₱ split while authoring a template;
+// real proposals compute the column from their own grand total.
 const PREVIEW_TOTAL = 1_000_000
-const PREVIEW_MONTHS = 12
 
 function peso(n: number): string {
   return new Intl.NumberFormat('en-PH', {
@@ -59,31 +59,23 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
     // Cast: the schema's .default() makes zod's input type looser than its
     // output, but the form always supplies complete defaultValues
     resolver: zodResolver(paymentTermSchema) as Resolver<PaymentTermInput>,
-    defaultValues: { name: '', bodyRichText: '', isDefault: false },
+    defaultValues: { name: '', bodyRichText: '', milestones: [], isDefault: false },
   })
 
   useEffect(() => {
     if (open) {
       reset(
         template
-          ? { name: template.name, bodyRichText: template.bodyRichText, isDefault: template.isDefault }
-          : { name: '', bodyRichText: '', isDefault: false },
+          ? {
+              name: template.name,
+              bodyRichText: template.bodyRichText,
+              milestones: template.milestones.map((m, i) => ({ id: `ms-${i}`, ...m })),
+              isDefault: template.isDefault,
+            }
+          : { name: '', bodyRichText: '', milestones: [], isDefault: false },
       )
     }
   }, [open, template, reset])
-
-  // Live schedule preview: recomputed from the terms text as the author edits it,
-  // against a sample total so the resulting breakdown shape is visible while writing.
-  const bodyValue = useWatch({ control, name: 'bodyRichText' })
-  const previewSchedule = useMemo(
-    () =>
-      computePaymentSchedule({
-        paymentText: stripHtml(bodyValue || ''),
-        total: PREVIEW_TOTAL,
-        engagementMonths: PREVIEW_MONTHS,
-      }),
-    [bodyValue],
-  )
 
   async function onSubmit(data: PaymentTermInput) {
     const result = isEdit
@@ -126,7 +118,7 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-xl overflow-y-auto flex flex-col gap-0 p-0"
+        className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0"
       >
         <SheetHeader className="px-6 py-5 border-b border-[var(--color-border)] shrink-0">
           <SheetTitle>{isEdit ? 'Edit Payment Template' : 'Add Payment Template'}</SheetTitle>
@@ -147,11 +139,38 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
             )}
           </div>
 
-          {/* Body */}
+          {/* Payment schedule — primary content */}
           <div className="space-y-1.5">
-            <Label htmlFor="pt-body">Payment terms *</Label>
+            <Label>Payment Schedule</Label>
             <p className="text-xs text-[var(--color-muted)]">
-              Rich text — supports bold, italic, bullet lists.
+              The default breakdown for proposals using this template. Percentages must
+              total 100%. The ₱ column previews a sample {peso(PREVIEW_TOTAL)} total —
+              proposals compute it from their own grand total.
+            </p>
+            <Controller
+              name="milestones"
+              control={control}
+              render={({ field }) => (
+                <MilestoneEditor
+                  milestones={field.value ?? []}
+                  onChange={field.onChange}
+                  total={PREVIEW_TOTAL}
+                  amountLabel="₱ of sample total"
+                  emptyHint="No schedule yet. Add milestones, or leave empty to print the terms text as written."
+                />
+              )}
+            />
+            {typeof errors.milestones?.message === 'string' && (
+              <p className="text-xs text-[var(--color-danger)]">{errors.milestones.message}</p>
+            )}
+          </div>
+
+          {/* Body — optional supporting terms */}
+          <div className="space-y-1.5">
+            <Label htmlFor="pt-body">Additional terms &amp; conditions (optional)</Label>
+            <p className="text-xs text-[var(--color-muted)]">
+              Rich text — payment conditions, late fees, currency notes. Printed above the
+              schedule on the proposal.
             </p>
             <Controller
               name="bodyRichText"
@@ -160,60 +179,13 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
                 <RichTextEditor
                   value={field.value}
                   onChange={field.onChange}
-                  placeholder="Describe the payment schedule and conditions…"
+                  placeholder="Describe any payment conditions…"
                 />
               )}
             />
             {errors.bodyRichText && (
               <p className="text-xs text-[var(--color-danger)]">{errors.bodyRichText.message}</p>
             )}
-          </div>
-
-          {/* Schedule preview */}
-          <div className="space-y-1.5">
-            <Label>Schedule preview</Label>
-            <p className="text-xs text-[var(--color-muted)]">
-              How this template breaks down a sample {peso(PREVIEW_TOTAL)} total
-              {previewSchedule?.kind === 'monthly' ? ` over a ${PREVIEW_MONTHS}-month engagement` : ''}.
-              Proposals compute this from their own grand total.
-            </p>
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-              {previewSchedule ? (
-                <div className="space-y-1.5">
-                  {previewSchedule.installments.map((inst, i) => (
-                    <div key={i} className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="text-[var(--color-primary)]">
-                        {inst.label}
-                        {inst.percent != null && (
-                          <span className="text-[var(--color-muted)]"> · {inst.percent}%</span>
-                        )}
-                        {inst.downpaymentAmount ? (
-                          <span className="text-[var(--color-muted)]">
-                            {' '}
-                            (incl. {inst.downpaymentPercent}% downpayment)
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="font-medium tabular-nums whitespace-nowrap">
-                        {peso(inst.amount)}
-                      </span>
-                    </div>
-                  ))}
-                  <div className="flex items-baseline justify-between gap-3 border-t border-[var(--color-border)] pt-1.5 text-sm font-semibold text-[var(--color-primary)]">
-                    <span>Total</span>
-                    <span className="tabular-nums whitespace-nowrap">{peso(previewSchedule.total)}</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-[var(--color-muted)]">
-                  No automatic schedule detected — the terms will display as written. Mention a
-                  percentage split (e.g. <span className="font-medium">50/50</span> or{' '}
-                  <span className="font-medium">50-30-20</span>),{' '}
-                  <span className="font-medium">monthly</span> billing, or a{' '}
-                  <span className="font-medium">20% downpayment</span> to generate one.
-                </p>
-              )}
-            </div>
           </div>
 
           {/* Set as default */}

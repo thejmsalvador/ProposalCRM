@@ -13,7 +13,13 @@ import {
   computeDiscount,
   computeTotal,
   formatCurrency,
+  cleanPaymentMilestones,
 } from '@/lib/validations/proposals'
+import {
+  milestonesPercentTotal,
+  milestonesSumTo100,
+  computeMilestoneAmounts,
+} from '@/lib/payment-schedule'
 import { engagementLabel } from '@/lib/validations/catalog'
 
 type CheckItem = {
@@ -55,6 +61,16 @@ export function Step6Review() {
       : null
   const convertedTotal = exRate != null ? total / exRate : null
 
+  // Payment milestones (optional): the proposal's override when present, else the
+  // selected template's default schedule. When present they must cover 100%.
+  const templateMilestones =
+    paymentTemplates.find((p) => p.id === data.paymentTemplateId)?.milestones ?? []
+  const milestones = cleanPaymentMilestones(data.paymentMilestones ?? templateMilestones)
+  const hasMilestones = milestones.length > 0
+  const milestonesBalanced = !hasMilestones || milestonesSumTo100(milestones)
+  const milestonePercentTotal = milestonesPercentTotal(milestones)
+  const milestoneAmounts = hasMilestones ? computeMilestoneAmounts(milestones, total) : []
+
   // Validation checklist
   const checks: CheckItem[] = [
     { label: 'Client name provided', passed: data.clientName.length >= 2 },
@@ -70,6 +86,14 @@ export function Step6Review() {
         ]
       : []),
     { label: 'Payment terms selected', passed: !!data.paymentTemplateId },
+    ...(hasMilestones
+      ? [
+          {
+            label: `Payment milestones total 100% (currently ${milestonePercentTotal}%)`,
+            passed: milestonesBalanced,
+          },
+        ]
+      : []),
     { label: 'Terms & conditions selected', passed: !!data.tcTemplateId },
   ]
   const allPassed = checks.every((c) => c.passed)
@@ -278,6 +302,61 @@ export function Step6Review() {
                 __html: data.paymentTermsOverride || paymentTemplate.bodyRichText,
               }}
             />
+
+            {hasMilestones && (
+              <div className="mt-4 overflow-x-auto rounded-[var(--radius-sm)] border border-[var(--color-border)]">
+                <table className="w-full min-w-[520px] text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--color-border)] bg-slate-50">
+                      <th className="text-left py-2 px-3 font-medium text-[var(--color-muted)]">
+                        Milestone
+                      </th>
+                      <th className="text-left py-2 px-3 font-medium text-[var(--color-muted)]">
+                        Due Date
+                      </th>
+                      <th className="text-right py-2 px-3 font-medium text-[var(--color-muted)]">
+                        %
+                      </th>
+                      <th className="text-right py-2 px-3 font-medium text-[var(--color-muted)]">
+                        Amount
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {milestones.map((m, i) => (
+                      <tr
+                        key={i}
+                        className="border-b border-[var(--color-border)] last:border-0"
+                      >
+                        <td className="py-2 px-3 font-medium">{m.label || `Milestone ${i + 1}`}</td>
+                        <td className="py-2 px-3 text-[var(--color-muted)]">{m.dueDate || '—'}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{m.percent}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums font-medium">
+                          {formatCurrency(milestoneAmounts[i])}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-[var(--color-border)] bg-slate-50 font-semibold">
+                      <td className="py-2 px-3" colSpan={2}>
+                        Total
+                      </td>
+                      <td
+                        className={`py-2 px-3 text-right tabular-nums ${
+                          milestonesBalanced
+                            ? 'text-[var(--color-success)]'
+                            : 'text-[var(--color-danger)]'
+                        }`}
+                      >
+                        {milestonePercentTotal}%
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums">{formatCurrency(total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

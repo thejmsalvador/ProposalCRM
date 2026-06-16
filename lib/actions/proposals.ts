@@ -21,9 +21,11 @@ import {
   computeSubtotal,
   computeTotal,
   cleanLineItemExpenses,
+  cleanPaymentMilestones,
   type ProposalFormData,
   type LineItemExpense,
 } from '../validations/proposals'
+import { parsePaymentMilestones, milestonesSumTo100 } from '../payment-schedule'
 
 // ─── Serialisable types ──────────────────────────────────────────────────────
 
@@ -65,6 +67,7 @@ export type PaymentTemplateOption = {
   id: string
   name: string
   bodyRichText: string
+  milestones: { label: string; dueDate: string; percent: number }[]
   isDefault: boolean
 }
 
@@ -127,7 +130,7 @@ export async function getWizardData(): Promise<{
       }),
       prisma.paymentTemplate.findMany({
         where: { isArchived: false },
-        select: { id: true, name: true, bodyRichText: true, isDefault: true },
+        select: { id: true, name: true, bodyRichText: true, milestones: true, isDefault: true },
         orderBy: { name: 'asc' },
       }),
       prisma.tCTemplate.findMany({
@@ -161,6 +164,7 @@ export async function getWizardData(): Promise<{
       id: p.id,
       name: p.name,
       bodyRichText: p.bodyRichText,
+      milestones: parsePaymentMilestones(p.milestones),
       isDefault: p.isDefault,
     })),
     tcTemplates: tcTemplates.map((t) => ({
@@ -272,6 +276,11 @@ export async function saveProposalDraft(
     pricingNotes: data.pricingNotes || null,
     paymentTemplateId: data.paymentTemplateId || null,
     paymentTermsOverride: data.paymentTermsOverride,
+    // null = inherit the template's schedule; an array = a per-proposal override.
+    paymentMilestones:
+      data.paymentMilestones == null
+        ? Prisma.JsonNull
+        : (cleanPaymentMilestones(data.paymentMilestones) as Prisma.InputJsonValue),
     tcTemplateId: data.tcTemplateId || null,
     tcOverride: data.tcOverride,
     confidentialWatermark: data.confidentialWatermark,
@@ -895,6 +904,7 @@ export type ProposalDetail = {
   pricingNotes: string | null
   introText: string | null
   paymentTermsOverride: string | null
+  paymentMilestones: { label: string; dueDate: string; percent: number }[]
   tcOverride: string | null
   confidentialWatermark: boolean
   hasBelowFloorPricing: boolean
@@ -944,7 +954,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     include: {
       createdBy: { select: { id: true, name: true, email: true, teamId: true } },
       assignedApprover: { select: { id: true, name: true } },
-      paymentTemplate: { select: { id: true, name: true, bodyRichText: true } },
+      paymentTemplate: { select: { id: true, name: true, bodyRichText: true, milestones: true } },
       tcTemplate: { select: { id: true, name: true, bodyRichText: true } },
       lineItems: { orderBy: { sortOrder: 'asc' } },
       approvalEvents: {
@@ -1007,6 +1017,11 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     pricingNotes: proposal.pricingNotes,
     introText: proposal.introText,
     paymentTermsOverride: proposal.paymentTermsOverride,
+    // Effective schedule: the proposal's override if it has one, else the template's.
+    paymentMilestones:
+      proposal.paymentMilestones != null
+        ? parsePaymentMilestones(proposal.paymentMilestones)
+        : parsePaymentMilestones(proposal.paymentTemplate?.milestones),
     tcOverride: proposal.tcOverride,
     confidentialWatermark: proposal.confidentialWatermark,
     hasBelowFloorPricing: proposal.hasBelowFloorPricing,
@@ -1141,6 +1156,10 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       introText: source.introText,
       paymentTemplateId: source.paymentTemplateId,
       paymentTermsOverride: source.paymentTermsOverride,
+      paymentMilestones:
+        source.paymentMilestones === null
+          ? Prisma.JsonNull
+          : (source.paymentMilestones as Prisma.InputJsonValue),
       tcTemplateId: source.tcTemplateId,
       tcOverride: source.tcOverride,
       confidentialWatermark: source.confidentialWatermark,
@@ -1653,6 +1672,10 @@ export async function submitExistingProposal(
   if (!proposal.tcTemplateId && !proposal.tcOverride) {
     return { error: 'Terms & conditions are required' }
   }
+  const milestones = parsePaymentMilestones(proposal.paymentMilestones)
+  if (milestones.length > 0 && !milestonesSumTo100(milestones)) {
+    return { error: 'Payment milestones must total 100% of the grand total' }
+  }
   if (Number(proposal.total) <= 0) {
     return { error: 'Total must be greater than 0' }
   }
@@ -1846,6 +1869,7 @@ export type ProposalFormDataExport = {
   pricingNotes: string
   paymentTemplateId: string
   paymentTermsOverride: string | null
+  paymentMilestones: { id: string; label: string; dueDate: string; percent: number }[] | null
   tcTemplateId: string
   tcOverride: string | null
   confidentialWatermark: boolean
@@ -1929,6 +1953,14 @@ export async function getProposalForEdit(
     pricingNotes: proposal.pricingNotes ?? '',
     paymentTemplateId: proposal.paymentTemplateId ?? '',
     paymentTermsOverride: proposal.paymentTermsOverride,
+    // null = inherit the template's schedule (no per-proposal override stored).
+    paymentMilestones:
+      proposal.paymentMilestones == null
+        ? null
+        : parsePaymentMilestones(proposal.paymentMilestones).map((m, i) => ({
+            id: `ms-${i}`,
+            ...m,
+          })),
     tcTemplateId: proposal.tcTemplateId ?? '',
     tcOverride: proposal.tcOverride,
     confidentialWatermark: proposal.confidentialWatermark,
@@ -2101,6 +2133,12 @@ export async function restoreVersion(
       introText: sp.introText ? String(sp.introText) : null,
       paymentTemplateId: sp.paymentTemplateId ? String(sp.paymentTemplateId) : null,
       paymentTermsOverride: sp.paymentTermsOverride ? String(sp.paymentTermsOverride) : null,
+      paymentMilestones:
+        sp.paymentMilestones == null
+          ? Prisma.JsonNull
+          : (cleanPaymentMilestones(
+              parsePaymentMilestones(sp.paymentMilestones),
+            ) as Prisma.InputJsonValue),
       tcTemplateId: sp.tcTemplateId ? String(sp.tcTemplateId) : null,
       tcOverride: sp.tcOverride ? String(sp.tcOverride) : null,
       confidentialWatermark: Boolean(sp.confidentialWatermark),

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { milestonesSumTo100, milestonesPercentTotal } from '../payment-schedule'
 
 // ─── Line item schema ────────────────────────────────────────────────────────
 
@@ -34,6 +35,38 @@ export const lineItemSchema = z.object({
 })
 
 export type LineItemFormData = z.infer<typeof lineItemSchema>
+
+// ─── Payment milestone schema ────────────────────────────────────────────────
+
+// A single hand-authored payment milestone. Lenient so blank draft rows don't
+// break auto-save; the peso amount is derived from `percent` × grand total and
+// never stored. Blank rows are pruned by cleanPaymentMilestones before persist.
+export const paymentMilestoneSchema = z.object({
+  id: z.string().default(''),
+  label: z.string().default(''),
+  dueDate: z.string().default(''),
+  // .catch(0) keeps a blank number input (NaN) from breaking auto-save/submit
+  percent: z.number().min(0, 'Percentage must be 0 or more').max(100, 'Percentage cannot exceed 100').catch(0).default(0),
+})
+
+export type PaymentMilestoneFormData = z.infer<typeof paymentMilestoneSchema>
+
+/** Drop blank milestone rows and trim; returns the persisted shape (no id). */
+export function cleanPaymentMilestones(
+  milestones:
+    | { label?: string | null; dueDate?: string | null; percent: number }[]
+    | undefined
+    | null,
+): { label: string; dueDate: string; percent: number }[] {
+  if (!Array.isArray(milestones)) return []
+  return milestones
+    .map((m) => ({
+      label: (m.label ?? '').trim(),
+      dueDate: (m.dueDate ?? '').trim(),
+      percent: Number(m.percent) || 0,
+    }))
+    .filter((m) => m.label !== '' || m.dueDate !== '' || m.percent > 0)
+}
 
 /** Drop blank expense rows (no label and zero amount) before persisting. */
 export function cleanLineItemExpenses(
@@ -85,6 +118,9 @@ export const proposalDraftSchema = z.object({
   // Step 4
   paymentTemplateId: z.string().default(''),
   paymentTermsOverride: z.string().nullable().default(null),
+  // null = inherit the selected template's schedule; an array = a per-proposal
+  // override (which may be empty to mean "no schedule for this proposal").
+  paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
 
   // Step 5
   tcTemplateId: z.string().default(''),
@@ -130,6 +166,7 @@ export const proposalSubmitSchema = z
     pricingNotes: z.string().default(''),
     paymentTemplateId: z.string().min(1, 'Payment terms are required'),
     paymentTermsOverride: z.string().nullable().default(null),
+    paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
     tcTemplateId: z.string().min(1, 'Terms & conditions are required'),
     tcOverride: z.string().nullable().default(null),
     confidentialWatermark: z.boolean().default(false),
@@ -161,6 +198,18 @@ export const proposalSubmitSchema = z
       path: ['exchangeRate'],
     },
   )
+  .refine(
+    (d) => {
+      // Milestones are optional, but once any are entered they must cover the
+      // whole grand total (100%) — a partial breakdown can't be billed.
+      const ms = cleanPaymentMilestones(d.paymentMilestones)
+      return ms.length === 0 || milestonesSumTo100(ms)
+    },
+    {
+      message: 'Payment milestones must total 100% of the grand total',
+      path: ['paymentMilestones'],
+    },
+  )
 
 // ─── Per-step wizard validation ──────────────────────────────────────────────
 // Gates forward navigation in the proposal wizard: each step's required fields
@@ -179,7 +228,7 @@ export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   1: ['clientName', 'contactEmail', 'projectTitle', 'date', 'validUntil'],
   2: ['lineItems'],
   3: ['exchangeRate'],
-  4: ['paymentTemplateId'],
+  4: ['paymentTemplateId', 'paymentMilestones'],
   5: ['tcTemplateId'],
   6: [],
 }
@@ -247,6 +296,11 @@ export function validateWizardStep(
     if (!data.paymentTemplateId) {
       fieldErrors.paymentTemplateId = 'Payment terms template is required'
       messages.push('Select a payment terms template')
+    }
+    const ms = cleanPaymentMilestones(data.paymentMilestones)
+    if (ms.length > 0 && !milestonesSumTo100(ms)) {
+      fieldErrors.paymentMilestones = `Milestones total ${milestonesPercentTotal(ms)}% — they must add up to 100%`
+      messages.push('Payment milestones must total 100% of the grand total')
     }
   }
 
