@@ -1,11 +1,7 @@
 {
+  "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/approval-sla", "schedule": "0 * * * *" },
+    { "path": "/api/cron/approval-sla", "schedule": "0 9 * * *" },
     { "path": "/api/cron/expire-proposals", "schedule": "0 2 * * *" }
-  ],
-  "functions": {
-    "app/api/pdf/generate/route.ts": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }
