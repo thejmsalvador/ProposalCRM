@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { formatCurrency } from '@/lib/validations/proposals'
+import { computeMilestoneAmounts, milestonesPercentTotal } from '@/lib/payment-schedule'
 import type { ProposalDetail, ProposalVersionEntry, VersionSnapshot } from '@/lib/actions/proposals'
 import {
   approveProposal,
@@ -896,6 +897,54 @@ export function ProposalDetailClient({
           ) : (
             <p className="text-sm text-slate-400 italic">No payment terms specified.</p>
           )}
+
+          {proposal.paymentMilestones.length > 0 &&
+            (() => {
+              const grandTotal = parseFloat(proposal.total) || 0
+              const amounts = computeMilestoneAmounts(proposal.paymentMilestones, grandTotal)
+              const percentTotal = milestonesPercentTotal(proposal.paymentMilestones)
+              return (
+                <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="text-left py-2 px-3 font-medium text-slate-500">Milestone</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-500">Due Date</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-500">%</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-500">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proposal.paymentMilestones.map((m, i) => (
+                        <tr key={i} className="border-b border-slate-200 last:border-0">
+                          <td className="py-2 px-3 font-medium text-slate-700">
+                            {m.label || `Milestone ${i + 1}`}
+                          </td>
+                          <td className="py-2 px-3 text-slate-500">{m.dueDate || '—'}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-slate-700">
+                            {m.percent}%
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums font-medium text-slate-700">
+                            {formatCurrency(amounts[i])}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-800">
+                        <td className="py-2 px-3" colSpan={2}>
+                          Total
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums">{percentTotal}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          {formatCurrency(grandTotal)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )
+            })()}
         </div>
       </section>
 

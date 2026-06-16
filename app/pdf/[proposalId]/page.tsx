@@ -4,7 +4,13 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { engagementLabel } from '@/lib/validations/catalog'
 import { formatCurrency } from '@/lib/validations/proposals'
-import { computePaymentSchedule, stripHtml } from '@/lib/payment-schedule'
+import {
+  computePaymentSchedule,
+  computeMilestoneAmounts,
+  milestonesPercentTotal,
+  parsePaymentMilestones,
+  stripHtml,
+} from '@/lib/payment-schedule'
 
 type Props = {
   params: { proposalId: string }
@@ -52,7 +58,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
           orderBy: { sortOrder: 'asc' },
           include: { service: { select: { category: true } } },
         },
-        paymentTemplate: { select: { bodyRichText: true } },
+        paymentTemplate: { select: { bodyRichText: true, milestones: true } },
         tcTemplate: { select: { bodyRichText: true } },
       },
     }),
@@ -116,13 +122,29 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .filter((li) => !/month/i.test(li.unit))
     .reduce((sum, li) => sum + (parseFloat(li.lineTotal.toString()) || 0), 0)
 
-  const paymentSchedule = computePaymentSchedule({
-    paymentText: stripHtml(paymentHtml),
-    total,
-    engagementMonths,
-    monthlyTotal,
-    oneTimeTotal,
-  })
+  // Hand-authored milestone breakdown takes precedence over the prose-derived
+  // schedule. The proposal's own override wins; otherwise it inherits the payment
+  // template's default schedule. Peso amounts are derived from the grand total.
+  // With no milestones at all we fall back to detecting a schedule from the terms.
+  const manualMilestones =
+    proposal.paymentMilestones != null
+      ? parsePaymentMilestones(proposal.paymentMilestones)
+      : parsePaymentMilestones(proposal.paymentTemplate?.milestones)
+  const hasManualMilestones = manualMilestones.length > 0
+  const manualAmounts = hasManualMilestones
+    ? computeMilestoneAmounts(manualMilestones, total)
+    : []
+  const manualPercentTotal = milestonesPercentTotal(manualMilestones)
+
+  const paymentSchedule = hasManualMilestones
+    ? null
+    : computePaymentSchedule({
+        paymentText: stripHtml(paymentHtml),
+        total,
+        engagementMonths,
+        monthlyTotal,
+        oneTimeTotal,
+      })
   const scheduleShowsPercent =
     paymentSchedule?.installments.some((i) => i.percent !== null) ?? false
   const scheduleOneTime = paymentSchedule?.installments[0]?.oneTimeAmount ?? 0
@@ -134,7 +156,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
   if (proposal.introText) order.push('exec')
   if (nonOptionalItems.length > 0) order.push('scope')
   order.push('invest')
-  if (paymentHtml) order.push('payment')
+  if (paymentHtml || hasManualMilestones) order.push('payment')
   if (tcHtml) order.push('tc')
   const totalPages = order.length
   const pageNum = (key: string) => order.indexOf(key) + 1
@@ -511,9 +533,58 @@ export default async function PdfPage({ params, searchParams }: Props) {
         </Sheet>
 
         {/* ── 5. PAYMENT TERMS ───────────────────────────────────────────────── */}
-        {paymentHtml && (
+        {(paymentHtml || hasManualMilestones) && (
           <Sheet pageKey="payment" title="Payment Terms">
-            <div className="rich" dangerouslySetInnerHTML={{ __html: paymentHtml }} />
+            {paymentHtml && (
+              <div className="rich" dangerouslySetInnerHTML={{ __html: paymentHtml }} />
+            )}
+
+            {hasManualMilestones && (
+              <div className="schedule">
+                <div className="schedule-head">
+                  <span className="schedule-title">Payment Schedule</span>
+                  <span className="tag">
+                    {manualMilestones.length} milestone
+                    {manualMilestones.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <table className="stable">
+                  <thead>
+                    <tr>
+                      <th className="col-idx">#</th>
+                      <th>Milestone</th>
+                      <th>Due Date</th>
+                      <th className="col-num">Share</th>
+                      <th className="col-num">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manualMilestones.map((ms, i) => (
+                      <tr key={i}>
+                        <td className="col-idx">{i + 1}</td>
+                        <td className="sched-label">{ms.label || `Milestone ${i + 1}`}</td>
+                        <td className="sched-label">{ms.dueDate || '—'}</td>
+                        <td className="col-num">{ms.percent}%</td>
+                        <td className="col-num amount">{money(manualAmounts[i])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="col-idx" />
+                      <td className="sched-total-label" colSpan={2}>
+                        Total
+                      </td>
+                      <td className="col-num">{manualPercentTotal}%</td>
+                      <td className="col-num amount">{money(total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+                <div className="schedule-note">
+                  Milestone billing as a share of the grand total of {money(total)}.
+                </div>
+              </div>
+            )}
 
             {paymentSchedule && (
               <div className="schedule">
