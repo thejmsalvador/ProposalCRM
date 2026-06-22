@@ -17,8 +17,9 @@ import {
 } from '@/lib/validations/proposals'
 import {
   milestonesPercentTotal,
-  milestonesSumTo100,
-  computeMilestoneAmounts,
+  remainingTailPercentTotal,
+  milestonesValidForBasis,
+  computeMilestoneAmountsForBasis,
 } from '@/lib/payment-schedule'
 import { engagementLabel } from '@/lib/validations/catalog'
 
@@ -62,14 +63,19 @@ export function Step6Review() {
   const convertedTotal = exRate != null ? total / exRate : null
 
   // Payment milestones (optional): the proposal's override when present, else the
-  // selected template's default schedule. When present they must cover 100%.
-  const templateMilestones =
-    paymentTemplates.find((p) => p.id === data.paymentTemplateId)?.milestones ?? []
+  // selected template's default schedule. When present they must fully bill the total.
+  const selectedPaymentTemplate = paymentTemplates.find((p) => p.id === data.paymentTemplateId)
+  const templateMilestones = selectedPaymentTemplate?.milestones ?? []
   const milestones = cleanPaymentMilestones(data.paymentMilestones ?? templateMilestones)
+  // Basis follows the schedule in effect: the proposal's own when overriding, else the template's.
+  const effectiveBasis = data.milestoneBasis ?? selectedPaymentTemplate?.milestoneBasis ?? 'total'
   const hasMilestones = milestones.length > 0
-  const milestonesBalanced = !hasMilestones || milestonesSumTo100(milestones)
+  const milestonesBalanced = !hasMilestones || milestonesValidForBasis(milestones, effectiveBasis)
   const milestonePercentTotal = milestonesPercentTotal(milestones)
-  const milestoneAmounts = hasMilestones ? computeMilestoneAmounts(milestones, total) : []
+  const milestoneTailPercentTotal = remainingTailPercentTotal(milestones)
+  const milestoneAmounts = hasMilestones
+    ? computeMilestoneAmountsForBasis(milestones, total, effectiveBasis)
+    : []
 
   // Validation checklist
   const checks: CheckItem[] = [
@@ -89,7 +95,10 @@ export function Step6Review() {
     ...(hasMilestones
       ? [
           {
-            label: `Payment milestones total 100% (currently ${milestonePercentTotal}%)`,
+            label:
+              effectiveBasis === 'remaining'
+                ? `Succeeding milestones total 100% of the remaining balance (currently ${milestoneTailPercentTotal}%)`
+                : `Payment milestones total 100% (currently ${milestonePercentTotal}%)`,
             passed: milestonesBalanced,
           },
         ]
@@ -340,7 +349,7 @@ export function Step6Review() {
                   <tfoot>
                     <tr className="border-t-2 border-[var(--color-border)] bg-slate-50 font-semibold">
                       <td className="py-2 px-3" colSpan={2}>
-                        Total
+                        {effectiveBasis === 'remaining' ? 'Total billed' : 'Total'}
                       </td>
                       <td
                         className={`py-2 px-3 text-right tabular-nums ${
@@ -349,7 +358,9 @@ export function Step6Review() {
                             : 'text-[var(--color-danger)]'
                         }`}
                       >
-                        {milestonePercentTotal}%
+                        {effectiveBasis === 'remaining'
+                          ? `${milestoneTailPercentTotal}%`
+                          : `${milestonePercentTotal}%`}
                       </td>
                       <td className="py-2 px-3 text-right tabular-nums">{formatCurrency(total)}</td>
                     </tr>

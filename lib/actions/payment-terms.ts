@@ -8,7 +8,7 @@ import { prisma } from '../prisma'
 import { logAudit } from '../audit'
 import { paymentTermSchema, type PaymentTermInput } from '../validations/payment-terms'
 import { cleanPaymentMilestones } from '../validations/proposals'
-import { parsePaymentMilestones } from '../payment-schedule'
+import { parsePaymentMilestones, normalizeBasis, type MilestoneBasis } from '../payment-schedule'
 
 // ─── Serialisable types ───────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ export type PaymentTermListItem = {
   name: string
   bodyRichText: string
   milestones: { label: string; dueDate: string; percent: number }[]
+  milestoneBasis: MilestoneBasis
   isDefault: boolean
   isArchived: boolean
   createdAt: string
@@ -57,6 +58,7 @@ export async function createPaymentTerm(
       name: data.name,
       bodyRichText: data.bodyRichText,
       milestones: cleanPaymentMilestones(data.milestones) as Prisma.InputJsonValue,
+      milestoneBasis: data.milestoneBasis,
       isDefault: data.isDefault,
     },
   })
@@ -97,6 +99,7 @@ export async function updatePaymentTerm(
       name: data.name,
       bodyRichText: data.bodyRichText,
       milestones: cleanPaymentMilestones(data.milestones) as Prisma.InputJsonValue,
+      milestoneBasis: data.milestoneBasis,
       isDefault: data.isDefault,
     },
   })
@@ -189,6 +192,7 @@ function toListItem(t: {
   name: string
   bodyRichText: string
   milestones: unknown
+  milestoneBasis: string | null
   isDefault: boolean
   isArchived: boolean
   createdAt: Date
@@ -199,6 +203,7 @@ function toListItem(t: {
     name: t.name,
     bodyRichText: t.bodyRichText,
     milestones: parsePaymentMilestones(t.milestones),
+    milestoneBasis: normalizeBasis(t.milestoneBasis),
     isDefault: t.isDefault,
     isArchived: t.isArchived,
     createdAt: t.createdAt.toISOString(),

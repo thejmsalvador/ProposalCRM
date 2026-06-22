@@ -82,6 +82,20 @@ export type PaymentMilestone = {
 /** Tolerance (in percentage points) for a milestone set to count as a full 100%. */
 export const MILESTONE_PERCENT_TOLERANCE = 0.01
 
+/**
+ * How a milestone schedule turns percentages into peso amounts:
+ *  - 'total':     every row is a share of the grand total; rows sum to 100%.
+ *  - 'remaining': row 0 (upfront) is a share of the grand total; the succeeding
+ *                 rows are shares of the leftover pool (total − upfront) and must
+ *                 sum to 100% of that pool.
+ */
+export type MilestoneBasis = 'total' | 'remaining'
+
+/** Coerce a stored/raw value into a basis; null/undefined/legacy ⇒ 'total'. */
+export function normalizeBasis(raw: unknown): MilestoneBasis {
+  return raw === 'remaining' ? 'remaining' : 'total'
+}
+
 /** Sum of milestone percentages, rounded to 2dp. */
 export function milestonesPercentTotal(milestones: { percent: number }[]): number {
   return round2(milestones.reduce((sum, m) => sum + (Number(m.percent) || 0), 0))
@@ -105,6 +119,59 @@ export function computeMilestoneAmounts(
     total,
     milestones.map((m) => Number(m.percent) || 0),
   )
+}
+
+/**
+ * 'remaining' (pool) model: row 0 is a share of the grand total; the leftover
+ * (total − upfront) is then split across the succeeding rows by their percentages.
+ * Rounding drift lands on the last row so amounts still sum to `total` exactly.
+ */
+function computeRemainingAmounts(milestones: { percent: number }[], total: number): number[] {
+  const percents = milestones.map((m) => Number(m.percent) || 0)
+  if (percents.length === 0) return []
+  const first = round2((total * percents[0]) / 100)
+  const pool = round2(total - first)
+  const rest = amountsFromPercents(pool, percents.slice(1))
+  return [first, ...rest]
+}
+
+/** Peso amount for each milestone under the given basis. Amounts sum to `total`. */
+export function computeMilestoneAmountsForBasis(
+  milestones: { percent: number }[],
+  total: number,
+  basis: MilestoneBasis,
+): number[] {
+  return basis === 'remaining'
+    ? computeRemainingAmounts(milestones, total)
+    : computeMilestoneAmounts(milestones, total)
+}
+
+/**
+ * Sum of the succeeding (rows 1..n) percentages — in 'remaining' mode this is
+ * what must reach 100% of the leftover pool.
+ */
+export function remainingTailPercentTotal(milestones: { percent: number }[]): number {
+  return milestonesPercentTotal(milestones.slice(1))
+}
+
+/**
+ * Whether a milestone set fully bills the grand total under the given basis.
+ * Empty is always allowed (the PDF prints prose instead of a schedule).
+ *  - 'total':     all rows sum to 100%.
+ *  - 'remaining': succeeding rows sum to 100% of the leftover pool. With no
+ *                 succeeding rows, the lone upfront must itself be 100%.
+ */
+export function milestonesValidForBasis(
+  milestones: { percent: number }[],
+  basis: MilestoneBasis,
+): boolean {
+  if (milestones.length === 0) return true
+  if (basis === 'total') return milestonesSumTo100(milestones)
+  const tail = milestones.slice(1)
+  if (tail.length === 0) {
+    return Math.abs((Number(milestones[0].percent) || 0) - 100) <= MILESTONE_PERCENT_TOLERANCE
+  }
+  return milestonesSumTo100(tail)
 }
 
 /** Parse a stored Json value into typed milestones, dropping malformed entries. */

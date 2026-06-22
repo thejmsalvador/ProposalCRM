@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { milestonesSumTo100, milestonesPercentTotal } from '../payment-schedule'
+import {
+  milestonesPercentTotal,
+  milestonesValidForBasis,
+  remainingTailPercentTotal,
+  normalizeBasis,
+} from '../payment-schedule'
 
 // ─── Line item schema ────────────────────────────────────────────────────────
 
@@ -121,6 +126,8 @@ export const proposalDraftSchema = z.object({
   // null = inherit the selected template's schedule; an array = a per-proposal
   // override (which may be empty to mean "no schedule for this proposal").
   paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
+  // null = inherit the template's calculation basis; otherwise this proposal's own.
+  milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
 
   // Step 5
   tcTemplateId: z.string().default(''),
@@ -167,6 +174,7 @@ export const proposalSubmitSchema = z
     paymentTemplateId: z.string().min(1, 'Payment terms are required'),
     paymentTermsOverride: z.string().nullable().default(null),
     paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
+    milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
     tcTemplateId: z.string().min(1, 'Terms & conditions are required'),
     tcOverride: z.string().nullable().default(null),
     confidentialWatermark: z.boolean().default(false),
@@ -200,13 +208,13 @@ export const proposalSubmitSchema = z
   )
   .refine(
     (d) => {
-      // Milestones are optional, but once any are entered they must cover the
-      // whole grand total (100%) — a partial breakdown can't be billed.
+      // Milestones are optional, but once any are entered they must fully bill the
+      // grand total under the selected calculation basis.
       const ms = cleanPaymentMilestones(d.paymentMilestones)
-      return ms.length === 0 || milestonesSumTo100(ms)
+      return milestonesValidForBasis(ms, normalizeBasis(d.milestoneBasis))
     },
     {
-      message: 'Payment milestones must total 100% of the grand total',
+      message: 'Payment milestones must fully bill the grand total',
       path: ['paymentMilestones'],
     },
   )
@@ -228,7 +236,7 @@ export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   1: ['clientName', 'contactEmail', 'projectTitle', 'date', 'validUntil'],
   2: ['lineItems'],
   3: ['exchangeRate'],
-  4: ['paymentTemplateId', 'paymentMilestones'],
+  4: ['paymentTemplateId', 'paymentMilestones', 'milestoneBasis'],
   5: ['tcTemplateId'],
   6: [],
 }
@@ -298,9 +306,19 @@ export function validateWizardStep(
       messages.push('Select a payment terms template')
     }
     const ms = cleanPaymentMilestones(data.paymentMilestones)
-    if (ms.length > 0 && !milestonesSumTo100(ms)) {
-      fieldErrors.paymentMilestones = `Milestones total ${milestonesPercentTotal(ms)}% — they must add up to 100%`
-      messages.push('Payment milestones must total 100% of the grand total')
+    const basis = normalizeBasis(data.milestoneBasis)
+    if (ms.length > 0 && !milestonesValidForBasis(ms, basis)) {
+      if (basis === 'remaining') {
+        fieldErrors.paymentMilestones = `Succeeding milestones total ${remainingTailPercentTotal(
+          ms,
+        )}% — they must add up to 100% of the remaining balance`
+        messages.push('Succeeding milestones must total 100% of the remaining balance')
+      } else {
+        fieldErrors.paymentMilestones = `Milestones total ${milestonesPercentTotal(
+          ms,
+        )}% — they must add up to 100%`
+        messages.push('Payment milestones must total 100% of the grand total')
+      }
     }
   }
 

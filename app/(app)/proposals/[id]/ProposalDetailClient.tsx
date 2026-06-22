@@ -36,7 +36,11 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { formatCurrency } from '@/lib/validations/proposals'
-import { computeMilestoneAmounts, milestonesPercentTotal } from '@/lib/payment-schedule'
+import {
+  computeMilestoneAmountsForBasis,
+  milestonesPercentTotal,
+  remainingTailPercentTotal,
+} from '@/lib/payment-schedule'
 import type { ProposalDetail, ProposalVersionEntry, VersionSnapshot } from '@/lib/actions/proposals'
 import {
   approveProposal,
@@ -901,10 +905,22 @@ export function ProposalDetailClient({
           {proposal.paymentMilestones.length > 0 &&
             (() => {
               const grandTotal = parseFloat(proposal.total) || 0
-              const amounts = computeMilestoneAmounts(proposal.paymentMilestones, grandTotal)
+              const isRemaining = proposal.milestoneBasis === 'remaining'
+              const amounts = computeMilestoneAmountsForBasis(
+                proposal.paymentMilestones,
+                grandTotal,
+                proposal.milestoneBasis,
+              )
               const percentTotal = milestonesPercentTotal(proposal.paymentMilestones)
+              const tailPercentTotal = remainingTailPercentTotal(proposal.paymentMilestones)
               return (
                 <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                  {isRemaining && (
+                    <p className="px-3 pt-2 text-xs text-slate-500">
+                      The first milestone is a share of the grand total; the rest split the
+                      remaining balance.
+                    </p>
+                  )}
                   <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
@@ -923,6 +939,11 @@ export function ProposalDetailClient({
                           <td className="py-2 px-3 text-slate-500">{m.dueDate || '—'}</td>
                           <td className="py-2 px-3 text-right tabular-nums text-slate-700">
                             {m.percent}%
+                            {isRemaining && (
+                              <span className="ml-1 text-[11px] text-slate-400">
+                                {i === 0 ? 'of total' : 'of remaining'}
+                              </span>
+                            )}
                           </td>
                           <td className="py-2 px-3 text-right tabular-nums font-medium text-slate-700">
                             {formatCurrency(amounts[i])}
@@ -933,9 +954,11 @@ export function ProposalDetailClient({
                     <tfoot>
                       <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-800">
                         <td className="py-2 px-3" colSpan={2}>
-                          Total
+                          {isRemaining ? 'Total billed' : 'Total'}
                         </td>
-                        <td className="py-2 px-3 text-right tabular-nums">{percentTotal}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          {isRemaining ? `${tailPercentTotal}%` : `${percentTotal}%`}
+                        </td>
                         <td className="py-2 px-3 text-right tabular-nums">
                           {formatCurrency(grandTotal)}
                         </td>

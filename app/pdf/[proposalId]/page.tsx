@@ -6,9 +6,10 @@ import { engagementLabel } from '@/lib/validations/catalog'
 import { formatCurrency } from '@/lib/validations/proposals'
 import {
   computePaymentSchedule,
-  computeMilestoneAmounts,
+  computeMilestoneAmountsForBasis,
   milestonesPercentTotal,
   parsePaymentMilestones,
+  normalizeBasis,
   stripHtml,
 } from '@/lib/payment-schedule'
 
@@ -58,7 +59,9 @@ export default async function PdfPage({ params, searchParams }: Props) {
           orderBy: { sortOrder: 'asc' },
           include: { service: { select: { category: true } } },
         },
-        paymentTemplate: { select: { bodyRichText: true, milestones: true } },
+        paymentTemplate: {
+          select: { bodyRichText: true, milestones: true, milestoneBasis: true },
+        },
         tcTemplate: { select: { bodyRichText: true } },
       },
     }),
@@ -130,11 +133,19 @@ export default async function PdfPage({ params, searchParams }: Props) {
     proposal.paymentMilestones != null
       ? parsePaymentMilestones(proposal.paymentMilestones)
       : parsePaymentMilestones(proposal.paymentTemplate?.milestones)
+  // Basis follows the schedule in effect: the proposal's own override, else the template's.
+  const milestoneBasis =
+    proposal.paymentMilestones != null
+      ? normalizeBasis(proposal.milestoneBasis)
+      : normalizeBasis(proposal.paymentTemplate?.milestoneBasis)
   const hasManualMilestones = manualMilestones.length > 0
   const manualAmounts = hasManualMilestones
-    ? computeMilestoneAmounts(manualMilestones, total)
+    ? computeMilestoneAmountsForBasis(manualMilestones, total, milestoneBasis)
     : []
   const manualPercentTotal = milestonesPercentTotal(manualMilestones)
+  // In 'remaining' mode the upfront is row 0; the leftover pool funds the rest.
+  const manualUpfront = manualAmounts[0] ?? 0
+  const manualPool = Math.max(0, Math.round((total - manualUpfront) * 100) / 100)
 
   const paymentSchedule = hasManualMilestones
     ? null
@@ -322,6 +333,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .stable tfoot td { border-bottom: 0; border-top: 2px solid var(--primary); padding-top: 12px; }
     .sched-label { color: var(--primary); font-weight: 500; }
     .sched-total-label { color: var(--primary); font-weight: 700; }
+    .sched-basis { font-size: 10px; color: var(--muted); font-weight: 400; }
     .schedule-note { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 14px; }
 
     /* Optional add-ons */
@@ -564,7 +576,14 @@ export default async function PdfPage({ params, searchParams }: Props) {
                         <td className="col-idx">{i + 1}</td>
                         <td className="sched-label">{ms.label || `Milestone ${i + 1}`}</td>
                         <td className="sched-label">{ms.dueDate || '—'}</td>
-                        <td className="col-num">{ms.percent}%</td>
+                        <td className="col-num">
+                          {ms.percent}%
+                          {milestoneBasis === 'remaining' && (
+                            <span className="sched-basis">
+                              {i === 0 ? ' of total' : ' of remaining'}
+                            </span>
+                          )}
+                        </td>
                         <td className="col-num amount">{money(manualAmounts[i])}</td>
                       </tr>
                     ))}
@@ -575,13 +594,21 @@ export default async function PdfPage({ params, searchParams }: Props) {
                       <td className="sched-total-label" colSpan={2}>
                         Total
                       </td>
-                      <td className="col-num">{manualPercentTotal}%</td>
+                      <td className="col-num">
+                        {milestoneBasis === 'remaining' ? '' : `${manualPercentTotal}%`}
+                      </td>
                       <td className="col-num amount">{money(total)}</td>
                     </tr>
                   </tfoot>
                 </table>
                 <div className="schedule-note">
-                  Milestone billing as a share of the grand total of {money(total)}.
+                  {milestoneBasis === 'remaining'
+                    ? `The first milestone is billed as a share of the grand total of ${money(
+                        total,
+                      )}; the remaining ${money(
+                        manualPool,
+                      )} is split across the succeeding milestones.`
+                    : `Milestone billing as a share of the grand total of ${money(total)}.`}
                 </div>
               </div>
             )}

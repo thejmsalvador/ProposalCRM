@@ -25,7 +25,12 @@ import {
   type ProposalFormData,
   type LineItemExpense,
 } from '../validations/proposals'
-import { parsePaymentMilestones, milestonesSumTo100 } from '../payment-schedule'
+import {
+  parsePaymentMilestones,
+  milestonesValidForBasis,
+  normalizeBasis,
+  type MilestoneBasis,
+} from '../payment-schedule'
 
 // ─── Serialisable types ──────────────────────────────────────────────────────
 
@@ -68,6 +73,7 @@ export type PaymentTemplateOption = {
   name: string
   bodyRichText: string
   milestones: { label: string; dueDate: string; percent: number }[]
+  milestoneBasis: MilestoneBasis
   isDefault: boolean
 }
 
@@ -130,7 +136,14 @@ export async function getWizardData(): Promise<{
       }),
       prisma.paymentTemplate.findMany({
         where: { isArchived: false },
-        select: { id: true, name: true, bodyRichText: true, milestones: true, isDefault: true },
+        select: {
+          id: true,
+          name: true,
+          bodyRichText: true,
+          milestones: true,
+          milestoneBasis: true,
+          isDefault: true,
+        },
         orderBy: { name: 'asc' },
       }),
       prisma.tCTemplate.findMany({
@@ -165,6 +178,7 @@ export async function getWizardData(): Promise<{
       name: p.name,
       bodyRichText: p.bodyRichText,
       milestones: parsePaymentMilestones(p.milestones),
+      milestoneBasis: normalizeBasis(p.milestoneBasis),
       isDefault: p.isDefault,
     })),
     tcTemplates: tcTemplates.map((t) => ({
@@ -281,6 +295,8 @@ export async function saveProposalDraft(
       data.paymentMilestones == null
         ? Prisma.JsonNull
         : (cleanPaymentMilestones(data.paymentMilestones) as Prisma.InputJsonValue),
+    // null = inherit the template's calculation basis; otherwise this proposal's own.
+    milestoneBasis: data.milestoneBasis,
     tcTemplateId: data.tcTemplateId || null,
     tcOverride: data.tcOverride,
     confidentialWatermark: data.confidentialWatermark,
@@ -905,6 +921,7 @@ export type ProposalDetail = {
   introText: string | null
   paymentTermsOverride: string | null
   paymentMilestones: { label: string; dueDate: string; percent: number }[]
+  milestoneBasis: MilestoneBasis
   tcOverride: string | null
   confidentialWatermark: boolean
   hasBelowFloorPricing: boolean
@@ -954,7 +971,15 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     include: {
       createdBy: { select: { id: true, name: true, email: true, teamId: true } },
       assignedApprover: { select: { id: true, name: true } },
-      paymentTemplate: { select: { id: true, name: true, bodyRichText: true, milestones: true } },
+      paymentTemplate: {
+        select: {
+          id: true,
+          name: true,
+          bodyRichText: true,
+          milestones: true,
+          milestoneBasis: true,
+        },
+      },
       tcTemplate: { select: { id: true, name: true, bodyRichText: true } },
       lineItems: { orderBy: { sortOrder: 'asc' } },
       approvalEvents: {
@@ -1022,6 +1047,11 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       proposal.paymentMilestones != null
         ? parsePaymentMilestones(proposal.paymentMilestones)
         : parsePaymentMilestones(proposal.paymentTemplate?.milestones),
+    // Basis follows the same source as the effective schedule above.
+    milestoneBasis:
+      proposal.paymentMilestones != null
+        ? normalizeBasis(proposal.milestoneBasis)
+        : normalizeBasis(proposal.paymentTemplate?.milestoneBasis),
     tcOverride: proposal.tcOverride,
     confidentialWatermark: proposal.confidentialWatermark,
     hasBelowFloorPricing: proposal.hasBelowFloorPricing,
@@ -1160,6 +1190,7 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
         source.paymentMilestones === null
           ? Prisma.JsonNull
           : (source.paymentMilestones as Prisma.InputJsonValue),
+      milestoneBasis: source.milestoneBasis,
       tcTemplateId: source.tcTemplateId,
       tcOverride: source.tcOverride,
       confidentialWatermark: source.confidentialWatermark,
@@ -1673,8 +1704,11 @@ export async function submitExistingProposal(
     return { error: 'Terms & conditions are required' }
   }
   const milestones = parsePaymentMilestones(proposal.paymentMilestones)
-  if (milestones.length > 0 && !milestonesSumTo100(milestones)) {
-    return { error: 'Payment milestones must total 100% of the grand total' }
+  if (
+    milestones.length > 0 &&
+    !milestonesValidForBasis(milestones, normalizeBasis(proposal.milestoneBasis))
+  ) {
+    return { error: 'Payment milestones must fully bill the grand total' }
   }
   if (Number(proposal.total) <= 0) {
     return { error: 'Total must be greater than 0' }
@@ -1870,6 +1904,7 @@ export type ProposalFormDataExport = {
   paymentTemplateId: string
   paymentTermsOverride: string | null
   paymentMilestones: { id: string; label: string; dueDate: string; percent: number }[] | null
+  milestoneBasis: MilestoneBasis | null
   tcTemplateId: string
   tcOverride: string | null
   confidentialWatermark: boolean
@@ -1961,6 +1996,9 @@ export async function getProposalForEdit(
             id: `ms-${i}`,
             ...m,
           })),
+    // null = inherit the template's basis, mirroring paymentMilestones above.
+    milestoneBasis:
+      proposal.paymentMilestones == null ? null : normalizeBasis(proposal.milestoneBasis),
     tcTemplateId: proposal.tcTemplateId ?? '',
     tcOverride: proposal.tcOverride,
     confidentialWatermark: proposal.confidentialWatermark,
@@ -2064,6 +2102,13 @@ function generateChangeSummary(
   if (String(prev.proposal.paymentTermsOverride ?? '') !== String(current.proposal.paymentTermsOverride ?? '')) {
     changes.push('Payment terms overridden from template.')
   }
+  if (normalizeBasis(prev.proposal.milestoneBasis) !== normalizeBasis(current.proposal.milestoneBasis)) {
+    changes.push(
+      normalizeBasis(current.proposal.milestoneBasis) === 'remaining'
+        ? 'Payment schedule switched to split-the-remaining-balance.'
+        : 'Payment schedule switched to share-of-grand-total.',
+    )
+  }
   if (String(prev.proposal.tcOverride ?? '') !== String(current.proposal.tcOverride ?? '')) {
     changes.push('Terms & conditions overridden from template.')
   }
@@ -2139,6 +2184,7 @@ export async function restoreVersion(
           : (cleanPaymentMilestones(
               parsePaymentMilestones(sp.paymentMilestones),
             ) as Prisma.InputJsonValue),
+      milestoneBasis: sp.milestoneBasis ? String(sp.milestoneBasis) : null,
       tcTemplateId: sp.tcTemplateId ? String(sp.tcTemplateId) : null,
       tcOverride: sp.tcOverride ? String(sp.tcOverride) : null,
       confidentialWatermark: Boolean(sp.confidentialWatermark),

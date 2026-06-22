@@ -97,6 +97,9 @@ model PaymentTemplate {
   name         String
   bodyRichText String    @db.Text
   milestones   Json?
+  // How milestone percentages are calculated: 'total' (share of grand total) or
+  // 'remaining' (upfront % of total, succeeding rows % of the leftover). Null = legacy 'total'.
+  milestoneBasis String? @db.Text
   isDefault    Boolean   @default(false)
   isArchived   Boolean   @default(false)
   createdAt    DateTime  @default(now())
@@ -189,6 +192,8 @@ model Proposal {
   paymentTemplateId     String?
   paymentTermsOverride  String?        @db.Text
   paymentMilestones     Json?
+  // Calculation basis for this proposal's milestone override. Null = inherit the template's.
+  milestoneBasis        String?        @db.Text
   tcTemplateId          String?
   tcOverride            String?        @db.Text
   confidentialWatermark Boolean        @default(false)

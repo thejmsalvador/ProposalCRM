@@ -35,11 +35,17 @@ export function Step4PaymentTerms() {
   // What's shown: the override when present, otherwise the template's default.
   const effectiveMilestones = milestoneOverride ?? templateMilestones
 
+  // Calculation basis follows the same array in effect: the proposal's own when
+  // overriding, otherwise the template's. null = inherit the template's basis.
+  const basisOverride = watch('milestoneBasis')
+  const effectiveBasis = basisOverride ?? selectedTemplate?.milestoneBasis ?? 'total'
+
   function handleTemplateChange(id: string) {
     setValue('paymentTemplateId', id)
     // Reset overrides when changing template so the new template's defaults apply.
     setValue('paymentTermsOverride', null)
     setValue('paymentMilestones', null)
+    setValue('milestoneBasis', null)
   }
 
   // The single override toggle governs both the prose terms and the schedule:
@@ -52,9 +58,11 @@ export function Step4PaymentTerms() {
         'paymentMilestones',
         templateMilestones.map((m, i) => ({ id: `ms-${i}`, ...m })),
       )
+      setValue('milestoneBasis', selectedTemplate?.milestoneBasis ?? 'total')
     } else {
       setValue('paymentTermsOverride', null)
       setValue('paymentMilestones', null)
+      setValue('milestoneBasis', null)
     }
   }
 
@@ -136,12 +144,15 @@ export function Step4PaymentTerms() {
                 }
                 total={grandTotal}
                 emptyHint="No milestones for this proposal. Add a breakdown, or leave empty to print the terms text as written."
+                basis={effectiveBasis}
+                onBasisChange={(b) => setValue('milestoneBasis', b, { shouldDirty: true })}
               />
             ) : effectiveMilestones.length > 0 ? (
               <MilestoneEditor
                 milestones={effectiveMilestones.map((m, i) => ({ id: `t-${i}`, ...m }))}
                 onChange={() => {}}
                 total={grandTotal}
+                basis={effectiveBasis}
                 readOnly
               />
             ) : (

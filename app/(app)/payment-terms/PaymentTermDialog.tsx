@@ -54,12 +54,20 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
     handleSubmit,
     control,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<PaymentTermInput>({
     // Cast: the schema's .default() makes zod's input type looser than its
     // output, but the form always supplies complete defaultValues
     resolver: zodResolver(paymentTermSchema) as Resolver<PaymentTermInput>,
-    defaultValues: { name: '', bodyRichText: '', milestones: [], isDefault: false },
+    defaultValues: {
+      name: '',
+      bodyRichText: '',
+      milestones: [],
+      milestoneBasis: 'total',
+      isDefault: false,
+    },
   })
 
   useEffect(() => {
@@ -70,12 +78,21 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
               name: template.name,
               bodyRichText: template.bodyRichText,
               milestones: template.milestones.map((m, i) => ({ id: `ms-${i}`, ...m })),
+              milestoneBasis: template.milestoneBasis,
               isDefault: template.isDefault,
             }
-          : { name: '', bodyRichText: '', milestones: [], isDefault: false },
+          : {
+              name: '',
+              bodyRichText: '',
+              milestones: [],
+              milestoneBasis: 'total',
+              isDefault: false,
+            },
       )
     }
   }, [open, template, reset])
+
+  const milestoneBasis = watch('milestoneBasis')
 
   async function onSubmit(data: PaymentTermInput) {
     const result = isEdit
@@ -143,9 +160,9 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
           <div className="space-y-1.5">
             <Label>Payment Schedule</Label>
             <p className="text-xs text-[var(--color-muted)]">
-              The default breakdown for proposals using this template. Percentages must
-              total 100%. The ₱ column previews a sample {peso(PREVIEW_TOTAL)} total —
-              proposals compute it from their own grand total.
+              The default breakdown for proposals using this template. Choose how the
+              percentages are calculated. The ₱ column previews a sample {peso(PREVIEW_TOTAL)}{' '}
+              total — proposals compute it from their own grand total.
             </p>
             <Controller
               name="milestones"
@@ -157,6 +174,8 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
                   total={PREVIEW_TOTAL}
                   amountLabel="₱ of sample total"
                   emptyHint="No schedule yet. Add milestones, or leave empty to print the terms text as written."
+                  basis={milestoneBasis}
+                  onBasisChange={(b) => setValue('milestoneBasis', b, { shouldDirty: true })}
                 />
               )}
             />

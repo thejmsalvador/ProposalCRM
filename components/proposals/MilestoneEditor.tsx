@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/validations/proposals'
 import {
   milestonesPercentTotal,
-  milestonesSumTo100,
+  remainingTailPercentTotal,
+  milestonesValidForBasis,
   MILESTONE_PERCENT_TOLERANCE,
+  type MilestoneBasis,
 } from '@/lib/payment-schedule'
 
 export type EditorMilestone = {
@@ -29,6 +31,17 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
+const BASIS_OPTIONS: { value: MilestoneBasis; label: string }[] = [
+  { value: 'total', label: 'Share of grand total' },
+  { value: 'remaining', label: 'Split the remaining balance' },
+]
+
+const BASIS_HELP: Record<MilestoneBasis, string> = {
+  total: 'Each milestone is a share of the grand total; percentages must total 100%.',
+  remaining:
+    'The first milestone is a share of the grand total; the rest split the remaining balance and must total 100% of it.',
+}
+
 type Props = {
   milestones: EditorMilestone[]
   onChange: (next: EditorMilestone[]) => void
@@ -41,6 +54,10 @@ type Props = {
   readOnly?: boolean
   /** Empty-state copy shown when there are no milestones. */
   emptyHint?: string
+  /** How percentages turn into amounts. Defaults to 'total' (legacy behavior). */
+  basis?: MilestoneBasis
+  /** When provided (and not read-only), renders the basis toggle. */
+  onBasisChange?: (basis: MilestoneBasis) => void
 }
 
 export function MilestoneEditor({
@@ -50,19 +67,53 @@ export function MilestoneEditor({
   amountLabel = '₱ of Grand Total',
   readOnly = false,
   emptyHint = 'No milestones yet.',
+  basis = 'total',
+  onBasisChange,
 }: Props) {
-  const percentTotal = milestonesPercentTotal(milestones)
-  const amountTotal = round2((total * percentTotal) / 100)
   const hasMilestones = milestones.length > 0
-  const isBalanced = milestonesSumTo100(milestones)
-  const remaining = round2(100 - percentTotal)
+  const isBalanced = milestonesValidForBasis(milestones, basis)
+  const showToggle = !readOnly && !!onBasisChange
+
+  // Live, "literal" amounts (no rounding-drift redistribution) so an in-progress,
+  // not-yet-100% schedule shows each row at its true percentage. The drift-aware
+  // computeMilestoneAmountsForBasis is used by the render surfaces on validated data.
+  const firstAmount = hasMilestones
+    ? round2((total * (Number(milestones[0].percent) || 0)) / 100)
+    : 0
+  const pool = round2(total - firstAmount)
+
+  function rowAmount(index: number, percent: number): number {
+    const p = Number(percent) || 0
+    if (basis === 'remaining') {
+      return index === 0 ? round2((total * p) / 100) : round2((pool * p) / 100)
+    }
+    return round2((total * p) / 100)
+  }
+
+  // Footer total reflects the *intended* billing so a shortfall is visible.
+  const percentTotal = milestonesPercentTotal(milestones)
+  const tailPercentTotal = remainingTailPercentTotal(milestones)
+  const amountTotal =
+    basis === 'remaining'
+      ? round2(firstAmount + (pool * tailPercentTotal) / 100)
+      : round2((total * percentTotal) / 100)
+
+  // For the amber banner: how far the active percentages are from a full bill.
+  const totalRemaining = round2(100 - percentTotal)
+  const tailRemaining = round2(100 - tailPercentTotal)
 
   function update(index: number, patch: Partial<EditorMilestone>) {
     onChange(milestones.map((m, i) => (i === index ? { ...m, ...patch } : m)))
   }
 
   function add() {
-    onChange([...milestones, newMilestone(remaining > 0 ? remaining : 0)])
+    if (basis === 'remaining') {
+      // First row = upfront (user picks); later rows seed the rest of the pool.
+      const seed = milestones.length === 0 ? 0 : Math.max(0, tailRemaining)
+      onChange([...milestones, newMilestone(seed)])
+      return
+    }
+    onChange([...milestones, newMilestone(totalRemaining > 0 ? totalRemaining : 0)])
   }
 
   function remove(index: number) {
@@ -71,6 +122,44 @@ export function MilestoneEditor({
 
   return (
     <div className="space-y-3">
+      {showToggle ? (
+        <div className="space-y-1.5">
+          <div
+            className="inline-flex flex-wrap gap-0.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-slate-50 p-0.5"
+            role="group"
+            aria-label="Milestone calculation basis"
+          >
+            {BASIS_OPTIONS.map((opt) => {
+              const active = basis === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onBasisChange?.(opt.value)}
+                  className={`min-h-[36px] rounded-[calc(var(--radius-sm)-2px)] px-3 text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-white text-[var(--color-primary)] shadow-sm'
+                      : 'text-[var(--color-muted)] hover:text-[var(--color-primary)]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-[var(--color-muted)]">{BASIS_HELP[basis]}</p>
+        </div>
+      ) : (
+        readOnly &&
+        basis === 'remaining' && (
+          <p className="text-xs text-[var(--color-muted)]">
+            Calculated on the remaining balance — the first milestone is a share of the grand total;
+            the rest split the remaining balance.
+          </p>
+        )
+      )}
+
       {hasMilestones ? (
         <div className="overflow-x-auto rounded-[var(--radius-sm)] border border-[var(--color-border)]">
           <table className="w-full min-w-[640px] text-sm">
@@ -93,7 +182,11 @@ export function MilestoneEditor({
             </thead>
             <tbody>
               {milestones.map((m, idx) => {
-                const rowAmount = round2((total * (Number(m.percent) || 0)) / 100)
+                const amount = rowAmount(idx, m.percent)
+                // In 'remaining' mode the percent of row 0 and the rest mean different
+                // things, so spell out the base each row's percentage applies to.
+                const basisHint =
+                  basis === 'remaining' ? (idx === 0 ? 'of grand total' : 'of remaining') : null
                 return (
                   <tr
                     key={m.id || idx}
@@ -153,9 +246,14 @@ export function MilestoneEditor({
                           </span>
                         </div>
                       )}
+                      {basisHint && (
+                        <span className="mt-1 block text-[11px] font-normal text-[var(--color-muted)]">
+                          {basisHint}
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 px-3 align-middle text-right tabular-nums font-medium">
-                      {formatCurrency(rowAmount)}
+                      {formatCurrency(amount)}
                     </td>
                     {!readOnly && (
                       <td className="py-2 px-2 align-middle text-center">
@@ -178,18 +276,16 @@ export function MilestoneEditor({
             <tfoot>
               <tr className="border-t-2 border-[var(--color-border)] bg-slate-50 font-semibold">
                 <td className="py-2 px-3" colSpan={2}>
-                  Total
+                  {basis === 'remaining' ? 'Total billed' : 'Total'}
                 </td>
                 <td
                   className={`py-2 px-3 text-right tabular-nums ${
                     isBalanced ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
                   }`}
                 >
-                  {percentTotal}%
+                  {basis === 'remaining' ? `${tailPercentTotal}%` : `${percentTotal}%`}
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums">
-                  {formatCurrency(amountTotal)}
-                </td>
+                <td className="py-2 px-3 text-right tabular-nums">{formatCurrency(amountTotal)}</td>
                 {!readOnly && <td className="py-2 px-2" />}
               </tr>
             </tfoot>
@@ -218,17 +314,36 @@ export function MilestoneEditor({
             (isBalanced ? (
               <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
                 <CheckCircle2 size={16} className="shrink-0" />
-                <span>Milestones total 100%.</span>
+                <span>
+                  {basis === 'remaining'
+                    ? `Upfront ${formatCurrency(firstAmount)}; remaining ${formatCurrency(
+                        pool,
+                      )} fully allocated.`
+                    : 'Milestones total 100%.'}
+                </span>
               </div>
             ) : (
               <div className="flex items-start gap-2 rounded-[var(--radius-sm)] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
                 <AlertTriangle size={16} className="mt-0.5 shrink-0" />
                 <span>
-                  Milestones total {percentTotal}% —{' '}
-                  {remaining > MILESTONE_PERCENT_TOLERANCE
-                    ? `${remaining}% short of`
-                    : `${Math.abs(remaining)}% over`}{' '}
-                  100%. Adjust before saving.
+                  {basis === 'remaining' ? (
+                    <>
+                      Upfront {formatCurrency(firstAmount)}. Remaining {formatCurrency(pool)} —
+                      succeeding milestones total {tailPercentTotal}%{' '}
+                      {tailRemaining > MILESTONE_PERCENT_TOLERANCE
+                        ? `(${tailRemaining}% short of 100%)`
+                        : `(${Math.abs(tailRemaining)}% over 100%)`}
+                      . Adjust before saving.
+                    </>
+                  ) : (
+                    <>
+                      Milestones total {percentTotal}% —{' '}
+                      {totalRemaining > MILESTONE_PERCENT_TOLERANCE
+                        ? `${totalRemaining}% short of`
+                        : `${Math.abs(totalRemaining)}% over`}{' '}
+                      100%. Adjust before saving.
+                    </>
+                  )}
                 </span>
               </div>
             ))}
