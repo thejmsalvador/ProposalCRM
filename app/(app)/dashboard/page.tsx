@@ -113,15 +113,22 @@ function StatCard({
   sub,
   icon: Icon,
   iconColor = 'text-slate-400',
+  className,
 }: {
   label: string
   value: string | number
   sub?: string
   icon: React.ElementType
   iconColor?: string
+  className?: string
 }) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-white p-5 flex flex-col gap-3">
+    <div
+      className={cn(
+        'rounded-xl border border-[var(--color-border)] bg-white p-5 flex flex-col gap-3',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
           {label}
@@ -407,6 +414,7 @@ export default async function DashboardPage() {
             sub="Approved + Sent"
             icon={TrendingUp}
             iconColor="text-indigo-400"
+            className="col-span-2 lg:col-span-1"
           />
           <StatCard
             label="Active Proposals"
@@ -414,6 +422,7 @@ export default async function DashboardPage() {
             sub="Non-terminal statuses"
             icon={FileText}
             iconColor="text-blue-400"
+            className="col-span-2 lg:col-span-1"
           />
           <StatCard
             label="Won This Month"
