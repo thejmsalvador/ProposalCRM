@@ -157,7 +157,6 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       // Apply template fields
       brandName: (sp.brandName as string) || '',
       projectTitle: (sp.projectTitle as string) || '',
-      introText: (sp.introText as string) || '',
       currency: (sp.currency as string) || 'PHP',
       exchangeRate: sp.exchangeRate != null ? parseFloat(String(sp.exchangeRate)) : null,
       discountType: (sp.discountType === 'percentage' || sp.discountType === 'fixed') ? sp.discountType : null,

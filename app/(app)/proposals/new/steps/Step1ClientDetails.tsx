@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useWizard } from '../WizardContext'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RichTextEditor } from '@/components/ui/rich-text-editor-lazy'
 import { searchClients } from '@/lib/actions/clients'
 import type { ClientOption } from '@/lib/actions/clients'
 import { Building2, FolderKanban, UserPlus } from 'lucide-react'
@@ -35,7 +34,6 @@ export function Step1ClientDetails() {
   const { form } = useWizard()
   const { register, setValue, watch, formState: { errors } } = form
 
-  const introText = watch('introText')
   const clientName = watch('clientName')
   const clientId = watch('clientId')
 
@@ -371,19 +369,6 @@ export function Step1ClientDetails() {
           </div>
         </div>
       </section>
-
-      {/* Executive Summary */}
-      <div className="space-y-1.5">
-        <Label htmlFor="introText">Executive Summary / Cover Note</Label>
-        <p className="text-xs text-[var(--color-muted)]">
-          Optional introductory text that appears on the proposal cover page.
-        </p>
-        <RichTextEditor
-          value={introText}
-          onChange={(html) => setValue('introText', html)}
-          placeholder="Write a brief introduction for this proposal..."
-        />
-      </div>
     </div>
   )
 }

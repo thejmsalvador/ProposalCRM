@@ -214,19 +214,6 @@ export function Step6Review() {
           <DetailCell label="Approver" value="Auto-assigned on submit" />
         </div>
 
-        {/* Executive Summary */}
-        {data.introText && data.introText !== '<p></p>' && (
-          <div className="px-6 py-4 border-t border-[var(--color-border)]">
-            <h4 className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-2">
-              Executive Summary
-            </h4>
-            <div
-              className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: data.introText }}
-            />
-          </div>
-        )}
-
         {/* Line Items */}
         <div className="px-6 py-4 border-t border-[var(--color-border)]">
           <h4 className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-3">

@@ -129,7 +129,6 @@ export function WizardProvider({
       date: today,
       validUntil: validUntilDefault,
       assignedApproverId: '',
-      introText: '',
       lineItems: [],
       currency: systemSettings.defaultCurrency,
       exchangeRate: null,

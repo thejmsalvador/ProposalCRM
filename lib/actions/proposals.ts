@@ -283,7 +283,6 @@ export async function saveProposalDraft(
     date: data.date ? new Date(data.date) : new Date(),
     validUntil: data.validUntil ? new Date(data.validUntil) : new Date(),
     assignedApproverId: data.assignedApproverId || null,
-    introText: data.introText || null,
     currency: data.currency,
     exchangeRate: data.currency === 'PHP' ? null : data.exchangeRate ?? null,
     subtotal,
@@ -924,7 +923,6 @@ export type ProposalDetail = {
   vatRate: string | null
   total: string
   pricingNotes: string | null
-  introText: string | null
   paymentTermsOverride: string | null
   paymentMilestones: { label: string; dueDate: string; percent: number }[]
   milestoneBasis: MilestoneBasis
@@ -1051,7 +1049,6 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     vatRate: proposal.vatRate != null ? String(proposal.vatRate) : null,
     total: String(proposal.total),
     pricingNotes: proposal.pricingNotes,
-    introText: proposal.introText,
     paymentTermsOverride: proposal.paymentTermsOverride,
     // Effective schedule: the proposal's override if it has one, else the template's.
     paymentMilestones:
@@ -1195,7 +1192,6 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       vatRate: source.vatRate,
       total: source.total,
       pricingNotes: source.pricingNotes,
-      introText: source.introText,
       paymentTemplateId: source.paymentTemplateId,
       paymentTermsOverride: source.paymentTermsOverride,
       paymentMilestones:
@@ -1895,7 +1891,6 @@ export type ProposalFormDataExport = {
   date: string
   validUntil: string
   assignedApproverId: string
-  introText: string
   lineItems: {
     id: string
     serviceId: string | null
@@ -1981,7 +1976,6 @@ export async function getProposalForEdit(
     date: proposal.date.toISOString().split('T')[0],
     validUntil: proposal.validUntil.toISOString().split('T')[0],
     assignedApproverId: proposal.assignedApproverId ?? '',
-    introText: proposal.introText ?? '',
     lineItems: proposal.lineItems.map((li) => ({
       id: li.id,
       serviceId: li.serviceId,
@@ -2203,7 +2197,6 @@ export async function restoreVersion(
       vatRate: sp.vatRate != null ? new Prisma.Decimal(String(sp.vatRate)) : null,
       total: new Prisma.Decimal(String(sp.total ?? '0')),
       pricingNotes: sp.pricingNotes ? String(sp.pricingNotes) : null,
-      introText: sp.introText ? String(sp.introText) : null,
       paymentTemplateId: sp.paymentTemplateId ? String(sp.paymentTemplateId) : null,
       paymentTermsOverride: sp.paymentTermsOverride ? String(sp.paymentTermsOverride) : null,
       paymentMilestones:

@@ -251,7 +251,7 @@ export async function getClientDetail(
       },
       proposals: {
         // Slim select — the bare include dragged every column along,
-        // including the large rich-text fields (introText, tcOverride, …)
+        // including the large rich-text fields (tcOverride, …)
         select: {
           id: true,
           number: true,

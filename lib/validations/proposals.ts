@@ -143,7 +143,6 @@ export const proposalDraftSchema = z.object({
   // Approver is resolved server-side on submit (creator's default approver /
   // team manager) — no longer picked in the wizard.
   assignedApproverId: z.string().default(''),
-  introText: z.string().default(''),
 
   // Step 2
   lineItems: z.array(lineItemSchema).default([]),
@@ -202,7 +201,6 @@ export const proposalSubmitSchema = z
     validUntil: z.string().min(1, 'Valid until date is required'),
     // Resolved server-side from the creator's pre-defined approver
     assignedApproverId: z.string().default(''),
-    introText: z.string().default(''),
     lineItems: z.array(lineItemSchema).min(1, 'At least one service is required'),
     currency: z.string().default('PHP'),
     exchangeRate: z.number().nullable().default(null),

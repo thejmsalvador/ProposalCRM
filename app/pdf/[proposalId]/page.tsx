@@ -169,7 +169,6 @@ export default async function PdfPage({ params, searchParams }: Props) {
 
   // ── Page ordering (for "Page X of Y") ────────────────────────────────────────
   const order: string[] = ['cover']
-  if (proposal.introText) order.push('exec')
   if (nonOptionalItems.length > 0) order.push('scope')
   order.push('invest')
   if (paymentHtml || hasManualMilestones) order.push('payment')
@@ -289,9 +288,6 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .tc-section { break-inside: avoid; page-break-inside: avoid; }
     .tc-section + .tc-section { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
     .tc-section-title { font-size: 14px; font-weight: 600; color: var(--primary); margin: 0 0 8px; line-height: 1.3; }
-
-    /* Lead paragraph (executive summary first block) */
-    .lead { font-size: 15px; line-height: 1.6; color: var(--text); margin-bottom: 16px; }
 
     /* Scope */
     .scope-item { break-inside: avoid; page-break-inside: avoid; margin-bottom: 22px; }
@@ -419,13 +415,6 @@ export default async function PdfPage({ params, searchParams }: Props) {
             </div>
           </div>
         </section>
-
-        {/* ── 2. EXECUTIVE SUMMARY ───────────────────────────────────────────── */}
-        {proposal.introText && (
-          <Sheet pageKey="exec" title="Executive Summary">
-            <div className="rich" dangerouslySetInnerHTML={{ __html: proposal.introText }} />
-          </Sheet>
-        )}
 
         {/* ── 3. SCOPE OF WORK ───────────────────────────────────────────────── */}
         {nonOptionalItems.length > 0 && (

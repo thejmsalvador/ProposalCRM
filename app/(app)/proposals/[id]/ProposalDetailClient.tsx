@@ -169,7 +169,6 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
     projectTitle?: string
     date?: string
     validUntil?: string
-    introText?: string | null
     subtotal?: string
     discountValue?: string | null
     vatRate?: string | null
@@ -196,17 +195,6 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
           <span><span className="font-medium text-slate-700">Valid until:</span> {sp.validUntil ? fmtDate(sp.validUntil) : '—'}</span>
         </div>
       </div>
-
-      {/* Intro text */}
-      {sp.introText && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Executive Summary</p>
-          <div
-            className="prose prose-sm max-w-none text-slate-700"
-            dangerouslySetInnerHTML={{ __html: sp.introText }}
-          />
-        </div>
-      )}
 
       {/* Line items */}
       <div>
@@ -1319,17 +1307,6 @@ export function ProposalDetailClient({
           </div>
         )}
 
-        {proposal.introText && (
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">
-              Executive Summary
-            </p>
-            <div
-              className="prose prose-sm max-w-none text-slate-700"
-              dangerouslySetInnerHTML={{ __html: proposal.introText }}
-            />
-          </div>
-        )}
       </div>
 
       {/* Tabs */}

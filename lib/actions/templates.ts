@@ -42,7 +42,6 @@ export async function saveAsTemplate(
   const snapshotJson = {
     proposal: {
       projectTitle: proposal.projectTitle,
-      introText: proposal.introText,
       currency: proposal.currency,
       exchangeRate: proposal.exchangeRate != null ? String(proposal.exchangeRate) : null,
       discountType: proposal.discountType,
