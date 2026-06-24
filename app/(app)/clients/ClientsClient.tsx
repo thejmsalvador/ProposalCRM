@@ -116,7 +116,7 @@ function ClientCard({ client }: { client: ClientListItem }) {
           <p className="text-sm font-semibold text-slate-800">
             {formatPHP(client.lifetimeValue)}
           </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Lifetime</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">LTV</p>
         </div>
         <div>
           <p className="text-sm font-semibold text-green-700">{client.wonDeals}</p>
@@ -130,7 +130,7 @@ function ClientCard({ client }: { client: ClientListItem }) {
           <p className="text-sm font-semibold text-slate-800">
             {client.totalProposals === 0 ? '—' : `${client.winRate}%`}
           </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Win Rate</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">WR</p>
         </div>
       </div>
 

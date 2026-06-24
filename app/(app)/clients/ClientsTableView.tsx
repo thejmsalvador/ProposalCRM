@@ -56,10 +56,10 @@ export function ClientsTableView({ clients }: Props) {
             <TableHead>Company</TableHead>
             <TableHead>Primary Contact</TableHead>
             <TableHead>Health</TableHead>
-            <TableHead className="text-right">Lifetime Value</TableHead>
+            <TableHead className="text-right">LTV</TableHead>
             <TableHead className="text-right">Won</TableHead>
             <TableHead className="text-right">Active</TableHead>
-            <TableHead className="text-right">Win Rate</TableHead>
+            <TableHead className="text-right">WR</TableHead>
             <TableHead>Last Activity</TableHead>
           </TableRow>
         </TableHeader>
