@@ -222,19 +222,7 @@ export function TcTemplatesClient({
                       label="Resize Associated categories column"
                     />
                   </th>
-                  <th
-                    scope="col"
-                    className="text-center px-4 py-3 font-medium text-[var(--color-muted)] w-24"
-                  >
-                    Locked
-                  </th>
-                  <th
-                    scope="col"
-                    className="text-center px-4 py-3 font-medium text-[var(--color-muted)] w-24"
-                  >
-                    Status
-                  </th>
-                  <th scope="col" className="px-4 py-3 w-52">
+                  <th scope="col" className="px-4 py-3 w-36">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
@@ -279,31 +267,6 @@ export function TcTemplatesClient({
                       )}
                     </td>
 
-                    {/* Lock status */}
-                    <td className="px-4 py-3 text-center">
-                      {t.isLocked ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                          <Lock size={10} aria-hidden="true" />
-                          Locked
-                        </span>
-                      ) : (
-                        <span className="text-[var(--color-muted)] text-xs">—</span>
-                      )}
-                    </td>
-
-                    {/* Archive status */}
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          t.isArchived
-                            ? 'bg-slate-100 text-slate-500'
-                            : 'bg-green-100 text-green-700'
-                        }`}
-                      >
-                        {t.isArchived ? 'Archived' : 'Active'}
-                      </span>
-                    </td>
-
                     {/* Actions */}
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -311,26 +274,24 @@ export function TcTemplatesClient({
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="gap-1.5 min-h-[36px] text-xs"
+                          size="icon"
+                          className="min-h-[36px] min-w-[36px]"
                           onClick={() => openEdit(t)}
                           aria-label={t.isLocked ? `View ${t.name} (locked)` : `Edit ${t.name}`}
                         >
-                          <Pencil size={13} aria-hidden="true" />
-                          {t.isLocked ? 'View' : 'Edit'}
+                          <Pencil size={15} aria-hidden="true" />
                         </Button>
 
                         {/* Duplicate */}
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="gap-1.5 min-h-[36px] text-xs text-[var(--color-muted)]"
+                          size="icon"
+                          className="min-h-[36px] min-w-[36px] text-[var(--color-muted)]"
                           onClick={() => handleDuplicate(t.id)}
                           aria-label={`Duplicate ${t.name}`}
                         >
-                          <Copy size={13} aria-hidden="true" />
-                          Duplicate
+                          <Copy size={15} aria-hidden="true" />
                         </Button>
 
                         {/* Lock / Unlock — SUPER_ADMIN only */}
@@ -339,25 +300,23 @@ export function TcTemplatesClient({
                             <Button
                               type="button"
                               variant="ghost"
-                              size="sm"
-                              className="gap-1.5 min-h-[36px] text-xs text-[var(--color-muted)]"
+                              size="icon"
+                              className="min-h-[36px] min-w-[36px] text-[var(--color-muted)]"
                               onClick={() => handleUnlock(t.id)}
                               aria-label={`Unlock ${t.name}`}
                             >
-                              <LockOpen size={13} aria-hidden="true" />
-                              Unlock
+                              <LockOpen size={15} aria-hidden="true" />
                             </Button>
                           ) : (
                             <Button
                               type="button"
                               variant="ghost"
-                              size="sm"
-                              className="gap-1.5 min-h-[36px] text-xs text-[var(--color-muted)]"
+                              size="icon"
+                              className="min-h-[36px] min-w-[36px] text-[var(--color-muted)]"
                               onClick={() => handleLock(t.id)}
                               aria-label={`Lock ${t.name}`}
                             >
-                              <Lock size={13} aria-hidden="true" />
-                              Lock
+                              <Lock size={15} aria-hidden="true" />
                             </Button>
                           )
                         )}

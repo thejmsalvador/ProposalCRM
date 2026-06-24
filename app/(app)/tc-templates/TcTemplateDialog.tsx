@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Archive, RotateCcw, Plus, X } from 'lucide-react'
+import { Archive, RotateCcw, Plus, X, Lock } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import {
   Sheet,
@@ -160,6 +160,26 @@ export function TcTemplateDialog({
               ? 'Update the section. Existing proposals referencing it are unaffected.'
               : 'Create a new reusable terms & conditions section.'}
           </SheetDescription>
+
+          {isEdit && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  template!.isArchived
+                    ? 'bg-slate-100 text-slate-500'
+                    : 'bg-green-100 text-green-700'
+                }`}
+              >
+                {template!.isArchived ? 'Archived' : 'Active'}
+              </span>
+              {isLocked && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                  <Lock size={10} aria-hidden="true" />
+                  Locked
+                </span>
+              )}
+            </div>
+          )}
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
