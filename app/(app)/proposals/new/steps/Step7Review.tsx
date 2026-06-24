@@ -39,6 +39,7 @@ export function Step7Review() {
     proposalNumber,
     paymentTemplates,
     tcTemplates,
+    modesOfPayment,
     currentUser,
   } = useWizard()
   const { setValue, watch } = form
@@ -82,6 +83,12 @@ export function Step7Review() {
   // Client-side signatories rendered in the PDF "Conforme" block.
   const signatories = cleanSignatories(data.signatories).filter(isCompleteSignatory)
 
+  // Selected Modes of Payment, resolved to full bank-account details for preview.
+  const selectedModesOfPayment = (data.modesOfPayment ?? []).flatMap((m) => {
+    const account = modesOfPayment.find((a) => a.id === m.modeOfPaymentId)
+    return account ? [account] : []
+  })
+
   // Validation checklist
   const checks: CheckItem[] = [
     { label: 'Client name provided', passed: data.clientName.length >= 2 },
@@ -97,6 +104,7 @@ export function Step7Review() {
         ]
       : []),
     { label: 'Payment terms selected', passed: !!data.paymentTemplateId },
+    { label: 'At least one mode of payment selected', passed: selectedModesOfPayment.length > 0 },
     { label: 'At least one signatory added', passed: signatories.length > 0 },
     ...(hasMilestones
       ? [
@@ -373,6 +381,37 @@ export function Step7Review() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Mode of Payment */}
+        {selectedModesOfPayment.length > 0 && (
+          <div className="px-6 py-4 border-t border-[var(--color-border)]">
+            <h4 className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-3">
+              Mode of Payment
+              <span className="ml-2 text-[var(--color-muted)] font-normal normal-case tracking-normal">
+                ({selectedModesOfPayment.length} account
+                {selectedModesOfPayment.length !== 1 ? 's' : ''})
+              </span>
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {selectedModesOfPayment.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2"
+                >
+                  <p className="text-sm font-semibold text-[var(--color-primary)]">{m.label}</p>
+                  <p className="text-xs text-[var(--color-muted)]">
+                    {m.bankName} · {m.accountName}
+                  </p>
+                  <p className="text-xs text-[var(--color-muted)] tabular-nums">
+                    {m.accountNumber}
+                    {m.branch ? ` · ${m.branch}` : ''}
+                    {m.swiftCode ? ` · SWIFT ${m.swiftCode}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

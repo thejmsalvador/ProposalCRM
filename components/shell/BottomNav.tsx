@@ -10,6 +10,7 @@ import {
   Menu,
   Package,
   CreditCard,
+  Landmark,
   ScrollText,
   UserCog,
   Settings,
@@ -38,6 +39,12 @@ const OVERFLOW_ITEMS: OverflowItem[] = [
     label: 'Payment Terms',
     href: '/payment-terms',
     icon: CreditCard,
+    roles: [Role.ADMIN, Role.SUPER_ADMIN],
+  },
+  {
+    label: 'Mode of Payment',
+    href: '/mode-of-payment',
+    icon: Landmark,
     roles: [Role.ADMIN, Role.SUPER_ADMIN],
   },
   {

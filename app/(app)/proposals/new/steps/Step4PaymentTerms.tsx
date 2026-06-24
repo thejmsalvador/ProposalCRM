@@ -16,8 +16,12 @@ import { MilestoneEditor } from '@/components/proposals/MilestoneEditor'
 import { computeTotal, formatCurrency } from '@/lib/validations/proposals'
 
 export function Step4PaymentTerms() {
-  const { form, paymentTemplates } = useWizard()
-  const { setValue, watch } = form
+  const { form, paymentTemplates, modesOfPayment } = useWizard()
+  const {
+    setValue,
+    watch,
+    formState: { errors },
+  } = form
 
   const selectedId = watch('paymentTemplateId')
   const override = watch('paymentTermsOverride')
@@ -39,6 +43,17 @@ export function Step4PaymentTerms() {
   // overriding, otherwise the template's. null = inherit the template's basis.
   const basisOverride = watch('milestoneBasis')
   const effectiveBasis = basisOverride ?? selectedTemplate?.milestoneBasis ?? 'total'
+
+  // Mode of Payment — multi-select of company bank accounts (order preserved).
+  const selectedModes = watch('modesOfPayment') ?? []
+  const selectedModeIds = new Set(selectedModes.map((m) => m.modeOfPaymentId))
+
+  function toggleMode(id: string) {
+    const next = selectedModeIds.has(id)
+      ? selectedModes.filter((m) => m.modeOfPaymentId !== id)
+      : [...selectedModes, { modeOfPaymentId: id }]
+    setValue('modesOfPayment', next, { shouldDirty: true })
+  }
 
   function handleTemplateChange(id: string) {
     setValue('paymentTemplateId', id)
@@ -188,6 +203,70 @@ export function Step4PaymentTerms() {
           ) : null}
         </div>
       )}
+
+      {/* Mode of Payment — multi-select of company bank accounts */}
+      <fieldset className="space-y-3 border-t border-[var(--color-border)] pt-6">
+        <legend className="contents">
+          <h3 className="text-base font-semibold text-[var(--color-primary)]">
+            Mode of Payment <span className="text-[var(--color-danger)]">*</span>
+          </h3>
+        </legend>
+        <p className="text-sm text-[var(--color-muted)]">
+          Select the bank account(s) the client can pay to. The chosen accounts appear on the
+          proposal and PDF — pick the ones applicable to this client.
+        </p>
+
+        {modesOfPayment.length === 0 ? (
+          <div className="text-center py-8 border border-dashed border-[var(--color-border)] rounded-[var(--radius-md)]">
+            <p className="text-sm text-[var(--color-muted)]">
+              No payment accounts have been set up yet. An admin can add them under{' '}
+              <span className="font-medium">Mode of Payment</span> in the sidebar.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {modesOfPayment.map((m) => {
+              const checked = selectedModeIds.has(m.id)
+              return (
+                <label
+                  key={m.id}
+                  className={`flex items-start gap-3 rounded-[var(--radius-sm)] border px-4 py-3 cursor-pointer transition-colors min-h-[44px] ${
+                    checked
+                      ? 'border-[var(--color-accent)] bg-[var(--color-accent-light)]'
+                      : 'border-[var(--color-border)] hover:bg-[var(--color-surface)]'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+                    checked={checked}
+                    onChange={() => toggleMode(m.id)}
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-[var(--color-primary)]">
+                      {m.label}
+                    </span>
+                    <span className="block text-xs text-[var(--color-muted)]">
+                      {m.bankName} · {m.accountName} · {m.accountNumber}
+                      {m.branch ? ` · ${m.branch}` : ''}
+                      {m.swiftCode ? ` · SWIFT ${m.swiftCode}` : ''}
+                    </span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+
+        {selectedModes.length > 0 && (
+          <p className="text-xs text-[var(--color-muted)]">
+            {selectedModes.length} account{selectedModes.length !== 1 ? 's' : ''} selected
+          </p>
+        )}
+        {typeof errors.modesOfPayment?.message === 'string' && (
+          <p className="text-xs text-[var(--color-danger)]">{errors.modesOfPayment.message}</p>
+        )}
+      </fieldset>
     </div>
   )
 }

@@ -959,6 +959,51 @@ export function ProposalDetailClient({
         </div>
       </section>
 
+      {/* Mode of Payment */}
+      {proposal.modesOfPayment.length > 0 && (
+        <section>
+          <h2 className="text-base font-semibold text-slate-800 mb-3">Mode of Payment</h2>
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {proposal.modesOfPayment.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-lg border border-slate-200 px-3 py-2.5"
+                >
+                  <p className="text-sm font-semibold text-slate-800">{m.label}</p>
+                  <dl className="mt-1 space-y-0.5 text-xs text-slate-600">
+                    <div className="flex gap-1.5">
+                      <dt className="text-slate-400">Bank:</dt>
+                      <dd className="font-medium">{m.bankName}</dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-slate-400">Account Name:</dt>
+                      <dd>{m.accountName}</dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt className="text-slate-400">Account No.:</dt>
+                      <dd className="tabular-nums">{m.accountNumber}</dd>
+                    </div>
+                    {m.branch && (
+                      <div className="flex gap-1.5">
+                        <dt className="text-slate-400">Branch:</dt>
+                        <dd>{m.branch}</dd>
+                      </div>
+                    )}
+                    {m.swiftCode && (
+                      <div className="flex gap-1.5">
+                        <dt className="text-slate-400">SWIFT:</dt>
+                        <dd className="tabular-nums">{m.swiftCode}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Terms & Conditions */}
       <section>
         <h2 className="text-base font-semibold text-slate-800 mb-3">Terms & Conditions</h2>

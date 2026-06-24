@@ -56,6 +56,7 @@ import type {
   ServiceOption,
   PaymentTemplateOption,
   TCTemplateOption,
+  ModeOfPaymentOption,
   SystemSettingsData,
   CurrentUserData,
   ProposalFormDataExport,
@@ -69,6 +70,7 @@ type WizardClientProps = {
   approvers: ApproverOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
+  modesOfPayment: ModeOfPaymentOption[]
   systemSettings: SystemSettingsData
   proposalTemplates?: ProposalTemplateOption[]
   currentUser: CurrentUserData

@@ -17,6 +17,7 @@ import {
   stripHtml,
 } from '@/lib/payment-schedule'
 import { resolveTcSections } from '@/lib/tc-sections'
+import { resolveModesOfPayment } from '@/lib/mode-of-payment-sections'
 
 type Props = {
   params: { proposalId: string }
@@ -88,6 +89,10 @@ export default async function PdfPage({ params, searchParams }: Props) {
   // Legacy fallback for proposals created before the section model.
   const tcHtml = proposal.tcOverride || proposal.tcTemplate?.bodyRichText || ''
   const hasTc = tcSections.length > 0 || !!tcHtml
+
+  // Selected company bank accounts ("Mode of Payment"), shown with payment terms.
+  const modesOfPayment = await resolveModesOfPayment(proposal.modesOfPayment)
+  const hasModesOfPayment = modesOfPayment.length > 0
 
   // ── Signatories ──────────────────────────────────────────────────────────────
   // Client-side "Conforme" signatories captured in the wizard (signed off-platform).
@@ -196,7 +201,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
   const order: string[] = ['cover']
   if (nonOptionalItems.length > 0) order.push('scope')
   order.push('invest')
-  if (paymentHtml || hasManualMilestones) order.push('payment')
+  if (paymentHtml || hasManualMilestones || hasModesOfPayment) order.push('payment')
   if (hasTc) order.push('tc')
   if (hasSignatories) order.push('signatories')
   const totalPages = order.length
@@ -378,6 +383,17 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .sched-total-label { color: var(--primary); font-weight: 700; }
     .sched-basis { font-size: 10px; color: var(--muted); font-weight: 400; }
     .schedule-note { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 14px; }
+
+    /* Mode of payment (bank accounts) */
+    .mop { margin-top: 32px; break-inside: avoid; page-break-inside: avoid; }
+    .mop-head { margin-bottom: 14px; }
+    .mop-title { font-size: 15px; font-weight: 600; color: var(--primary); }
+    .mop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mop-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; break-inside: avoid; }
+    .mop-label { font-size: 12.5px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+    .mop-row { display: flex; gap: 6px; font-size: 11.5px; line-height: 1.7; }
+    .mop-row .k { color: var(--muted); white-space: nowrap; }
+    .mop-row .v { color: var(--text); }
 
     /* Optional add-ons */
     .addon-head { display: flex; align-items: center; justify-content: space-between; margin-top: 34px; margin-bottom: 14px; }
@@ -581,7 +597,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
         </Sheet>
 
         {/* ── 5. PAYMENT TERMS ───────────────────────────────────────────────── */}
-        {(paymentHtml || hasManualMilestones) && (
+        {(paymentHtml || hasManualMilestones || hasModesOfPayment) && (
           <Sheet pageKey="payment" title="Payment Terms">
             {paymentHtml && (
               <div className="rich" dangerouslySetInnerHTML={{ __html: paymentHtml }} />
@@ -711,6 +727,45 @@ export default async function PdfPage({ params, searchParams }: Props) {
                         ? `A one-time fee of ${money(scheduleOneTime)} is billed upfront in Month 1; the recurring balance is spread evenly across the ${paymentSchedule.installments.length}-month engagement.`
                         : `Equal monthly installments across the ${paymentSchedule.installments.length}-month engagement, derived from the grand total of ${money(paymentSchedule.total)}.`
                     : `Milestone billing as a share of the grand total of ${money(paymentSchedule.total)}.`}
+                </div>
+              </div>
+            )}
+
+            {hasModesOfPayment && (
+              <div className="mop">
+                <div className="mop-head">
+                  <span className="mop-title">Mode of Payment</span>
+                </div>
+                <div className="mop-grid">
+                  {modesOfPayment.map((m) => (
+                    <div key={m.id} className="mop-card">
+                      <div className="mop-label">{m.label}</div>
+                      <div className="mop-row">
+                        <span className="k">Bank:</span>
+                        <span className="v">{m.bankName}</span>
+                      </div>
+                      <div className="mop-row">
+                        <span className="k">Account Name:</span>
+                        <span className="v">{m.accountName}</span>
+                      </div>
+                      <div className="mop-row">
+                        <span className="k">Account No.:</span>
+                        <span className="v">{m.accountNumber}</span>
+                      </div>
+                      {m.branch && (
+                        <div className="mop-row">
+                          <span className="k">Branch:</span>
+                          <span className="v">{m.branch}</span>
+                        </div>
+                      )}
+                      {m.swiftCode && (
+                        <div className="mop-row">
+                          <span className="k">SWIFT Code:</span>
+                          <span className="v">{m.swiftCode}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

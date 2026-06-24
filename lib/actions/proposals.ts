@@ -24,11 +24,14 @@ import {
   cleanPaymentMilestones,
   cleanTcSections,
   parseTcSections,
+  cleanModesOfPayment,
+  parseModesOfPayment,
   cleanSignatories,
   parseSignatories,
   isCompleteSignatory,
   type ProposalFormData,
   type TcSectionFormData,
+  type ModeOfPaymentSelectionFormData,
   type Signatory,
   type SignatoryFormData,
   type LineItemExpense,
@@ -40,6 +43,7 @@ import {
   type MilestoneBasis,
 } from '../payment-schedule'
 import { resolveTcSections } from '../tc-sections'
+import { resolveModesOfPayment, type ResolvedModeOfPayment } from '../mode-of-payment-sections'
 
 // ─── Serialisable types ──────────────────────────────────────────────────────
 
@@ -93,6 +97,16 @@ export type TCTemplateOption = {
   categories: string[]
 }
 
+export type ModeOfPaymentOption = {
+  id: string
+  label: string
+  bankName: string
+  accountName: string
+  accountNumber: string
+  branch: string
+  swiftCode: string
+}
+
 export type SystemSettingsData = {
   defaultValidityDays: number
   defaultCurrency: string
@@ -114,9 +128,10 @@ export async function getWizardData(): Promise<{
   services: ServiceOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
+  modesOfPayment: ModeOfPaymentOption[]
   systemSettings: SystemSettingsData
 }> {
-  const [approvers, services, paymentTemplates, tcTemplates, settings] =
+  const [approvers, services, paymentTemplates, tcTemplates, modesOfPayment, settings] =
     await Promise.all([
       prisma.user.findMany({
         where: {
@@ -160,6 +175,10 @@ export async function getWizardData(): Promise<{
         select: { id: true, name: true, bodyRichText: true, categories: true },
         orderBy: { name: 'asc' },
       }),
+      prisma.modeOfPayment.findMany({
+        where: { isArchived: false },
+        orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      }),
       prisma.systemSettings.findFirst(),
     ])
 
@@ -195,6 +214,15 @@ export async function getWizardData(): Promise<{
       name: t.name,
       bodyRichText: t.bodyRichText,
       categories: t.categories,
+    })),
+    modesOfPayment: modesOfPayment.map((m) => ({
+      id: m.id,
+      label: m.label,
+      bankName: m.bankName,
+      accountName: m.accountName,
+      accountNumber: m.accountNumber,
+      branch: m.branch ?? '',
+      swiftCode: m.swiftCode ?? '',
     })),
     systemSettings: {
       defaultValidityDays: settings?.defaultValidityDays ?? 30,
@@ -309,6 +337,8 @@ export async function saveProposalDraft(
     tcOverride: data.tcOverride,
     // Ordered T&C section selection compiled into the PDF.
     tcSections: cleanTcSections(data.tcSections) as Prisma.InputJsonValue,
+    // Ordered Mode-of-Payment (bank account) selection shown on the PDF.
+    modesOfPayment: cleanModesOfPayment(data.modesOfPayment) as Prisma.InputJsonValue,
     // Client-side "Conforme" signatories rendered on the PDF.
     signatories: cleanSignatories(data.signatories) as Prisma.InputJsonValue,
     confidentialWatermark: data.confidentialWatermark,
@@ -948,6 +978,8 @@ export type ProposalDetail = {
   tcTemplate: { id: string; name: string; bodyRichText: string } | null
   // Resolved, ordered T&C sections (override applied) compiled into the PDF.
   tcSections: { tcTemplateId: string; name: string; html: string }[]
+  // Resolved, ordered Mode-of-Payment bank accounts shown on the PDF.
+  modesOfPayment: ResolvedModeOfPayment[]
   // Client-side "Conforme" signatories rendered on the PDF.
   signatories: Signatory[]
   lineItems: {
@@ -1020,6 +1052,8 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
 
   // Resolve the ordered T&C section selection (override applied) for display.
   const resolvedTcSections = await resolveTcSections(proposal.tcSections)
+  // Resolve the ordered Mode-of-Payment selection to full bank-account details.
+  const resolvedModesOfPayment = await resolveModesOfPayment(proposal.modesOfPayment)
 
   // Enforce visibility rules
   if (
@@ -1087,6 +1121,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     paymentTemplate: proposal.paymentTemplate,
     tcTemplate: proposal.tcTemplate,
     tcSections: resolvedTcSections,
+    modesOfPayment: resolvedModesOfPayment,
     signatories: parseSignatories(proposal.signatories),
     lineItems: proposal.lineItems.map((li) => ({
       id: li.id,
@@ -1215,6 +1250,10 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
         source.tcSections == null
           ? Prisma.JsonNull
           : (source.tcSections as Prisma.InputJsonValue),
+      modesOfPayment:
+        source.modesOfPayment == null
+          ? Prisma.JsonNull
+          : (source.modesOfPayment as Prisma.InputJsonValue),
       signatories:
         source.signatories == null
           ? Prisma.JsonNull
@@ -1736,6 +1775,9 @@ export async function submitExistingProposal(
   if (!parseSignatories(proposal.signatories).some(isCompleteSignatory)) {
     return { error: 'At least one signatory (name, position, and company) is required' }
   }
+  if (parseModesOfPayment(proposal.modesOfPayment).length === 0) {
+    return { error: 'At least one mode of payment is required' }
+  }
   const milestones = parsePaymentMilestones(proposal.paymentMilestones)
   if (
     milestones.length > 0 &&
@@ -1940,6 +1982,7 @@ export type ProposalFormDataExport = {
   tcTemplateId: string
   tcOverride: string | null
   tcSections: TcSectionFormData[]
+  modesOfPayment: ModeOfPaymentSelectionFormData[]
   signatories: SignatoryFormData[]
   confidentialWatermark: boolean
 }
@@ -2035,6 +2078,7 @@ export async function getProposalForEdit(
     tcTemplateId: proposal.tcTemplateId ?? '',
     tcOverride: proposal.tcOverride,
     tcSections: parseTcSections(proposal.tcSections),
+    modesOfPayment: parseModesOfPayment(proposal.modesOfPayment),
     signatories: parseSignatories(proposal.signatories).map((s, i) => ({
       id: `sig-${i}`,
       ...s,
@@ -2157,6 +2201,12 @@ function generateChangeSummary(
     changes.push('Terms & conditions sections updated.')
   }
   if (
+    JSON.stringify(parseModesOfPayment(prev.proposal.modesOfPayment)) !==
+    JSON.stringify(parseModesOfPayment(current.proposal.modesOfPayment))
+  ) {
+    changes.push('Modes of payment updated.')
+  }
+  if (
     JSON.stringify(parseSignatories(prev.proposal.signatories)) !==
     JSON.stringify(parseSignatories(current.proposal.signatories))
   ) {
@@ -2237,6 +2287,9 @@ export async function restoreVersion(
       tcTemplateId: sp.tcTemplateId ? String(sp.tcTemplateId) : null,
       tcOverride: sp.tcOverride ? String(sp.tcOverride) : null,
       tcSections: cleanTcSections(parseTcSections(sp.tcSections)) as Prisma.InputJsonValue,
+      modesOfPayment: cleanModesOfPayment(
+        parseModesOfPayment(sp.modesOfPayment),
+      ) as Prisma.InputJsonValue,
       signatories: cleanSignatories(parseSignatories(sp.signatories)) as Prisma.InputJsonValue,
       confidentialWatermark: Boolean(sp.confidentialWatermark),
       hasBelowFloorPricing: Boolean(sp.hasBelowFloorPricing),

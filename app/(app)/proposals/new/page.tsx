@@ -17,8 +17,10 @@ export default async function NewProposalPage({ searchParams }: Props) {
 
   const { clientId } = await searchParams
 
-  const [{ approvers, services, paymentTemplates, tcTemplates, systemSettings }, proposalTemplates] =
-    await Promise.all([getWizardData(), getProposalTemplates()])
+  const [
+    { approvers, services, paymentTemplates, tcTemplates, modesOfPayment, systemSettings },
+    proposalTemplates,
+  ] = await Promise.all([getWizardData(), getProposalTemplates()])
 
   // Pre-populate client fields if clientId is provided
   let initialValues: Record<string, unknown> | undefined
@@ -51,6 +53,7 @@ export default async function NewProposalPage({ searchParams }: Props) {
         approvers={approvers}
         paymentTemplates={paymentTemplates}
         tcTemplates={tcTemplates}
+        modesOfPayment={modesOfPayment}
         systemSettings={systemSettings}
         proposalTemplates={proposalTemplates}
         currentUser={{

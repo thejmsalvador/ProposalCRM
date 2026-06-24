@@ -166,6 +166,69 @@ async function main() {
     },
   })
 
+  // ─── Mode of Payment (company bank accounts) ─────────────────────────────────
+
+  // Selectable per proposal; rendered with the payment terms on the PDF.
+  const modesOfPayment: {
+    id: string
+    label: string
+    bankName: string
+    accountName: string
+    accountNumber: string
+    branch: string | null
+    swiftCode: string | null
+    sortOrder: number
+  }[] = [
+    {
+      id: 'seed-mop-bdo',
+      label: 'Foreign Clients (BDO)',
+      bankName: 'BDO',
+      accountName: 'Sunday Elephant Creatives Inc.',
+      accountNumber: '4170269821',
+      branch: 'Reposo, Makati',
+      swiftCode: 'BNORPHMM',
+      sortOrder: 0,
+    },
+    {
+      id: 'seed-mop-unionbank',
+      label: 'Local Clients (Union Bank)',
+      bankName: 'Union Bank',
+      accountName: 'Sunday Elephant Creatives Inc.',
+      accountNumber: '0001-3001-9033',
+      branch: 'JP Rizal, Makati',
+      swiftCode: null,
+      sortOrder: 1,
+    },
+    {
+      id: 'seed-mop-eastwest',
+      label: 'Filinvest (EastWest)',
+      bankName: 'EastWest Bank',
+      accountName: 'Sunday Elephant Creatives, Inc.',
+      accountNumber: '2000-4370-8286',
+      branch: null,
+      swiftCode: null,
+      sortOrder: 2,
+    },
+    {
+      id: 'seed-mop-robinsons',
+      label: 'URC (Robinsons Bank)',
+      bankName: 'Robinsons Bank',
+      accountName: 'Sunday Elephant Creatives, Inc.',
+      accountNumber: '1059-3010-0001-949',
+      branch: '1059 JP Rizal Makati',
+      swiftCode: null,
+      sortOrder: 3,
+    },
+  ]
+  for (const mop of modesOfPayment) {
+    const { id, ...data } = mop
+    await prisma.modeOfPayment.upsert({
+      where: { id },
+      update: data,
+      create: { id, ...data },
+    })
+  }
+
   // ─── T&C Template ────────────────────────────────────────────────────────────
 
   // Service catalog categories. Kept in one place so Services and T&C templates stay in sync.

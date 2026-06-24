@@ -10,6 +10,7 @@ import {
   Users,
   Package,
   CreditCard,
+  Landmark,
   ScrollText,
   UserCog,
   Settings,
@@ -52,6 +53,12 @@ function getNavItems(unreadCount: number): NavItem[] {
       label: 'Payment Terms',
       href: '/payment-terms',
       icon: CreditCard,
+      roles: [Role.ADMIN, Role.SUPER_ADMIN],
+    },
+    {
+      label: 'Mode of Payment',
+      href: '/mode-of-payment',
+      icon: Landmark,
       roles: [Role.ADMIN, Role.SUPER_ADMIN],
     },
     {

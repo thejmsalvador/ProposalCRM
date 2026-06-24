@@ -41,6 +41,7 @@ export default async function EditProposalPage({ params }: Props) {
         approvers={wizardData.approvers}
         paymentTemplates={wizardData.paymentTemplates}
         tcTemplates={wizardData.tcTemplates}
+        modesOfPayment={wizardData.modesOfPayment}
         systemSettings={wizardData.systemSettings}
         currentUser={{
           id: session.user.id,

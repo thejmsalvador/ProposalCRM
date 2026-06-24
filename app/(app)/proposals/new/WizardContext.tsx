@@ -23,6 +23,7 @@ import {
   type ServiceOption,
   type PaymentTemplateOption,
   type TCTemplateOption,
+  type ModeOfPaymentOption,
   type SystemSettingsData,
   type CurrentUserData,
 } from '@/lib/actions/proposals'
@@ -52,6 +53,7 @@ type WizardContextValue = {
   approvers: ApproverOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
+  modesOfPayment: ModeOfPaymentOption[]
   systemSettings: SystemSettingsData
   currentUser: CurrentUserData
 }
@@ -72,6 +74,7 @@ type WizardProviderProps = {
   approvers: ApproverOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
+  modesOfPayment: ModeOfPaymentOption[]
   systemSettings: SystemSettingsData
   currentUser: CurrentUserData
   initialValues?: Partial<ProposalFormData>
@@ -85,6 +88,7 @@ export function WizardProvider({
   approvers,
   paymentTemplates,
   tcTemplates,
+  modesOfPayment,
   systemSettings,
   currentUser,
   initialValues,
@@ -145,6 +149,7 @@ export function WizardProvider({
       tcTemplateId: '',
       tcOverride: null,
       tcSections: [],
+      modesOfPayment: [],
       signatories: [],
       confidentialWatermark: false,
       // Merge initial values last (edit mode)
@@ -273,6 +278,7 @@ export function WizardProvider({
     approvers,
     paymentTemplates,
     tcTemplates,
+    modesOfPayment,
     systemSettings,
     currentUser,
   }

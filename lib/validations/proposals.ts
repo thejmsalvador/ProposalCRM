@@ -112,6 +112,50 @@ export function parseTcSections(raw: unknown): { tcTemplateId: string; override:
   })
 }
 
+// ─── Mode of Payment selection schema ────────────────────────────────────────
+
+// One selected Mode of Payment (company bank account) on a proposal. Only the
+// library reference is stored — bank details are company-wide facts resolved at
+// render time, never retyped per proposal. Order in the array is the order
+// accounts are listed on the detail page and PDF.
+export const modeOfPaymentSelectionSchema = z.object({
+  modeOfPaymentId: z.string().default(''),
+})
+
+export type ModeOfPaymentSelectionFormData = z.infer<typeof modeOfPaymentSelectionSchema>
+
+/** Drop entries without a reference and de-duplicate, preserving order. */
+export function cleanModesOfPayment(
+  modes: { modeOfPaymentId?: string | null }[] | undefined | null,
+): { modeOfPaymentId: string }[] {
+  if (!Array.isArray(modes)) return []
+  const seen = new Set<string>()
+  const out: { modeOfPaymentId: string }[] = []
+  for (const m of modes) {
+    const id = (m.modeOfPaymentId ?? '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push({ modeOfPaymentId: id })
+  }
+  return out
+}
+
+/** Parse a stored `modesOfPayment` JSON value back into the form/array shape. */
+export function parseModesOfPayment(raw: unknown): { modeOfPaymentId: string }[] {
+  if (!Array.isArray(raw)) return []
+  return cleanModesOfPayment(
+    raw.flatMap((m) => {
+      if (m && typeof m === 'object' && 'modeOfPaymentId' in m) {
+        const o = m as Record<string, unknown>
+        return [{ modeOfPaymentId: String(o.modeOfPaymentId ?? '').trim() }]
+      }
+      // Tolerate a bare string[] shape too.
+      if (typeof m === 'string') return [{ modeOfPaymentId: m.trim() }]
+      return []
+    }),
+  )
+}
+
 // ─── Signatory schema ────────────────────────────────────────────────────────
 
 // One client-side signatory shown in the proposal's "Conforme" block. The client
@@ -223,6 +267,8 @@ export const proposalDraftSchema = z.object({
   paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
   // null = inherit the template's calculation basis; otherwise this proposal's own.
   milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
+  // Ordered multi-select of company bank accounts ("Mode of Payment") shown on the PDF.
+  modesOfPayment: z.array(modeOfPaymentSelectionSchema).default([]),
 
   // Step 5
   // Legacy single-template fields, kept for back-compat with older drafts.
@@ -274,6 +320,9 @@ export const proposalSubmitSchema = z
     paymentTermsOverride: z.string().nullable().default(null),
     paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
     milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
+    modesOfPayment: z
+      .array(modeOfPaymentSelectionSchema)
+      .min(1, 'At least one mode of payment is required'),
     tcTemplateId: z.string().default(''),
     tcOverride: z.string().nullable().default(null),
     tcSections: z
@@ -352,7 +401,7 @@ export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   ],
   2: ['lineItems'],
   3: ['exchangeRate'],
-  4: ['paymentTemplateId', 'paymentMilestones', 'milestoneBasis'],
+  4: ['paymentTemplateId', 'paymentMilestones', 'milestoneBasis', 'modesOfPayment'],
   5: ['tcSections'],
   6: ['signatories'],
   7: [],
@@ -444,6 +493,10 @@ export function validateWizardStep(
         )}% — they must add up to 100%`
         messages.push('Payment milestones must total 100% of the grand total')
       }
+    }
+    if (cleanModesOfPayment(data.modesOfPayment).length === 0) {
+      fieldErrors.modesOfPayment = 'At least one mode of payment is required'
+      messages.push('Select at least one mode of payment')
     }
   }
 

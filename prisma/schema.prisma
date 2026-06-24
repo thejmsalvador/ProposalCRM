@@ -126,6 +126,22 @@ model TCTemplate {
   proposals Proposal[]
 }
 
+// A reusable company bank account / "mode of payment". Multi-selected per
+// proposal and stored as Proposal.modesOfPayment JSON (no FK, mirroring tcSections).
+model ModeOfPayment {
+  id            String   @id @default(cuid())
+  label         String // category/label, e.g. "Foreign Clients (BDO)"
+  bankName      String
+  accountName   String
+  accountNumber String
+  branch        String?
+  swiftCode     String?
+  sortOrder     Int      @default(0)
+  isArchived    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model Client {
   id          String   @id @default(cuid())
   companyName String
@@ -202,6 +218,8 @@ model Proposal {
   // Ordered per-proposal T&C section selection: [{ tcTemplateId, override }].
   // Supersedes the single tcTemplateId/tcOverride above (kept for legacy fallback).
   tcSections            Json?
+  // Ordered per-proposal Mode-of-Payment (bank account) selection: [{ modeOfPaymentId }].
+  modesOfPayment        Json?
   // Client-side "Conforme" signatories rendered on the PDF: [{ name, position,
   // companyName }]. The client signs the printed PDF by hand (off-platform).
   signatories           Json?
