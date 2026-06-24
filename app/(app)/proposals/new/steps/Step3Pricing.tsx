@@ -252,7 +252,7 @@ export function Step3Pricing() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="currency">Client-facing Currency</Label>
-          <p className="text-xs text-[var(--color-muted)]">
+          <p className="min-h-[2rem] text-xs text-[var(--color-muted)]">
             The currency presented to the client on the proposal PDF. Items are always costed
             in ₱.
           </p>
@@ -279,6 +279,9 @@ export function Step3Pricing() {
         {currency !== 'PHP' && (
           <div className="space-y-1.5">
             <Label htmlFor="exchangeRate">Exchange Rate (₱ per 1 {currency})</Label>
+            <p className="min-h-[2rem] text-xs text-[var(--color-muted)]">
+              Converts the ₱ Grand Total into {currency} for the client-facing proposal.
+            </p>
             <Input
               id="exchangeRate"
               type="number"
@@ -289,9 +292,6 @@ export function Step3Pricing() {
                 setValueAs: (v) => (v === '' || v === null ? null : Number(v)),
               })}
             />
-            <p className="text-xs text-[var(--color-muted)]">
-              Converts the ₱ Grand Total into {currency} for the client-facing proposal.
-            </p>
             {errors.exchangeRate && (
               <p className="text-xs text-[var(--color-danger)]">
                 {errors.exchangeRate.message}
