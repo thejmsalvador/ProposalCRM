@@ -339,7 +339,7 @@ export function ClientsClient({ clients: initial, contacts, initialTab = 'compan
   const [sortKey, setSortKey] = useState<SortKey>('lifetimeValue')
   const [addOpen, setAddOpen] = useState(false)
   const [addContactOpen, setAddContactOpen] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
 
   function switchTab(tab: ClientsTab) {
     setActiveTab(tab)
@@ -354,6 +354,10 @@ export function ClientsClient({ clients: initial, contacts, initialTab = 'compan
       const stored = localStorage.getItem(VIEW_PREF_KEY)
       if (stored === 'table' || stored === 'grid') {
         setViewMode(stored)
+      } else if (window.innerWidth < 640) {
+        // No saved preference: table is the default, but fall back to cards on
+        // mobile where the table view isn't usable and the toggle is hidden.
+        setViewMode('grid')
       }
     } catch {
       // localStorage unavailable
