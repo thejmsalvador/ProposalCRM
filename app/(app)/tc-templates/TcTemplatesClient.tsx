@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useMemo, useTransition, useRef, useEffect, useCallback } from 'react'
 import { ScrollText, Plus, Lock, LockOpen, Copy, Pencil } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -17,14 +17,76 @@ type StatusFilter = 'active' | 'archived' | 'all'
 type Props = {
   templates: TcTemplateListItem[]
   serviceCategories: string[]
+  existingCategories: string[]
   isSuperAdmin: boolean
 }
 
-export function TcTemplatesClient({ templates, serviceCategories, isSuperAdmin }: Props) {
+// Resizable columns: persisted px widths for the variable-content columns.
+const COL_DEFAULTS = { name: 240, categories: 320 }
+const COL_MIN = 120
+const COL_STORAGE_KEY = 'tc-templates-col-widths'
+
+export function TcTemplatesClient({
+  templates,
+  serviceCategories,
+  existingCategories,
+  isSuperAdmin,
+}: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<TcTemplateListItem | null>(null)
   const [, startTransition] = useTransition()
+
+  // ── Column resizing ──
+  const [colWidths, setColWidths] = useState(COL_DEFAULTS)
+  const resizing = useRef<{ key: keyof typeof COL_DEFAULTS; startX: number; startW: number } | null>(
+    null,
+  )
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(COL_STORAGE_KEY)
+      if (saved) setColWidths({ ...COL_DEFAULTS, ...JSON.parse(saved) })
+    } catch {
+      /* ignore malformed storage */
+    }
+  }, [])
+
+  const onResizeMove = useCallback((e: MouseEvent) => {
+    const r = resizing.current
+    if (!r) return
+    const next = Math.max(COL_MIN, r.startW + (e.clientX - r.startX))
+    setColWidths((prev) => ({ ...prev, [r.key]: next }))
+  }, [])
+
+  const onResizeEnd = useCallback(() => {
+    resizing.current = null
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+    window.removeEventListener('mousemove', onResizeMove)
+    window.removeEventListener('mouseup', onResizeEnd)
+    setColWidths((prev) => {
+      try {
+        localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(prev))
+      } catch {
+        /* ignore */
+      }
+      return prev
+    })
+  }, [onResizeMove])
+
+  const startResize = useCallback(
+    (key: keyof typeof COL_DEFAULTS) => (e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      resizing.current = { key, startX: e.clientX, startW: colWidths[key] }
+      document.body.style.userSelect = 'none'
+      document.body.style.cursor = 'col-resize'
+      window.addEventListener('mousemove', onResizeMove)
+      window.addEventListener('mouseup', onResizeEnd)
+    },
+    [colWidths, onResizeMove, onResizeEnd],
+  )
 
   const filtered = useMemo(() => {
     return templates.filter((t) => {
@@ -86,13 +148,13 @@ export function TcTemplatesClient({ templates, serviceCategories, isSuperAdmin }
             Terms &amp; Conditions
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {templates.filter((t) => !t.isArchived).length} active template
+            {templates.filter((t) => !t.isArchived).length} active section
             {templates.filter((t) => !t.isArchived).length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button type="button" className="gap-2 min-h-[44px]" onClick={openAdd}>
           <Plus size={16} aria-hidden="true" />
-          Add template
+          Add section
         </Button>
       </div>
 
@@ -126,32 +188,39 @@ export function TcTemplatesClient({ templates, serviceCategories, isSuperAdmin }
           <ScrollText size={40} className="text-[var(--color-muted)]" aria-hidden="true" />
           <p className="text-sm text-[var(--color-muted)]">
             {statusFilter === 'archived'
-              ? 'No archived templates.'
-              : 'No T&C templates yet. Create your first one.'}
+              ? 'No archived sections.'
+              : 'No T&C sections yet. Create your first one.'}
           </p>
           {statusFilter !== 'archived' && (
             <Button type="button" size="sm" onClick={openAdd}>
-              Add template
+              Add section
             </Button>
           )}
         </div>
       ) : (
         <div className="rounded-xl border border-[var(--color-border)] bg-white overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" role="table">
+            <table className="w-full text-sm table-fixed" role="table">
               <thead>
                 <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
                   <th
                     scope="col"
-                    className="text-left px-4 py-3 font-medium text-[var(--color-muted)] w-48"
+                    style={{ width: colWidths.name }}
+                    className="relative text-left px-4 py-3 font-medium text-[var(--color-muted)]"
                   >
                     Name
+                    <ResizeHandle onMouseDown={startResize('name')} label="Resize Name column" />
                   </th>
                   <th
                     scope="col"
-                    className="text-left px-4 py-3 font-medium text-[var(--color-muted)] hidden sm:table-cell"
+                    style={{ width: colWidths.categories }}
+                    className="relative text-left px-4 py-3 font-medium text-[var(--color-muted)] hidden sm:table-cell"
                   >
                     Associated categories
+                    <ResizeHandle
+                      onMouseDown={startResize('categories')}
+                      label="Resize Associated categories column"
+                    />
                   </th>
                   <th
                     scope="col"
@@ -173,18 +242,23 @@ export function TcTemplatesClient({ templates, serviceCategories, isSuperAdmin }
               <tbody className="divide-y divide-[var(--color-border)]">
                 {filtered.map((t) => (
                   <tr key={t.id} className="hover:bg-[var(--color-surface)] transition-colors">
-                    {/* Name */}
+                    {/* Name — click to open */}
                     <td className="px-4 py-3 font-medium text-[var(--color-primary)]">
-                      <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(t)}
+                        className="flex items-center gap-2 text-left hover:text-[var(--color-accent)] hover:underline w-full min-h-[28px]"
+                        aria-label={t.isLocked ? `View ${t.name} (locked)` : `Edit ${t.name}`}
+                      >
                         {t.isLocked && (
                           <Lock
                             size={13}
                             className="text-[var(--color-muted)] shrink-0"
-                            aria-label="Locked"
+                            aria-hidden="true"
                           />
                         )}
-                        <span className="truncate max-w-[160px]">{t.name}</span>
-                      </div>
+                        <span className="break-words">{t.name}</span>
+                      </button>
                     </td>
 
                     {/* Categories */}
@@ -302,7 +376,29 @@ export function TcTemplatesClient({ templates, serviceCategories, isSuperAdmin }
         onOpenChange={setDialogOpen}
         template={editing}
         serviceCategories={serviceCategories}
+        existingCategories={existingCategories}
       />
     </div>
+  )
+}
+
+// Drag handle on a table header's right edge to resize the column.
+function ResizeHandle({
+  onMouseDown,
+  label,
+}: {
+  onMouseDown: (e: React.MouseEvent) => void
+  label: string
+}) {
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      onMouseDown={onMouseDown}
+      className="absolute top-0 right-0 h-full w-2 cursor-col-resize select-none touch-none
+                 before:absolute before:right-0 before:top-1/2 before:-translate-y-1/2 before:h-1/2
+                 before:w-px before:bg-[var(--color-border)] hover:before:bg-[var(--color-accent)]"
+    />
   )
 }

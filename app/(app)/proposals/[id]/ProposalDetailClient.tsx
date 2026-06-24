@@ -975,7 +975,21 @@ export function ProposalDetailClient({
       <section>
         <h2 className="text-base font-semibold text-slate-800 mb-3">Terms & Conditions</h2>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          {proposal.tcOverride ? (
+          {proposal.tcSections.length > 0 ? (
+            <div className="space-y-5">
+              {proposal.tcSections.map((section, i) => (
+                <div key={`${section.tcTemplateId}-${i}`}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                    {section.name}
+                  </p>
+                  <div
+                    className="prose prose-sm max-w-none text-slate-700"
+                    dangerouslySetInnerHTML={{ __html: section.html }}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : proposal.tcOverride ? (
             <div
               className="prose prose-sm max-w-none text-slate-700"
               dangerouslySetInnerHTML={{ __html: proposal.tcOverride }}

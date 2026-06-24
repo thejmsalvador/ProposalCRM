@@ -837,6 +837,15 @@ async function main() {
         '<p>Thank you for the opportunity to partner with Acme Corp on the on-site brand application rollout for this development.</p>',
       paymentTemplateId: paymentTemplate.id,
       tcTemplateId: tcCollaterals.id,
+      // New multi-select model: two sections compiled in order, the second
+      // overridden for this proposal. Demonstrates the compiled-PDF flow.
+      tcSections: [
+        { tcTemplateId: tcCollaterals.id, override: null },
+        {
+          tcTemplateId: tcStrategy.id,
+          override: `${UNIVERSAL_TC}\n<p><strong>Note for Acme Corp:</strong> Strategy deliverables for this rollout are limited to the on-site application plan.</p>`,
+        },
+      ],
       lineItems: {
         create: [
           {

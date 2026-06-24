@@ -22,7 +22,10 @@ import {
   computeTotal,
   cleanLineItemExpenses,
   cleanPaymentMilestones,
+  cleanTcSections,
+  parseTcSections,
   type ProposalFormData,
+  type TcSectionFormData,
   type LineItemExpense,
 } from '../validations/proposals'
 import {
@@ -31,6 +34,7 @@ import {
   normalizeBasis,
   type MilestoneBasis,
 } from '../payment-schedule'
+import { resolveTcSections } from '../tc-sections'
 
 // ─── Serialisable types ──────────────────────────────────────────────────────
 
@@ -299,6 +303,8 @@ export async function saveProposalDraft(
     milestoneBasis: data.milestoneBasis,
     tcTemplateId: data.tcTemplateId || null,
     tcOverride: data.tcOverride,
+    // Ordered T&C section selection compiled into the PDF.
+    tcSections: cleanTcSections(data.tcSections) as Prisma.InputJsonValue,
     confidentialWatermark: data.confidentialWatermark,
     hasBelowFloorPricing,
   }
@@ -935,6 +941,8 @@ export type ProposalDetail = {
   ceoApprovedAt: string | null
   paymentTemplate: { id: string; name: string; bodyRichText: string } | null
   tcTemplate: { id: string; name: string; bodyRichText: string } | null
+  // Resolved, ordered T&C sections (override applied) compiled into the PDF.
+  tcSections: { tcTemplateId: string; name: string; html: string }[]
   lineItems: {
     id: string
     serviceId: string | null
@@ -1003,6 +1011,9 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
 
   if (!proposal) return null
 
+  // Resolve the ordered T&C section selection (override applied) for display.
+  const resolvedTcSections = await resolveTcSections(proposal.tcSections)
+
   // Enforce visibility rules
   if (
     user.role === 'SALES_EXEC' &&
@@ -1069,6 +1080,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     ceoApprovedAt: proposal.ceoApprovedAt?.toISOString() ?? null,
     paymentTemplate: proposal.paymentTemplate,
     tcTemplate: proposal.tcTemplate,
+    tcSections: resolvedTcSections,
     lineItems: proposal.lineItems.map((li) => ({
       id: li.id,
       serviceId: li.serviceId,
@@ -1193,6 +1205,10 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       milestoneBasis: source.milestoneBasis,
       tcTemplateId: source.tcTemplateId,
       tcOverride: source.tcOverride,
+      tcSections:
+        source.tcSections == null
+          ? Prisma.JsonNull
+          : (source.tcSections as Prisma.InputJsonValue),
       confidentialWatermark: source.confidentialWatermark,
       hasBelowFloorPricing: source.hasBelowFloorPricing,
       internalNotes: source.internalNotes,
@@ -1700,8 +1716,12 @@ export async function submitExistingProposal(
   if (!proposal.paymentTemplateId && !proposal.paymentTermsOverride) {
     return { error: 'Payment terms are required' }
   }
-  if (!proposal.tcTemplateId && !proposal.tcOverride) {
-    return { error: 'Terms & conditions are required' }
+  if (
+    parseTcSections(proposal.tcSections).length === 0 &&
+    !proposal.tcTemplateId &&
+    !proposal.tcOverride
+  ) {
+    return { error: 'At least one T&C section is required' }
   }
   const milestones = parsePaymentMilestones(proposal.paymentMilestones)
   if (
@@ -1907,6 +1927,7 @@ export type ProposalFormDataExport = {
   milestoneBasis: MilestoneBasis | null
   tcTemplateId: string
   tcOverride: string | null
+  tcSections: TcSectionFormData[]
   confidentialWatermark: boolean
 }
 
@@ -2001,6 +2022,7 @@ export async function getProposalForEdit(
       proposal.paymentMilestones == null ? null : normalizeBasis(proposal.milestoneBasis),
     tcTemplateId: proposal.tcTemplateId ?? '',
     tcOverride: proposal.tcOverride,
+    tcSections: parseTcSections(proposal.tcSections),
     confidentialWatermark: proposal.confidentialWatermark,
   }
 
@@ -2112,6 +2134,12 @@ function generateChangeSummary(
   if (String(prev.proposal.tcOverride ?? '') !== String(current.proposal.tcOverride ?? '')) {
     changes.push('Terms & conditions overridden from template.')
   }
+  if (
+    JSON.stringify(parseTcSections(prev.proposal.tcSections)) !==
+    JSON.stringify(parseTcSections(current.proposal.tcSections))
+  ) {
+    changes.push('Terms & conditions sections updated.')
+  }
 
   return changes.length > 0 ? changes.join(' ') : 'No changes from previous version.'
 }
@@ -2187,6 +2215,7 @@ export async function restoreVersion(
       milestoneBasis: sp.milestoneBasis ? String(sp.milestoneBasis) : null,
       tcTemplateId: sp.tcTemplateId ? String(sp.tcTemplateId) : null,
       tcOverride: sp.tcOverride ? String(sp.tcOverride) : null,
+      tcSections: cleanTcSections(parseTcSections(sp.tcSections)) as Prisma.InputJsonValue,
       confidentialWatermark: Boolean(sp.confidentialWatermark),
       hasBelowFloorPricing: Boolean(sp.hasBelowFloorPricing),
       internalNotes: sp.internalNotes ? String(sp.internalNotes) : null,

@@ -169,6 +169,14 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       paymentTermsOverride: (sp.paymentTermsOverride as string | null) || null,
       tcTemplateId: (sp.tcTemplateId as string) || '',
       tcOverride: (sp.tcOverride as string | null) || null,
+      tcSections: Array.isArray(sp.tcSections)
+        ? (sp.tcSections as { tcTemplateId?: unknown; override?: unknown }[])
+            .filter((s) => !!s && typeof s.tcTemplateId === 'string' && s.tcTemplateId)
+            .map((s) => ({
+              tcTemplateId: String(s.tcTemplateId),
+              override: s.override == null ? null : String(s.override),
+            }))
+        : [],
       confidentialWatermark: !!(sp.confidentialWatermark),
       assignedApproverId: (sp.assignedApproverId as string) || '',
       lineItems: lineItems.map((li, idx) => ({

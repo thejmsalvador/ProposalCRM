@@ -73,6 +73,45 @@ export function cleanPaymentMilestones(
     .filter((m) => m.label !== '' || m.dueDate !== '' || m.percent > 0)
 }
 
+// ─── T&C section schema ──────────────────────────────────────────────────────
+
+// One selected T&C section on a proposal. `override` is null to inherit the
+// section's library body, or a string for a per-proposal customization. Order in
+// the array is the order sections are compiled into the PDF.
+export const tcSectionSchema = z.object({
+  tcTemplateId: z.string().default(''),
+  override: z.string().nullable().default(null),
+})
+
+export type TcSectionFormData = z.infer<typeof tcSectionSchema>
+
+/** Drop entries without a section reference before persisting. */
+export function cleanTcSections(
+  sections: { tcTemplateId?: string | null; override?: string | null }[] | undefined | null,
+): { tcTemplateId: string; override: string | null }[] {
+  if (!Array.isArray(sections)) return []
+  return sections
+    .filter((s) => !!(s.tcTemplateId ?? '').trim())
+    .map((s) => ({
+      tcTemplateId: (s.tcTemplateId ?? '').trim(),
+      override: s.override ?? null,
+    }))
+}
+
+/** Parse a stored `tcSections` JSON value back into the form/array shape. */
+export function parseTcSections(raw: unknown): { tcTemplateId: string; override: string | null }[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((s) => {
+    if (s && typeof s === 'object' && 'tcTemplateId' in s) {
+      const o = s as Record<string, unknown>
+      const id = String(o.tcTemplateId ?? '').trim()
+      if (!id) return []
+      return [{ tcTemplateId: id, override: o.override == null ? null : String(o.override) }]
+    }
+    return []
+  })
+}
+
 /** Drop blank expense rows (no label and zero amount) before persisting. */
 export function cleanLineItemExpenses(
   expenses: LineItemExpense[] | undefined | null,
@@ -130,8 +169,11 @@ export const proposalDraftSchema = z.object({
   milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
 
   // Step 5
+  // Legacy single-template fields, kept for back-compat with older drafts.
   tcTemplateId: z.string().default(''),
   tcOverride: z.string().nullable().default(null),
+  // Ordered multi-select of T&C sections compiled into the PDF.
+  tcSections: z.array(tcSectionSchema).default([]),
 
   // Step 6
   confidentialWatermark: z.boolean().default(false),
@@ -175,8 +217,11 @@ export const proposalSubmitSchema = z
     paymentTermsOverride: z.string().nullable().default(null),
     paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
     milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
-    tcTemplateId: z.string().min(1, 'Terms & conditions are required'),
+    tcTemplateId: z.string().default(''),
     tcOverride: z.string().nullable().default(null),
+    tcSections: z
+      .array(tcSectionSchema)
+      .min(1, 'At least one T&C section is required'),
     confidentialWatermark: z.boolean().default(false),
   })
   .refine(
@@ -237,7 +282,7 @@ export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   2: ['lineItems'],
   3: ['exchangeRate'],
   4: ['paymentTemplateId', 'paymentMilestones', 'milestoneBasis'],
-  5: ['tcTemplateId'],
+  5: ['tcSections'],
   6: [],
 }
 
@@ -323,9 +368,9 @@ export function validateWizardStep(
   }
 
   if (step === 5) {
-    if (!data.tcTemplateId) {
-      fieldErrors.tcTemplateId = 'Terms & conditions template is required'
-      messages.push('Select a terms & conditions template')
+    if (cleanTcSections(data.tcSections).length === 0) {
+      fieldErrors.tcSections = 'At least one T&C section is required'
+      messages.push('Select at least one terms & conditions section')
     }
   }
 

@@ -145,6 +145,7 @@ export function WizardProvider({
       milestoneBasis: null,
       tcTemplateId: '',
       tcOverride: null,
+      tcSections: [],
       confidentialWatermark: false,
       // Merge initial values last (edit mode)
       ...initialValues,

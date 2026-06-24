@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Archive, RotateCcw } from 'lucide-react'
+import { Archive, RotateCcw, Plus, X } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import {
   Sheet,
@@ -31,9 +31,16 @@ type Props = {
   onOpenChange: (open: boolean) => void
   template: TcTemplateListItem | null
   serviceCategories: string[]
+  existingCategories: string[]
 }
 
-export function TcTemplateDialog({ open, onOpenChange, template, serviceCategories }: Props) {
+export function TcTemplateDialog({
+  open,
+  onOpenChange,
+  template,
+  serviceCategories,
+  existingCategories,
+}: Props) {
   const isEdit = !!template
   const isLocked = template?.isLocked ?? false
   const [, startTransition] = useTransition()
@@ -54,6 +61,15 @@ export function TcTemplateDialog({ open, onOpenChange, template, serviceCategori
   })
 
   const selectedCategories = watch('categories')
+  const [newCategory, setNewCategory] = useState('')
+
+  // Suggestions = service categories + categories already used across sections,
+  // minus the ones already selected on this template.
+  const suggestions = Array.from(
+    new Set([...serviceCategories, ...existingCategories]),
+  )
+    .filter((c) => !(selectedCategories ?? []).includes(c))
+    .sort((a, b) => a.localeCompare(b))
 
   useEffect(() => {
     if (open) {
@@ -72,6 +88,24 @@ export function TcTemplateDialog({ open, onOpenChange, template, serviceCategori
     } else {
       setValue('categories', [...current, cat], { shouldValidate: true })
     }
+  }
+
+  function addCategory() {
+    const value = newCategory.trim()
+    if (!value) return
+    const current = selectedCategories ?? []
+    if (!current.some((c) => c.toLowerCase() === value.toLowerCase())) {
+      setValue('categories', [...current, value], { shouldValidate: true })
+    }
+    setNewCategory('')
+  }
+
+  function removeCategory(cat: string) {
+    setValue(
+      'categories',
+      (selectedCategories ?? []).filter((c) => c !== cat),
+      { shouldValidate: true },
+    )
   }
 
   async function onSubmit(data: TcTemplateInput) {
@@ -118,24 +152,24 @@ export function TcTemplateDialog({ open, onOpenChange, template, serviceCategori
         className="w-full sm:max-w-xl overflow-y-auto flex flex-col gap-0 p-0"
       >
         <SheetHeader className="px-6 py-5 border-b border-[var(--color-border)] shrink-0">
-          <SheetTitle>{isEdit ? 'Edit T&C Template' : 'Add T&C Template'}</SheetTitle>
+          <SheetTitle>{isEdit ? 'Edit T&C Section' : 'Add T&C Section'}</SheetTitle>
           <SheetDescription>
             {isLocked
-              ? 'This template is locked. Duplicate it to create an editable copy.'
+              ? 'This section is locked. Duplicate it to create an editable copy.'
               : isEdit
-              ? 'Update the template. Existing proposals referencing it are unaffected.'
-              : 'Create a new reusable terms & conditions template.'}
+              ? 'Update the section. Existing proposals referencing it are unaffected.'
+              : 'Create a new reusable terms & conditions section.'}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="tc-name">Name *</Label>
+            <Label htmlFor="tc-name">Section title *</Label>
             <Input
               id="tc-name"
               {...register('name')}
-              placeholder="e.g. Standard Digital Services T&C"
+              placeholder="e.g. Revision Policy"
               disabled={isLocked}
             />
             {errors.name && (
@@ -147,36 +181,85 @@ export function TcTemplateDialog({ open, onOpenChange, template, serviceCategori
           <div className="space-y-2">
             <Label>Associated categories</Label>
             <p className="text-xs text-[var(--color-muted)]">
-              Auto-suggests this template in the proposal wizard when the selected services match
-              these categories.
+              Used to group and filter sections in the proposal wizard, and to auto-suggest
+              sections when the selected services match these categories.
             </p>
-            {serviceCategories.length === 0 ? (
-              <p className="text-xs text-[var(--color-muted)] italic">
-                No service categories found. Add services to the catalog first.
-              </p>
-            ) : (
+
+            {/* Selected categories as removable chips */}
+            {(selectedCategories ?? []).length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {serviceCategories.map((cat) => {
-                  const checked = (selectedCategories ?? []).includes(cat)
-                  return (
+                {(selectedCategories ?? []).map((cat) => (
+                  <span
+                    key={cat}
+                    className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full text-xs font-medium bg-[var(--color-accent)] text-white"
+                  >
+                    {cat}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => removeCategory(cat)}
+                        aria-label={`Remove ${cat}`}
+                        className="rounded-full p-0.5 hover:bg-white/20"
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Add a brand-new category */}
+            {!isLocked && (
+              <div className="flex gap-2">
+                <Input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCategory()
+                    }
+                  }}
+                  placeholder="Add a category, e.g. Revision Policies"
+                  aria-label="New category"
+                  className="h-9"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 shrink-0"
+                  onClick={addCategory}
+                  disabled={!newCategory.trim()}
+                >
+                  <Plus size={14} aria-hidden="true" />
+                  Add
+                </Button>
+              </div>
+            )}
+
+            {/* Suggestions */}
+            {!isLocked && suggestions.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">
+                  Suggestions
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((cat) => (
                     <button
                       key={cat}
                       type="button"
-                      disabled={isLocked}
                       onClick={() => toggleCategory(cat)}
-                      aria-pressed={checked}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors min-h-[32px] ${
-                        checked
-                          ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white'
-                          : 'bg-white border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
-                      } disabled:opacity-50 disabled:pointer-events-none`}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border bg-white border-[var(--color-border)] text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors min-h-[32px]"
                     >
-                      {cat}
+                      + {cat}
                     </button>
-                  )
-                })}
+                  ))}
+                </div>
               </div>
             )}
+
             {errors.categories && (
               <p className="text-xs text-[var(--color-danger)]">{errors.categories.message}</p>
             )}

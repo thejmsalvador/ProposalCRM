@@ -103,7 +103,7 @@ export function Step6Review() {
           },
         ]
       : []),
-    { label: 'Terms & conditions selected', passed: !!data.tcTemplateId },
+    { label: 'Terms & conditions selected', passed: (data.tcSections ?? []).length > 0 },
   ]
   const allPassed = checks.every((c) => c.passed)
 
@@ -120,7 +120,19 @@ export function Step6Review() {
 
   // Lookup references
   const paymentTemplate = paymentTemplates.find((p) => p.id === data.paymentTemplateId)
-  const tcTemplate = tcTemplates.find((t) => t.id === data.tcTemplateId)
+  // Resolve the ordered T&C section selection (override applied) for preview.
+  const resolvedTcSections = (data.tcSections ?? []).flatMap((s) => {
+    const tpl = tcTemplates.find((t) => t.id === s.tcTemplateId)
+    if (!tpl) return []
+    return [
+      {
+        id: s.tcTemplateId,
+        name: tpl.name,
+        html: s.override != null ? s.override : tpl.bodyRichText,
+        isOverridden: s.override != null,
+      },
+    ]
+  })
 
   async function handleSaveDraft() {
     setIsSaving(true)
@@ -372,20 +384,33 @@ export function Step6Review() {
         )}
 
         {/* Terms & Conditions */}
-        {tcTemplate && (
+        {resolvedTcSections.length > 0 && (
           <div className="px-6 py-4 border-t border-[var(--color-border)]">
             <h4 className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-2">
               Terms & Conditions
-              {data.tcOverride && (
-                <Badge className="ml-2 bg-amber-100 text-amber-700 hover:bg-amber-100">Customized</Badge>
-              )}
+              <span className="ml-2 text-[var(--color-muted)] font-normal normal-case tracking-normal">
+                ({resolvedTcSections.length} section
+                {resolvedTcSections.length !== 1 ? 's' : ''})
+              </span>
             </h4>
-            <div
-              className="prose prose-sm max-w-none max-h-48 overflow-y-auto"
-              dangerouslySetInnerHTML={{
-                __html: data.tcOverride || tcTemplate.bodyRichText,
-              }}
-            />
+            <div className="max-h-64 overflow-y-auto space-y-4">
+              {resolvedTcSections.map((section) => (
+                <div key={section.id}>
+                  <p className="text-xs font-semibold text-[var(--color-primary)] mb-1">
+                    {section.name}
+                    {section.isOverridden && (
+                      <Badge className="ml-2 bg-amber-100 text-amber-700 hover:bg-amber-100">
+                        Customized
+                      </Badge>
+                    )}
+                  </p>
+                  <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: section.html }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

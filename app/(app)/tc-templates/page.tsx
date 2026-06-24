@@ -17,10 +17,17 @@ export default async function TcTemplatesPage() {
 
   const isSuperAdmin = session.user.role === Role.SUPER_ADMIN
 
+  // Custom categories already used across the section library — surfaced as
+  // suggestions in the dialog alongside the service categories.
+  const existingCategories = Array.from(
+    new Set(templates.flatMap((t) => t.categories)),
+  ).sort((a, b) => a.localeCompare(b))
+
   return (
     <TcTemplatesClient
       templates={templates}
       serviceCategories={categories}
+      existingCategories={existingCategories}
       isSuperAdmin={isSuperAdmin}
     />
   )

@@ -12,6 +12,7 @@ import {
   normalizeBasis,
   stripHtml,
 } from '@/lib/payment-schedule'
+import { resolveTcSections } from '@/lib/tc-sections'
 
 type Props = {
   params: { proposalId: string }
@@ -78,7 +79,11 @@ export default async function PdfPage({ params, searchParams }: Props) {
 
   const paymentHtml =
     proposal.paymentTermsOverride || proposal.paymentTemplate?.bodyRichText || ''
+  // New model: ordered, multi-select T&C sections compiled in order (override applied).
+  const tcSections = await resolveTcSections(proposal.tcSections)
+  // Legacy fallback for proposals created before the section model.
   const tcHtml = proposal.tcOverride || proposal.tcTemplate?.bodyRichText || ''
+  const hasTc = tcSections.length > 0 || !!tcHtml
 
   // ── Pricing maths (all stored in ₱) ──────────────────────────────────────────
   const subtotal = parseFloat(proposal.subtotal.toString())
@@ -168,7 +173,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
   if (nonOptionalItems.length > 0) order.push('scope')
   order.push('invest')
   if (paymentHtml || hasManualMilestones) order.push('payment')
-  if (tcHtml) order.push('tc')
+  if (hasTc) order.push('tc')
   const totalPages = order.length
   const pageNum = (key: string) => order.indexOf(key) + 1
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -279,6 +284,11 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .rich em { font-style: italic; }
     .rich a { color: var(--accent); text-decoration: none; }
     .rich blockquote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--muted); margin: 0 0 12px; }
+
+    /* T&C compiled sections */
+    .tc-section { break-inside: avoid; page-break-inside: avoid; }
+    .tc-section + .tc-section { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
+    .tc-section-title { font-size: 14px; font-weight: 600; color: var(--primary); margin: 0 0 8px; line-height: 1.3; }
 
     /* Lead paragraph (executive summary first block) */
     .lead { font-size: 15px; line-height: 1.6; color: var(--text); margin-bottom: 16px; }
@@ -682,9 +692,20 @@ export default async function PdfPage({ params, searchParams }: Props) {
         )}
 
         {/* ── 6. TERMS & CONDITIONS ──────────────────────────────────────────── */}
-        {tcHtml && (
+        {hasTc && (
           <Sheet pageKey="tc" title="Terms & Conditions">
-            <div className="rich" dangerouslySetInnerHTML={{ __html: tcHtml }} />
+            {tcSections.length > 0 ? (
+              <div className="tc-sections">
+                {tcSections.map((section, i) => (
+                  <div key={`${section.tcTemplateId}-${i}`} className="tc-section">
+                    <h3 className="tc-section-title">{section.name}</h3>
+                    <div className="rich" dangerouslySetInnerHTML={{ __html: section.html }} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rich" dangerouslySetInnerHTML={{ __html: tcHtml }} />
+            )}
           </Sheet>
         )}
       </div>

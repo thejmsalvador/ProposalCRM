@@ -196,6 +196,9 @@ model Proposal {
   milestoneBasis        String?        @db.Text
   tcTemplateId          String?
   tcOverride            String?        @db.Text
+  // Ordered per-proposal T&C section selection: [{ tcTemplateId, override }].
+  // Supersedes the single tcTemplateId/tcOverride above (kept for legacy fallback).
+  tcSections            Json?
   confidentialWatermark Boolean        @default(false)
   hasBelowFloorPricing  Boolean        @default(false)
   lostReason            String?

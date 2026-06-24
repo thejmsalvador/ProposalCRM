@@ -53,6 +53,7 @@ export async function saveAsTemplate(
       paymentTermsOverride: proposal.paymentTermsOverride,
       tcTemplateId: proposal.tcTemplateId,
       tcOverride: proposal.tcOverride,
+      tcSections: proposal.tcSections ?? [],
       confidentialWatermark: proposal.confidentialWatermark,
       assignedApproverId: proposal.assignedApproverId,
     },
