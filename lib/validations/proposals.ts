@@ -187,14 +187,13 @@ export const proposalSubmitSchema = z
   .object({
     clientName: z.string().min(2, 'Company name is required'),
     department: z.string().default(''),
-    contactName: z.string().default(''),
-    contactTitle: z.string().default(''),
+    contactName: z.string().min(1, 'Contact person is required'),
+    contactTitle: z.string().min(1, 'Position is required'),
     contactEmail: z
       .string()
-      .email('Invalid email address')
-      .or(z.literal(''))
-      .default(''),
-    contactPhone: z.string().default(''),
+      .min(1, 'Email address is required')
+      .email('Invalid email address'),
+    contactPhone: z.string().min(1, 'Contact number is required'),
     businessAddress: z.string().default(''),
     tin: z.string().default(''),
     brandName: z.string().default(''),
@@ -278,7 +277,16 @@ export type StepValidationResult = {
 
 /** Fields owned by each step, used to clear stale manual errors before re-validating */
 export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
-  1: ['clientName', 'contactEmail', 'projectTitle', 'date', 'validUntil'],
+  1: [
+    'clientName',
+    'contactName',
+    'contactTitle',
+    'contactEmail',
+    'contactPhone',
+    'projectTitle',
+    'date',
+    'validUntil',
+  ],
   2: ['lineItems'],
   3: ['exchangeRate'],
   4: ['paymentTemplateId', 'paymentMilestones', 'milestoneBasis'],
@@ -297,11 +305,19 @@ export function validateWizardStep(
     if (!data.clientName || data.clientName.trim().length < 2) {
       fieldErrors.clientName = 'Company name is required'
     }
-    if (
-      data.contactEmail &&
-      !z.string().email().safeParse(data.contactEmail).success
-    ) {
+    if (!data.contactName || !data.contactName.trim()) {
+      fieldErrors.contactName = 'Contact person is required'
+    }
+    if (!data.contactTitle || !data.contactTitle.trim()) {
+      fieldErrors.contactTitle = 'Position is required'
+    }
+    if (!data.contactEmail || !data.contactEmail.trim()) {
+      fieldErrors.contactEmail = 'Email address is required'
+    } else if (!z.string().email().safeParse(data.contactEmail).success) {
       fieldErrors.contactEmail = 'Invalid email address'
+    }
+    if (!data.contactPhone || !data.contactPhone.trim()) {
+      fieldErrors.contactPhone = 'Contact number is required'
     }
     if (!data.projectTitle || data.projectTitle.trim().length < 3) {
       fieldErrors.projectTitle = 'Project title is required'

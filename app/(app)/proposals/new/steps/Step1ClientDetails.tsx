@@ -210,27 +210,41 @@ export function Step1ClientDetails() {
 
           {/* Contact Person */}
           <div className="space-y-1.5">
-            <Label htmlFor="contactName">Contact Person</Label>
+            <Label htmlFor="contactName">Contact Person *</Label>
             <Input
               id="contactName"
               placeholder="e.g. Juan Dela Cruz"
+              aria-invalid={!!errors.contactName}
+              aria-describedby={errors.contactName ? 'contactName-error' : undefined}
               {...register('contactName')}
             />
+            {errors.contactName && (
+              <p id="contactName-error" className="text-xs text-[var(--color-danger)]">
+                {errors.contactName.message}
+              </p>
+            )}
           </div>
 
           {/* Position */}
           <div className="space-y-1.5">
-            <Label htmlFor="contactTitle">Position</Label>
+            <Label htmlFor="contactTitle">Position *</Label>
             <Input
               id="contactTitle"
               placeholder="e.g. Marketing Director"
+              aria-invalid={!!errors.contactTitle}
+              aria-describedby={errors.contactTitle ? 'contactTitle-error' : undefined}
               {...register('contactTitle')}
             />
+            {errors.contactTitle && (
+              <p id="contactTitle-error" className="text-xs text-[var(--color-danger)]">
+                {errors.contactTitle.message}
+              </p>
+            )}
           </div>
 
           {/* Email Address */}
           <div className="space-y-1.5">
-            <Label htmlFor="contactEmail">Email Address</Label>
+            <Label htmlFor="contactEmail">Email Address *</Label>
             <Input
               id="contactEmail"
               type="email"
@@ -248,13 +262,20 @@ export function Step1ClientDetails() {
 
           {/* Contact Number */}
           <div className="space-y-1.5">
-            <Label htmlFor="contactPhone">Contact Number</Label>
+            <Label htmlFor="contactPhone">Contact Number *</Label>
             <Input
               id="contactPhone"
               type="tel"
               placeholder="e.g. +63 917 123 4567"
+              aria-invalid={!!errors.contactPhone}
+              aria-describedby={errors.contactPhone ? 'contactPhone-error' : undefined}
               {...register('contactPhone')}
             />
+            {errors.contactPhone && (
+              <p id="contactPhone-error" className="text-xs text-[var(--color-danger)]">
+                {errors.contactPhone.message}
+              </p>
+            )}
           </div>
 
           {/* Business Address */}
