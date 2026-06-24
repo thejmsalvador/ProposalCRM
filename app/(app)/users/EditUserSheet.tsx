@@ -54,6 +54,7 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
         role: user.role as UpdateUserInput['role'],
         teamId: user.teamId ?? undefined,
         defaultApproverId: user.defaultApproverId ?? undefined,
+        signatureImageUrl: user.signatureImageUrl ?? '',
         isActive: user.isActive,
       })
     }
@@ -74,6 +75,38 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
 
   // Sales Managers for the Default Approver dropdown
   const managers = allUsers.filter((u) => u.role === 'SALES_MANAGER')
+
+  const signatureImageUrl = watch('signatureImageUrl')
+
+  // Read a chosen image as a data URI and store it on the form. Kept small (data
+  // URI in the DB) so it renders directly in the Puppeteer-generated PDF.
+  function handleSignatureFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.currentTarget.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file',
+        description: 'Choose an image file (PNG or JPG).',
+        variant: 'destructive',
+      })
+      e.currentTarget.value = ''
+      return
+    }
+    if (file.size > 500 * 1024) {
+      toast({
+        title: 'Image too large',
+        description: 'Signature image must be under 500 KB.',
+        variant: 'destructive',
+      })
+      e.currentTarget.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () =>
+      setValue('signatureImageUrl', String(reader.result), { shouldDirty: true })
+    reader.readAsDataURL(file)
+    e.currentTarget.value = ''
+  }
 
   return (
     <Sheet open={!!user} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -103,6 +136,40 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
               id="edit-job-title"
               placeholder="e.g. Account Executive"
               {...register('jobTitle')}
+            />
+          </div>
+
+          {/* Signature image */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-signature">Signature image</Label>
+            <p className="text-xs text-[var(--color-muted)]">
+              Shown on approved proposal PDFs for sign-off (e.g. COO/CEO). PNG or JPG,
+              under 500&nbsp;KB.
+            </p>
+            {signatureImageUrl ? (
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={signatureImageUrl}
+                  alt={`${user?.name ?? 'User'} signature`}
+                  className="h-16 w-auto max-w-[200px] rounded border border-[var(--color-border)] bg-white object-contain p-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setValue('signatureImageUrl', '', { shouldDirty: true })}
+                >
+                  Remove
+                </Button>
+              </div>
+            ) : null}
+            <Input
+              id="edit-signature"
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={handleSignatureFile}
+              className="cursor-pointer"
             />
           </div>
 

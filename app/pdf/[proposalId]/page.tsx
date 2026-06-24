@@ -3,7 +3,11 @@ import { createHmac } from 'crypto'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { engagementLabel } from '@/lib/validations/catalog'
-import { formatCurrency } from '@/lib/validations/proposals'
+import {
+  formatCurrency,
+  parseSignatories,
+  isCompleteSignatory,
+} from '@/lib/validations/proposals'
 import {
   computePaymentSchedule,
   computeMilestoneAmountsForBasis,
@@ -84,6 +88,27 @@ export default async function PdfPage({ params, searchParams }: Props) {
   // Legacy fallback for proposals created before the section model.
   const tcHtml = proposal.tcOverride || proposal.tcTemplate?.bodyRichText || ''
   const hasTc = tcSections.length > 0 || !!tcHtml
+
+  // ── Signatories ──────────────────────────────────────────────────────────────
+  // Client-side "Conforme" signatories captured in the wizard (signed off-platform).
+  const signatories = parseSignatories(proposal.signatories).filter(isCompleteSignatory)
+  // Internal/agency sign-off: the actual COO + CEO who approved, with their stored
+  // signature image. Only resolved once both have signed (status APPROVED).
+  const approverIds = [proposal.cooApprovedById, proposal.ceoApprovedById].filter(
+    (id): id is string => !!id,
+  )
+  const approverRows =
+    proposal.status === 'APPROVED' && approverIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: approverIds } },
+          select: { id: true, name: true, jobTitle: true, signatureImageUrl: true },
+        })
+      : []
+  // Preserve COO-then-CEO order (findMany returns no guaranteed order).
+  const internalSignatories = approverIds
+    .map((id) => approverRows.find((u) => u.id === id))
+    .filter((u): u is (typeof approverRows)[number] => !!u)
+  const hasSignatories = signatories.length > 0 || internalSignatories.length > 0
 
   // ── Pricing maths (all stored in ₱) ──────────────────────────────────────────
   const subtotal = parseFloat(proposal.subtotal.toString())
@@ -173,6 +198,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
   order.push('invest')
   if (paymentHtml || hasManualMilestones) order.push('payment')
   if (hasTc) order.push('tc')
+  if (hasSignatories) order.push('signatories')
   const totalPages = order.length
   const pageNum = (key: string) => order.indexOf(key) + 1
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -288,6 +314,17 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .tc-section { break-inside: avoid; page-break-inside: avoid; }
     .tc-section + .tc-section { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
     .tc-section-title { font-size: 14px; font-weight: 600; color: var(--primary); margin: 0 0 8px; line-height: 1.3; }
+
+    /* Signatories */
+    .sig-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+    .sig-col-head { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 28px; }
+    .sig-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 40px; }
+    .sig-mark { height: 64px; display: flex; align-items: flex-end; }
+    .sig-mark img { max-height: 64px; max-width: 240px; object-fit: contain; }
+    .sig-line { border-bottom: 1px solid var(--primary); width: 100%; margin-top: auto; }
+    .sig-name { font-size: 13.5px; font-weight: 700; color: var(--primary); margin-top: 8px; }
+    .sig-company { font-size: 12px; color: var(--text); margin-top: 2px; }
+    .sig-position { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
     /* Scope */
     .scope-item { break-inside: avoid; page-break-inside: avoid; margin-bottom: 22px; }
@@ -695,6 +732,49 @@ export default async function PdfPage({ params, searchParams }: Props) {
             ) : (
               <div className="rich" dangerouslySetInnerHTML={{ __html: tcHtml }} />
             )}
+          </Sheet>
+        )}
+
+        {/* ── 7. SIGNATORIES ─────────────────────────────────────────────────── */}
+        {hasSignatories && (
+          <Sheet pageKey="signatories" title="Signatories">
+            <div className="sig-cols">
+              {internalSignatories.length > 0 && (
+                <div className="sig-agency">
+                  <div className="sig-col-head">For {agencyName}</div>
+                  {internalSignatories.map((u) => (
+                    <div key={u.id} className="sig-block">
+                      <div className="sig-mark">
+                        {u.signatureImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={u.signatureImageUrl} alt={`${u.name} signature`} />
+                        ) : (
+                          <div className="sig-line" />
+                        )}
+                      </div>
+                      <div className="sig-name">{u.name}</div>
+                      <div className="sig-company">{agencyName}</div>
+                      {u.jobTitle && <div className="sig-position">{u.jobTitle}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {signatories.length > 0 && (
+                <div className="sig-client">
+                  <div className="sig-col-head">Conforme:</div>
+                  {signatories.map((s, i) => (
+                    <div key={i} className="sig-block">
+                      <div className="sig-mark">
+                        <div className="sig-line" />
+                      </div>
+                      <div className="sig-name">{s.name}</div>
+                      <div className="sig-company">{s.companyName}</div>
+                      <div className="sig-position">{s.position}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </Sheet>
         )}
       </div>

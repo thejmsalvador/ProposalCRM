@@ -42,8 +42,12 @@ const Step5TermsConditions = dynamic(
   () => import('./steps/Step5TermsConditions').then((m) => m.Step5TermsConditions),
   { ssr: false, loading: () => <StepSkeleton /> },
 )
-const Step6Review = dynamic(
-  () => import('./steps/Step6Review').then((m) => m.Step6Review),
+const Step6Signatories = dynamic(
+  () => import('./steps/Step6Signatories').then((m) => m.Step6Signatories),
+  { ssr: false, loading: () => <StepSkeleton /> },
+)
+const Step7Review = dynamic(
+  () => import('./steps/Step7Review').then((m) => m.Step7Review),
   { ssr: false, loading: () => <StepSkeleton /> },
 )
 import { Button } from '@/components/ui/button'
@@ -133,7 +137,8 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
     import('./steps/Step3Pricing')
     import('./steps/Step4PaymentTerms')
     import('./steps/Step5TermsConditions')
-    import('./steps/Step6Review')
+    import('./steps/Step6Signatories')
+    import('./steps/Step7Review')
   }, [])
 
   function applyTemplate(template: ProposalTemplateOption) {
@@ -312,7 +317,8 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
         {currentStep === 3 && <Step3Pricing />}
         {currentStep === 4 && <Step4PaymentTerms />}
         {currentStep === 5 && <Step5TermsConditions />}
-        {currentStep === 6 && <Step6Review />}
+        {currentStep === 6 && <Step6Signatories />}
+        {currentStep === 7 && <Step7Review />}
       </div>
 
       {/* Step validation errors */}
@@ -334,7 +340,7 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       )}
 
       {/* Navigation */}
-      {currentStep < 6 && (
+      {currentStep < 7 && (
         <>
           {/* Desktop inline nav */}
           <div className="hidden sm:flex justify-between pt-4 border-t border-[var(--color-border)]">

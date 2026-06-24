@@ -24,8 +24,13 @@ import {
   cleanPaymentMilestones,
   cleanTcSections,
   parseTcSections,
+  cleanSignatories,
+  parseSignatories,
+  isCompleteSignatory,
   type ProposalFormData,
   type TcSectionFormData,
+  type Signatory,
+  type SignatoryFormData,
   type LineItemExpense,
 } from '../validations/proposals'
 import {
@@ -304,6 +309,8 @@ export async function saveProposalDraft(
     tcOverride: data.tcOverride,
     // Ordered T&C section selection compiled into the PDF.
     tcSections: cleanTcSections(data.tcSections) as Prisma.InputJsonValue,
+    // Client-side "Conforme" signatories rendered on the PDF.
+    signatories: cleanSignatories(data.signatories) as Prisma.InputJsonValue,
     confidentialWatermark: data.confidentialWatermark,
     hasBelowFloorPricing,
   }
@@ -941,6 +948,8 @@ export type ProposalDetail = {
   tcTemplate: { id: string; name: string; bodyRichText: string } | null
   // Resolved, ordered T&C sections (override applied) compiled into the PDF.
   tcSections: { tcTemplateId: string; name: string; html: string }[]
+  // Client-side "Conforme" signatories rendered on the PDF.
+  signatories: Signatory[]
   lineItems: {
     id: string
     serviceId: string | null
@@ -1078,6 +1087,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     paymentTemplate: proposal.paymentTemplate,
     tcTemplate: proposal.tcTemplate,
     tcSections: resolvedTcSections,
+    signatories: parseSignatories(proposal.signatories),
     lineItems: proposal.lineItems.map((li) => ({
       id: li.id,
       serviceId: li.serviceId,
@@ -1205,6 +1215,10 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
         source.tcSections == null
           ? Prisma.JsonNull
           : (source.tcSections as Prisma.InputJsonValue),
+      signatories:
+        source.signatories == null
+          ? Prisma.JsonNull
+          : (source.signatories as Prisma.InputJsonValue),
       confidentialWatermark: source.confidentialWatermark,
       hasBelowFloorPricing: source.hasBelowFloorPricing,
       internalNotes: source.internalNotes,
@@ -1719,6 +1733,9 @@ export async function submitExistingProposal(
   ) {
     return { error: 'At least one T&C section is required' }
   }
+  if (!parseSignatories(proposal.signatories).some(isCompleteSignatory)) {
+    return { error: 'At least one signatory (name, position, and company) is required' }
+  }
   const milestones = parsePaymentMilestones(proposal.paymentMilestones)
   if (
     milestones.length > 0 &&
@@ -1923,6 +1940,7 @@ export type ProposalFormDataExport = {
   tcTemplateId: string
   tcOverride: string | null
   tcSections: TcSectionFormData[]
+  signatories: SignatoryFormData[]
   confidentialWatermark: boolean
 }
 
@@ -2017,6 +2035,10 @@ export async function getProposalForEdit(
     tcTemplateId: proposal.tcTemplateId ?? '',
     tcOverride: proposal.tcOverride,
     tcSections: parseTcSections(proposal.tcSections),
+    signatories: parseSignatories(proposal.signatories).map((s, i) => ({
+      id: `sig-${i}`,
+      ...s,
+    })),
     confidentialWatermark: proposal.confidentialWatermark,
   }
 
@@ -2134,6 +2156,12 @@ function generateChangeSummary(
   ) {
     changes.push('Terms & conditions sections updated.')
   }
+  if (
+    JSON.stringify(parseSignatories(prev.proposal.signatories)) !==
+    JSON.stringify(parseSignatories(current.proposal.signatories))
+  ) {
+    changes.push('Signatories updated.')
+  }
 
   return changes.length > 0 ? changes.join(' ') : 'No changes from previous version.'
 }
@@ -2209,6 +2237,7 @@ export async function restoreVersion(
       tcTemplateId: sp.tcTemplateId ? String(sp.tcTemplateId) : null,
       tcOverride: sp.tcOverride ? String(sp.tcOverride) : null,
       tcSections: cleanTcSections(parseTcSections(sp.tcSections)) as Prisma.InputJsonValue,
+      signatories: cleanSignatories(parseSignatories(sp.signatories)) as Prisma.InputJsonValue,
       confidentialWatermark: Boolean(sp.confidentialWatermark),
       hasBelowFloorPricing: Boolean(sp.hasBelowFloorPricing),
       internalNotes: sp.internalNotes ? String(sp.internalNotes) : null,

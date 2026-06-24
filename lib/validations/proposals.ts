@@ -112,6 +112,63 @@ export function parseTcSections(raw: unknown): { tcTemplateId: string; override:
   })
 }
 
+// ─── Signatory schema ────────────────────────────────────────────────────────
+
+// One client-side signatory shown in the proposal's "Conforme" block. The client
+// signs the printed PDF by hand, so no signature image is captured here — only the
+// printed identity (name, position, company). Lenient defaults keep blank draft
+// rows from breaking auto-save; entirely-blank rows are pruned by cleanSignatories
+// before persisting, and a row only counts toward the "at least one signatory"
+// submit requirement once all three fields are filled (isCompleteSignatory).
+export const signatorySchema = z.object({
+  id: z.string().default(''),
+  name: z.string().default(''),
+  position: z.string().default(''),
+  companyName: z.string().default(''),
+})
+
+export type SignatoryFormData = z.infer<typeof signatorySchema>
+
+export type Signatory = { name: string; position: string; companyName: string }
+
+/** Drop entirely-blank rows; keep partially-filled ones so drafts persist work. */
+export function cleanSignatories(
+  signatories:
+    | { name?: string | null; position?: string | null; companyName?: string | null }[]
+    | undefined
+    | null,
+): Signatory[] {
+  if (!Array.isArray(signatories)) return []
+  return signatories
+    .map((s) => ({
+      name: (s.name ?? '').trim(),
+      position: (s.position ?? '').trim(),
+      companyName: (s.companyName ?? '').trim(),
+    }))
+    .filter((s) => s.name !== '' || s.position !== '' || s.companyName !== '')
+}
+
+/** A signatory is complete (renderable / counts toward submit) when all fields are set. */
+export function isCompleteSignatory(s: Signatory): boolean {
+  return s.name !== '' && s.position !== '' && s.companyName !== ''
+}
+
+/** Parse a stored `signatories` JSON value back into the form/array shape. */
+export function parseSignatories(raw: unknown): Signatory[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((s) => {
+    if (s && typeof s === 'object') {
+      const o = s as Record<string, unknown>
+      const name = String(o.name ?? '').trim()
+      const position = String(o.position ?? '').trim()
+      const companyName = String(o.companyName ?? '').trim()
+      if (!name && !position && !companyName) return []
+      return [{ name, position, companyName }]
+    }
+    return []
+  })
+}
+
 /** Drop blank expense rows (no label and zero amount) before persisting. */
 export function cleanLineItemExpenses(
   expenses: LineItemExpense[] | undefined | null,
@@ -174,7 +231,10 @@ export const proposalDraftSchema = z.object({
   // Ordered multi-select of T&C sections compiled into the PDF.
   tcSections: z.array(tcSectionSchema).default([]),
 
-  // Step 6
+  // Step 6 — Signatories (client-side "Conforme" signers; signed off-platform)
+  signatories: z.array(signatorySchema).default([]),
+
+  // Step 7 — Review
   confidentialWatermark: z.boolean().default(false),
 })
 
@@ -219,6 +279,7 @@ export const proposalSubmitSchema = z
     tcSections: z
       .array(tcSectionSchema)
       .min(1, 'At least one T&C section is required'),
+    signatories: z.array(signatorySchema).default([]),
     confidentialWatermark: z.boolean().default(false),
   })
   .refine(
@@ -260,6 +321,10 @@ export const proposalSubmitSchema = z
       path: ['paymentMilestones'],
     },
   )
+  .refine((d) => cleanSignatories(d.signatories).some(isCompleteSignatory), {
+    message: 'At least one signatory (name, position, and company) is required',
+    path: ['signatories'],
+  })
 
 // ─── Per-step wizard validation ──────────────────────────────────────────────
 // Gates forward navigation in the proposal wizard: each step's required fields
@@ -289,7 +354,8 @@ export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   3: ['exchangeRate'],
   4: ['paymentTemplateId', 'paymentMilestones', 'milestoneBasis'],
   5: ['tcSections'],
-  6: [],
+  6: ['signatories'],
+  7: [],
 }
 
 export function validateWizardStep(
@@ -385,6 +451,14 @@ export function validateWizardStep(
     if (cleanTcSections(data.tcSections).length === 0) {
       fieldErrors.tcSections = 'At least one T&C section is required'
       messages.push('Select at least one terms & conditions section')
+    }
+  }
+
+  if (step === 6) {
+    const complete = cleanSignatories(data.signatories).filter(isCompleteSignatory)
+    if (complete.length === 0) {
+      fieldErrors.signatories = 'At least one signatory is required'
+      messages.push('Add at least one signatory with a name, position, and company')
     }
   }
 

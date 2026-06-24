@@ -9,7 +9,8 @@ const STEPS = [
   { number: 3, label: 'Pricing' },
   { number: 4, label: 'Payment Terms' },
   { number: 5, label: 'T&C' },
-  { number: 6, label: 'Review' },
+  { number: 6, label: 'Signatories' },
+  { number: 7, label: 'Review' },
 ]
 
 type Props = {
@@ -66,7 +67,7 @@ export function StepIndicator({ currentStep, onStepClick }: Props) {
       {/* Mobile */}
       <div className="sm:hidden flex items-center justify-between px-1">
         <span className="text-sm font-medium text-[var(--color-primary)]">
-          Step {currentStep} of 6
+          Step {currentStep} of {STEPS.length}
         </span>
         <span className="text-sm text-[var(--color-muted)]">
           {STEPS[currentStep - 1].label}

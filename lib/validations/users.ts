@@ -16,6 +16,9 @@ export const updateUserSchema = z.object({
   role: z.enum(['SALES_EXEC', 'SALES_MANAGER', 'COO', 'CEO', 'ADMIN', 'SUPER_ADMIN']),
   teamId: z.string().optional(),
   defaultApproverId: z.string().optional(),
+  // Sign-off signature image stored as a data URI (or empty to clear). Shown on
+  // approved proposal PDFs for internal approvers (COO/CEO).
+  signatureImageUrl: z.string().optional(),
   isActive: z.boolean(),
 })
 

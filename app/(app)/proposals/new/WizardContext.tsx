@@ -145,6 +145,7 @@ export function WizardProvider({
       tcTemplateId: '',
       tcOverride: null,
       tcSections: [],
+      signatories: [],
       confidentialWatermark: false,
       // Merge initial values last (edit mode)
       ...initialValues,
@@ -175,7 +176,7 @@ export function WizardProvider({
   // the user lands on the first incomplete step with its errors shown.
   const setStep = useCallback(
     (target: number) => {
-      if (target < 1 || target > 6) return
+      if (target < 1 || target > 7) return
       if (target <= currentStep) {
         setStepError(null)
         setCurrentStep(target)

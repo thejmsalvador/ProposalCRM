@@ -41,6 +41,9 @@ model User {
   role              Role      @default(SALES_EXEC)
   jobTitle          String?
   avatarUrl         String?
+  // Sign-off signature image (data URI) shown on approved proposal PDFs for
+  // internal approvers (COO/CEO). Optional; uploaded in the Users admin.
+  signatureImageUrl String?
   teamId            String?
   defaultApproverId String?
   isActive          Boolean   @default(true)
@@ -199,6 +202,9 @@ model Proposal {
   // Ordered per-proposal T&C section selection: [{ tcTemplateId, override }].
   // Supersedes the single tcTemplateId/tcOverride above (kept for legacy fallback).
   tcSections            Json?
+  // Client-side "Conforme" signatories rendered on the PDF: [{ name, position,
+  // companyName }]. The client signs the printed PDF by hand (off-platform).
+  signatories           Json?
   confidentialWatermark Boolean        @default(false)
   hasBelowFloorPricing  Boolean        @default(false)
   lostReason            String?

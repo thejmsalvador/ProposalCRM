@@ -14,6 +14,8 @@ import {
   computeTotal,
   formatCurrency,
   cleanPaymentMilestones,
+  cleanSignatories,
+  isCompleteSignatory,
 } from '@/lib/validations/proposals'
 import {
   milestonesPercentTotal,
@@ -28,7 +30,7 @@ type CheckItem = {
   passed: boolean
 }
 
-export function Step6Review() {
+export function Step7Review() {
   const {
     form,
     saveDraft,
@@ -77,6 +79,9 @@ export function Step6Review() {
     ? computeMilestoneAmountsForBasis(milestones, total, effectiveBasis)
     : []
 
+  // Client-side signatories rendered in the PDF "Conforme" block.
+  const signatories = cleanSignatories(data.signatories).filter(isCompleteSignatory)
+
   // Validation checklist
   const checks: CheckItem[] = [
     { label: 'Client name provided', passed: data.clientName.length >= 2 },
@@ -92,6 +97,7 @@ export function Step6Review() {
         ]
       : []),
     { label: 'Payment terms selected', passed: !!data.paymentTemplateId },
+    { label: 'At least one signatory added', passed: signatories.length > 0 },
     ...(hasMilestones
       ? [
           {
@@ -398,6 +404,34 @@ export function Step6Review() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Signatories */}
+        {signatories.length > 0 && (
+          <div className="px-6 py-4 border-t border-[var(--color-border)]">
+            <h4 className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-3">
+              Signatories
+              <span className="ml-2 text-[var(--color-muted)] font-normal normal-case tracking-normal">
+                (client-side &ldquo;Conforme&rdquo;)
+              </span>
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {signatories.map((s, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2"
+                >
+                  <p className="text-sm font-semibold text-[var(--color-primary)]">{s.name}</p>
+                  <p className="text-xs text-[var(--color-muted)]">{s.companyName}</p>
+                  <p className="text-xs text-[var(--color-muted)]">{s.position}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-[var(--color-muted)] mt-3">
+              Your internal approvers (COO and CEO) are added automatically once the proposal
+              is approved.
+            </p>
           </div>
         )}
       </div>

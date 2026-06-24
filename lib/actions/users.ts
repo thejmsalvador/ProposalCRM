@@ -27,6 +27,7 @@ export type UserListItem = {
   teamId: string | null
   teamName: string | null
   defaultApproverId: string | null
+  signatureImageUrl: string | null
   isActive: boolean
   lastLoginAt: string | null
   createdAt: string
@@ -56,6 +57,7 @@ export async function getUsers(): Promise<UserListItem[]> {
     teamId: u.teamId,
     teamName: u.team?.name ?? null,
     defaultApproverId: u.defaultApproverId,
+    signatureImageUrl: u.signatureImageUrl,
     isActive: u.isActive,
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),
@@ -163,6 +165,7 @@ export async function updateUser(
       role: data.role as Role,
       teamId: data.teamId || null,
       defaultApproverId: data.defaultApproverId || null,
+      signatureImageUrl: data.signatureImageUrl || null,
       isActive: data.isActive,
     },
   })
