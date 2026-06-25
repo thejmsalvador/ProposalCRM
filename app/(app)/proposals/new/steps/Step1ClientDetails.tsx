@@ -84,6 +84,7 @@ export function Step1ClientDetails() {
   function selectClient(client: ClientOption) {
     setValue('clientId', client.id)
     setValue('clientName', client.companyName)
+    if (client.accountCode) setValue('accountCode', client.accountCode.toUpperCase())
     const primary = client.primaryContact
     if (primary?.contactName) setValue('contactName', primary.contactName)
     if (primary?.contactTitle) setValue('contactTitle', primary.contactTitle)
@@ -194,6 +195,23 @@ export function Step1ClientDetails() {
                 {errors.clientName.message}
               </p>
             )}
+          </div>
+
+          {/* Account Code */}
+          <div className="space-y-1.5">
+            <Label htmlFor="accountCode">Account Code</Label>
+            <Input
+              id="accountCode"
+              placeholder="e.g. SUNB"
+              autoCapitalize="characters"
+              {...register('accountCode')}
+              onChange={(e) =>
+                setValue('accountCode', e.target.value.toUpperCase(), { shouldDirty: true })
+              }
+            />
+            <p className="text-xs text-[var(--color-muted)]">
+              Short internal code for this client (usually 3–5 letters).
+            </p>
           </div>
 
           {/* Department */}

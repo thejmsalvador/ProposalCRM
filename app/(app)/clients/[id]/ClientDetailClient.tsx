@@ -572,6 +572,7 @@ function EditClientSheet({
 }) {
   const [form, setForm] = useState({
     companyName: client.companyName,
+    accountCode: client.accountCode ?? '',
     industry: client.industry ?? '',
     website: client.website ?? '',
     address: client.address ?? '',
@@ -606,6 +607,20 @@ function EditClientSheet({
               value={form.companyName}
               onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ec-account-code">Account Code</Label>
+            <Input
+              id="ec-account-code"
+              value={form.accountCode}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, accountCode: e.target.value.toUpperCase() }))
+              }
+              placeholder="e.g. SUNB"
+            />
+            <p className="text-xs text-slate-500">
+              Short internal code (usually 3–5 letters).
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ec-industry">Industry</Label>
@@ -713,7 +728,14 @@ export function ClientDetailClient({ client: initial, currentUserId, currentUser
             {client.companyName.charAt(0).toUpperCase()}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{client.companyName}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-slate-900">{client.companyName}</h1>
+              {client.accountCode && (
+                <span className="inline-block text-xs font-mono font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">
+                  {client.accountCode}
+                </span>
+              )}
+            </div>
             {client.industry && (
               <span className="inline-block mt-0.5 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                 {client.industry}
@@ -936,6 +958,12 @@ export function ClientDetailClient({ client: initial, currentUserId, currentUser
               </button>
             </div>
             <div className="space-y-2 text-sm">
+              {client.accountCode && (
+                <div>
+                  <span className="text-slate-500 text-xs">Account Code</span>
+                  <p className="text-slate-800 font-mono">{client.accountCode}</p>
+                </div>
+              )}
               {client.industry && (
                 <div>
                   <span className="text-slate-500 text-xs">Industry</span>
@@ -969,7 +997,7 @@ export function ClientDetailClient({ client: initial, currentUserId, currentUser
                   <p className="text-slate-700 whitespace-pre-line text-xs">{client.notes}</p>
                 </div>
               )}
-              {!client.industry && !client.website && !client.address && !client.notes && (
+              {!client.accountCode && !client.industry && !client.website && !client.address && !client.notes && (
                 <p className="text-slate-400 text-xs italic">No company details added yet.</p>
               )}
             </div>

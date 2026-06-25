@@ -121,6 +121,7 @@ export function WizardProvider({
     defaultValues: {
       clientId: null,
       clientName: '',
+      accountCode: '',
       department: '',
       contactName: '',
       contactTitle: '',

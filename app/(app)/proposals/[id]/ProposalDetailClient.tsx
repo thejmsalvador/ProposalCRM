@@ -1305,9 +1305,13 @@ export function ProposalDetailClient({
                   .join(' · ')}
               </p>
             )}
-            {(proposal.businessAddress || proposal.tin) && (
+            {(proposal.businessAddress || proposal.tin || proposal.accountCode) && (
               <p className="text-xs text-slate-400">
-                {[proposal.businessAddress, proposal.tin && `TIN: ${proposal.tin}`]
+                {[
+                  proposal.accountCode && `Account: ${proposal.accountCode}`,
+                  proposal.businessAddress,
+                  proposal.tin && `TIN: ${proposal.tin}`,
+                ]
                   .filter(Boolean)
                   .join(' · ')}
               </p>

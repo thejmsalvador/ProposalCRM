@@ -76,13 +76,20 @@ export function ClientsTableView({ clients }: Props) {
                     {client.companyName.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <Link
-                      href={`/clients/${client.id}`}
-                      className="font-medium text-slate-900 hover:text-indigo-600 truncate block"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {client.companyName}
-                    </Link>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link
+                        href={`/clients/${client.id}`}
+                        className="font-medium text-slate-900 hover:text-indigo-600 truncate"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {client.companyName}
+                      </Link>
+                      {client.accountCode && (
+                        <span className="shrink-0 text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
+                          {client.accountCode}
+                        </span>
+                      )}
+                    </div>
                     {client.industry && (
                       <p className="text-xs text-slate-500 truncate">{client.industry}</p>
                     )}

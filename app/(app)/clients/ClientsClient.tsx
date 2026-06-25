@@ -86,9 +86,16 @@ function ClientCard({ client }: { client: ClientListItem }) {
             {client.companyName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-slate-900 truncate leading-snug">
-              {client.companyName}
-            </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="font-semibold text-slate-900 truncate leading-snug">
+                {client.companyName}
+              </p>
+              {client.accountCode && (
+                <span className="shrink-0 text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
+                  {client.accountCode}
+                </span>
+              )}
+            </div>
             {client.industry && (
               <span className="inline-block mt-0.5 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                 {client.industry}
@@ -188,6 +195,7 @@ const INDUSTRY_SUGGESTIONS = [
 
 type ClientForm = {
   companyName: string
+  accountCode: string
   industry: string
   website: string
   address: string
@@ -196,6 +204,7 @@ type ClientForm = {
 
 const emptyForm: ClientForm = {
   companyName: '',
+  accountCode: '',
   industry: '',
   website: '',
   address: '',
@@ -223,6 +232,7 @@ function AddClientSheet({
     setIsSaving(true)
     const result = await createClient({
       companyName: form.companyName.trim(),
+      accountCode: form.accountCode.trim() || undefined,
       industry: form.industry || undefined,
       website: form.website || undefined,
       address: form.address || undefined,
@@ -254,6 +264,20 @@ function AddClientSheet({
               onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
               placeholder="e.g. Acme Corp"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-account-code">Account Code</Label>
+            <Input
+              id="add-account-code"
+              value={form.accountCode}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, accountCode: e.target.value.toUpperCase() }))
+              }
+              placeholder="e.g. SUNB"
+            />
+            <p className="text-xs text-slate-500">
+              Short internal code (usually 3–5 letters).
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="add-industry">Industry</Label>

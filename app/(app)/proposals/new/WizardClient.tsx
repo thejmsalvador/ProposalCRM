@@ -153,6 +153,7 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       // Reset client fields
       clientId: null,
       clientName: '',
+      accountCode: '',
       department: '',
       contactName: '',
       contactTitle: '',

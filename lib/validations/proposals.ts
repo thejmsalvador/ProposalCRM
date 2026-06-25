@@ -229,6 +229,8 @@ export const proposalDraftSchema = z.object({
   // Step 1 — Client Details
   clientId: z.string().nullable().default(null),
   clientName: z.string().default(''),
+  // Short internal account code for the client (e.g. "SUNB"). Optional.
+  accountCode: z.string().default(''),
   department: z.string().default(''),
   contactName: z.string().default(''),
   contactTitle: z.string().default(''),
@@ -291,6 +293,7 @@ export type ProposalFormData = z.infer<typeof proposalDraftSchema>
 export const proposalSubmitSchema = z
   .object({
     clientName: z.string().min(2, 'Company name is required'),
+    accountCode: z.string().default(''),
     department: z.string().default(''),
     contactName: z.string().min(1, 'Contact person is required'),
     contactTitle: z.string().min(1, 'Position is required'),

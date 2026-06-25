@@ -197,6 +197,7 @@ export function Step7Review() {
           )}
           <p className="text-sm text-[var(--color-muted)] mt-0.5">
             Prepared for {data.clientName || '—'}
+            {data.accountCode ? ` (${data.accountCode})` : ''}
             {data.department ? ` — ${data.department}` : ''}
           </p>
           {data.contactName && (

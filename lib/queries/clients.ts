@@ -8,6 +8,7 @@ export type HealthStatus = 'Active' | 'Dormant' | 'Lapsed'
 export type ClientListItem = {
   id: string
   companyName: string
+  accountCode: string | null
   industry: string | null
   website: string | null
   totalProposals: number
@@ -151,6 +152,7 @@ export async function getClientList(
     select: {
       id: true,
       companyName: true,
+      accountCode: true,
       industry: true,
       website: true,
       createdAt: true,
@@ -214,6 +216,7 @@ export async function getClientList(
     return {
       id: c.id,
       companyName: c.companyName,
+      accountCode: c.accountCode,
       industry: c.industry,
       website: c.website,
       totalProposals: stats.totalProposals,
@@ -303,6 +306,7 @@ export async function getClientDetail(
   return {
     id: client.id,
     companyName: client.companyName,
+    accountCode: client.accountCode,
     industry: client.industry,
     website: client.website,
     address: client.address,

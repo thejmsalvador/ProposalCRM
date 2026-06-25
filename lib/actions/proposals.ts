@@ -304,6 +304,7 @@ export async function saveProposalDraft(
   const proposalData = {
     clientId: data.clientId || null,
     clientName: data.clientName || 'Untitled',
+    accountCode: data.accountCode.trim().toUpperCase() || null,
     contactName: data.contactName || null,
     contactTitle: data.contactTitle || null,
     department: data.department || null,
@@ -452,6 +453,7 @@ export async function saveProposalDraft(
         email: data.contactEmail,
         phone: data.contactPhone,
         businessAddress: data.businessAddress,
+        accountCode: data.accountCode,
       },
       session.user.id,
     ).catch(() => {/* non-critical, don't block save */})
@@ -940,6 +942,7 @@ export type ProposalDetail = {
   number: string
   version: number
   clientName: string
+  accountCode: string | null
   contactName: string | null
   contactTitle: string | null
   department: string | null
@@ -1072,6 +1075,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     number: proposal.number,
     version: proposal.version,
     clientName: proposal.clientName,
+    accountCode: proposal.accountCode,
     contactName: proposal.contactName,
     contactTitle: proposal.contactTitle,
     department: proposal.department,
@@ -1216,6 +1220,7 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       version: 1,
       status: 'DRAFT',
       clientName: '',
+      accountCode: source.accountCode,
       contactName: source.contactName,
       contactTitle: source.contactTitle,
       department: source.department,
@@ -1938,6 +1943,7 @@ export async function getPendingApprovals(): Promise<PendingApprovalItem[]> {
 export type ProposalFormDataExport = {
   clientId: string | null
   clientName: string
+  accountCode: string
   contactName: string
   contactTitle: string
   department: string
@@ -2025,6 +2031,7 @@ export async function getProposalForEdit(
   const formData: ProposalFormDataExport = {
     clientId: proposal.clientId ?? null,
     clientName: proposal.clientName,
+    accountCode: proposal.accountCode ?? '',
     contactName: proposal.contactName ?? '',
     contactTitle: proposal.contactTitle ?? '',
     department: proposal.department ?? '',
@@ -2255,6 +2262,7 @@ export async function restoreVersion(
       version: nextVersionNumber,
       status: 'DRAFT',
       clientName: String(sp.clientName ?? ''),
+      accountCode: sp.accountCode ? String(sp.accountCode) : null,
       contactName: sp.contactName ? String(sp.contactName) : null,
       contactTitle: sp.contactTitle ? String(sp.contactTitle) : null,
       department: sp.department ? String(sp.department) : null,

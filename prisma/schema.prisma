@@ -145,6 +145,9 @@ model ModeOfPayment {
 model Client {
   id          String   @id @default(cuid())
   companyName String
+  // Short internal account code (e.g. "SUNB" for Sunrise Beverages). Free-form,
+  // typically 3–5 letters; used for naming conventions. Not client-facing.
+  accountCode String?
   industry    String?
   website     String?
   address     String?
@@ -181,6 +184,8 @@ model Proposal {
   version               Int            @default(1)
   clientId              String?
   clientName            String
+  // Snapshot of the client's account code at proposal time (see Client.accountCode).
+  accountCode           String?
   contactName           String?
   contactTitle          String?
   department            String?

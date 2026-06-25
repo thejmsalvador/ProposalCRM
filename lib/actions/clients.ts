@@ -11,6 +11,7 @@ import { logAudit } from '@/lib/audit'
 export type ClientOption = {
   id: string
   companyName: string
+  accountCode: string | null
   industry: string | null
   primaryContact: {
     contactName: string | null
@@ -25,6 +26,7 @@ export type ClientOption = {
 
 const clientSchema = z.object({
   companyName: z.string().min(1, 'Company name is required'),
+  accountCode: z.string().optional(),
   industry: z.string().optional(),
   website: z
     .string()
@@ -61,7 +63,7 @@ export async function createClient(
   const parsed = clientSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
-  const { companyName, industry, website, address, notes } = parsed.data
+  const { companyName, accountCode, industry, website, address, notes } = parsed.data
 
   const existing = await prisma.client.findFirst({
     where: { companyName: { equals: companyName.trim(), mode: 'insensitive' } },
@@ -71,6 +73,7 @@ export async function createClient(
   const client = await prisma.client.create({
     data: {
       companyName: companyName.trim(),
+      accountCode: accountCode?.trim().toUpperCase() || null,
       industry: industry || null,
       website: website || null,
       address: address || null,
@@ -99,12 +102,13 @@ export async function updateClient(
   const existing = await prisma.client.findUnique({ where: { id } })
   if (!existing) return { error: 'Client not found' }
 
-  const { companyName, industry, website, address, notes } = parsed.data
+  const { companyName, accountCode, industry, website, address, notes } = parsed.data
 
   await prisma.client.update({
     where: { id },
     data: {
       companyName: companyName.trim(),
+      accountCode: accountCode?.trim().toUpperCase() || null,
       industry: industry || null,
       website: website || null,
       address: address || null,
@@ -307,6 +311,7 @@ export async function searchClients(query: string): Promise<ClientOption[]> {
   return clients.map((c) => ({
     id: c.id,
     companyName: c.companyName,
+    accountCode: c.accountCode,
     industry: c.industry,
     primaryContact: c.contacts[0]
       ? {
@@ -332,6 +337,8 @@ type ProposalContactInfo = {
   phone: string
   /** Company-level business address — synced onto the Client record. */
   businessAddress: string
+  /** Company-level account code — synced onto the Client record. */
+  accountCode: string
 }
 
 export async function syncClientFromProposal(
@@ -356,6 +363,7 @@ export async function syncClientFromProposal(
             companyName: companyName.trim(),
             createdById,
             address: contact.businessAddress.trim() || null,
+            accountCode: contact.accountCode.trim().toUpperCase() || null,
           },
         })
       ).id
@@ -365,12 +373,22 @@ export async function syncClientFromProposal(
       .catch(() => {/* non-critical */})
   }
 
-  // Keep the company's business address current when one is provided
-  if (resolvedClientId && contact.businessAddress.trim()) {
+  // Keep the company's business address and account code current when provided
+  if (
+    resolvedClientId &&
+    (contact.businessAddress.trim() || contact.accountCode.trim())
+  ) {
     await prisma.client
       .update({
         where: { id: resolvedClientId },
-        data: { address: contact.businessAddress.trim() },
+        data: {
+          ...(contact.businessAddress.trim()
+            ? { address: contact.businessAddress.trim() }
+            : {}),
+          ...(contact.accountCode.trim()
+            ? { accountCode: contact.accountCode.trim().toUpperCase() }
+            : {}),
+        },
       })
       .catch(() => {/* non-critical */})
   }

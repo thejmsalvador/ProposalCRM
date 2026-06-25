@@ -36,6 +36,7 @@ export default async function NewProposalPage({ searchParams }: Props) {
       initialValues = {
         clientId: client.id,
         clientName: client.companyName,
+        accountCode: client.accountCode ?? '',
         contactName: primary?.contactName ?? '',
         contactTitle: primary?.contactTitle ?? '',
         department: primary?.department ?? '',
