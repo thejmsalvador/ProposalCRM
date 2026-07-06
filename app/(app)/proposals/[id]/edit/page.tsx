@@ -38,7 +38,6 @@ export default async function EditProposalPage({ params }: Props) {
       </div>
       <WizardClient
         services={wizardData.services}
-        approvers={wizardData.approvers}
         paymentTemplates={wizardData.paymentTemplates}
         tcTemplates={wizardData.tcTemplates}
         modesOfPayment={wizardData.modesOfPayment}

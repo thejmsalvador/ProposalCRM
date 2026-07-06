@@ -18,7 +18,7 @@ export default async function NewProposalPage({ searchParams }: Props) {
   const { clientId } = await searchParams
 
   const [
-    { approvers, services, paymentTemplates, tcTemplates, modesOfPayment, systemSettings },
+    { services, paymentTemplates, tcTemplates, modesOfPayment, systemSettings },
     proposalTemplates,
   ] = await Promise.all([getWizardData(), getProposalTemplates()])
 
@@ -51,7 +51,6 @@ export default async function NewProposalPage({ searchParams }: Props) {
     <div className="p-4 sm:p-6 lg:p-8">
       <WizardClient
         services={services}
-        approvers={approvers}
         paymentTemplates={paymentTemplates}
         tcTemplates={tcTemplates}
         modesOfPayment={modesOfPayment}

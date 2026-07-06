@@ -19,7 +19,6 @@ import {
 import {
   saveProposalExplicit,
   submitProposalForApproval,
-  type ApproverOption,
   type ServiceOption,
   type PaymentTemplateOption,
   type TCTemplateOption,
@@ -50,7 +49,6 @@ type WizardContextValue = {
   submitForApproval: () => Promise<{ success: boolean; error?: string }>
   // Reference data
   services: ServiceOption[]
-  approvers: ApproverOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
   modesOfPayment: ModeOfPaymentOption[]
@@ -71,7 +69,6 @@ export function useWizard() {
 type WizardProviderProps = {
   children: ReactNode
   services: ServiceOption[]
-  approvers: ApproverOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
   modesOfPayment: ModeOfPaymentOption[]
@@ -85,7 +82,6 @@ type WizardProviderProps = {
 export function WizardProvider({
   children,
   services,
-  approvers,
   paymentTemplates,
   tcTemplates,
   modesOfPayment,
@@ -276,7 +272,6 @@ export function WizardProvider({
     saveDraft: saveExplicit,
     submitForApproval: handleSubmitForApproval,
     services,
-    approvers,
     paymentTemplates,
     tcTemplates,
     modesOfPayment,

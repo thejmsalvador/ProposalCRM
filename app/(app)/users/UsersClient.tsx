@@ -299,7 +299,6 @@ export function UsersClient({ users, teams }: Props) {
       <EditUserSheet
         user={editingUser}
         teams={teams}
-        allUsers={users}
         onClose={() => setEditingUser(null)}
       />
     </div>
