@@ -955,6 +955,7 @@ export type ProposalDetail = {
   date: string
   validUntil: string
   status: string
+  temperature: 'HOT' | 'WARM' | 'COLD' | null
   currency: string
   exchangeRate: string | null
   subtotal: string
@@ -1088,6 +1089,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     date: proposal.date.toISOString(),
     validUntil: proposal.validUntil.toISOString(),
     status: proposal.status,
+    temperature: proposal.temperature,
     currency: proposal.currency,
     exchangeRate: proposal.exchangeRate != null ? String(proposal.exchangeRate) : null,
     subtotal: String(proposal.subtotal),
@@ -1159,6 +1161,36 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       createdBy: v.createdBy,
     })),
   }
+}
+
+// ─── Lead temperature (Hot/Warm/Cold) ────────────────────────────────────────
+// A likelihood-to-close signal, independent of workflow status. Any value or
+// null (cleared). Editable by the creator or a manager+ (edit:any_proposal).
+export async function setProposalTemperature(
+  proposalId: string,
+  temperature: 'HOT' | 'WARM' | 'COLD' | null,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  if (temperature !== null && !['HOT', 'WARM', 'COLD'].includes(temperature)) {
+    return { error: 'Invalid temperature' }
+  }
+
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    select: { createdById: true },
+  })
+  if (!proposal) return { error: 'Proposal not found' }
+  if (proposal.createdById !== session.user.id && !can(session.user, 'edit:any_proposal')) {
+    return { error: 'Unauthorized' }
+  }
+
+  await prisma.proposal.update({ where: { id: proposalId }, data: { temperature } })
+  revalidatePath(`/proposals/${proposalId}`)
+  revalidatePath('/proposals')
+  revalidatePath('/dashboard')
+  return { success: true }
 }
 
 export async function getVersionSnapshot(versionId: string): Promise<VersionSnapshot | null> {

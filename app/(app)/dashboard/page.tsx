@@ -14,6 +14,7 @@ import {
   BarChart2,
   AlertCircle,
   PlusCircle,
+  Flame,
 } from 'lucide-react'
 
 import { getSession } from '@/lib/auth'
@@ -32,6 +33,7 @@ import {
   expiringProposals,
   pendingApprovalsForUser,
   recentProposals,
+  hotProposals,
   activeProposalCount,
   wonLostThisMonth,
   pipelineFunnel,
@@ -250,12 +252,13 @@ export default async function DashboardPage() {
   }
 
   // Core data — all roles
-  const [statusCounts, pipeline, wonLost, expiring, recent] = await Promise.all([
+  const [statusCounts, pipeline, wonLost, expiring, recent, hot] = await Promise.all([
     proposalsByStatus(filter),
     pipelineValue(filter),
     wonLostThisMonth(filter),
     expiringProposals(filter),
     recentProposals(filter),
+    hotProposals(filter),
   ])
 
   // Derived from statusCounts — no extra queries
@@ -463,6 +466,39 @@ export default async function DashboardPage() {
             <ExpiringCard expiring={expiring} />
           )}
         </div>
+
+        {/* ── Hot proposals (temperature) ──────────────────────────────────── */}
+        {hot.length > 0 && (
+          <div className="rounded-xl border border-[var(--color-border)] bg-white p-5">
+            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+              <Flame className="h-4 w-4 text-red-500" aria-hidden="true" />
+              Hot Proposals
+              <span className="inline-flex items-center justify-center rounded-full bg-red-100 text-red-700 text-xs font-bold w-5 h-5">
+                {hot.length}
+              </span>
+            </h3>
+            <ul className="flex flex-col gap-2">
+              {hot.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/proposals/${p.id}`}
+                    className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm bg-red-50 hover:bg-red-100 border border-red-100 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs font-semibold text-red-700">{p.number}</div>
+                      <div className="text-xs text-slate-600 truncate mt-0.5">
+                        {p.projectTitle} · {p.clientName}
+                      </div>
+                    </div>
+                    <div className="ml-3 text-right shrink-0 text-xs font-bold text-slate-700">
+                      {fmtCurrency(p.total)}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* ── Manager metrics ──────────────────────────────────────────────── */}
         {isManager && (
