@@ -26,6 +26,10 @@ export type ModeOfPaymentListItem = {
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
 export async function getModesOfPayment(): Promise<ModeOfPaymentListItem[]> {
+  // Internal bank-account details — require an authenticated session before
+  // returning them. Available to all signed-in staff (used across the wizard).
+  const session = await getSession()
+  if (!session) return []
   const modes = await prisma.modeOfPayment.findMany({
     orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
   })
