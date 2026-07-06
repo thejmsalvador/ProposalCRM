@@ -4,6 +4,9 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { prisma } from '../prisma'
+import { getSession } from '../auth'
+import { logAudit } from '../audit'
+import { changeOwnPasswordSchema, type ChangeOwnPasswordInput } from '../validations/profile'
 
 function makeSupabaseServerClient() {
   return createClient(cookies())
@@ -43,4 +46,32 @@ export async function signOut() {
   const supabase = makeSupabaseServerClient()
   await supabase.auth.signOut()
   redirect('/login')
+}
+
+/**
+ * Changes the CALLER'S OWN password via Supabase Auth. Operates on the
+ * request-scoped session client (not the admin client), so it can only ever
+ * update the currently signed-in user — there is no userId/email parameter.
+ */
+export async function changeOwnPassword(
+  raw: ChangeOwnPasswordInput,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  const parsed = changeOwnPasswordSchema.safeParse(raw)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  }
+
+  const supabase = makeSupabaseServerClient()
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.newPassword })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  await logAudit('User', session.user.id, 'changed_own_password', session.user.id)
+
+  return { success: true }
 }

@@ -15,6 +15,7 @@ import {
   type UpdateUserInput,
   type CreateTeamInput,
 } from '../validations/users'
+import { updateOwnProfileSchema, type UpdateOwnProfileInput } from '../validations/profile'
 
 // ─── Serialisable types (safe to pass to Client Components) ─────────────────
 
@@ -224,5 +225,51 @@ export async function createTeam(
   })
 
   revalidatePath('/users')
+  return { success: true }
+}
+
+// ─── Self-service profile (any authenticated user, own record only) ─────────
+
+/**
+ * Updates the CALLER'S OWN name/jobTitle/signatureImageUrl/avatarUrl.
+ * Deliberately takes no userId — the target is always derived from
+ * getSession(), so there is no way to edit another user's record through
+ * this action. Role/team/isActive/approver changes remain SUPER_ADMIN-only
+ * via updateUser() above.
+ */
+export async function updateOwnProfile(
+  raw: UpdateOwnProfileInput,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  const parsed = updateOwnProfileSchema.safeParse(raw)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  }
+  const data = parsed.data
+
+  const before = session.user
+
+  await prisma.user.update({
+    where: { id: before.id },
+    data: {
+      name: data.name,
+      jobTitle: data.jobTitle || null,
+      signatureImageUrl: data.signatureImageUrl || null,
+      avatarUrl: data.avatarUrl || null,
+    },
+  })
+
+  const diff: Record<string, unknown> = {}
+  if (before.name !== data.name) diff.name = { from: before.name, to: data.name }
+  if ((before.jobTitle ?? '') !== (data.jobTitle ?? ''))
+    diff.jobTitle = { from: before.jobTitle, to: data.jobTitle || null }
+
+  await logAudit('User', before.id, 'updated_own_profile', before.id, diff)
+
+  revalidatePath('/profile')
+  // Sidebar/TopHeader/BottomNav render name/avatarUrl in the shared layout.
+  revalidatePath('/', 'layout')
   return { success: true }
 }

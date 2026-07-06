@@ -166,48 +166,32 @@ export function Sidebar({ user, agencyName, agencyLogoUrl, unreadCount }: Props)
         })}
       </nav>
 
-      {/* User profile at bottom */}
+      {/* User profile at bottom — links to self-service /profile for everyone */}
       <div className="px-4 py-4 border-t border-[var(--color-border)]">
         <div className="flex items-center gap-3">
-          {user.role === Role.SUPER_ADMIN ? (
-            <Link
-              href="/settings"
-              className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-sm font-semibold shrink-0 overflow-hidden hover:ring-2 hover:ring-[var(--color-accent)] hover:ring-offset-2 transition-all"
-              aria-label="Go to settings"
-            >
-              {user.avatarUrl ? (
-                <Image
-                  src={user.avatarUrl}
-                  alt={user.name}
-                  width={32}
-                  height={32}
-                  className="rounded-full object-cover w-full h-full"
-                />
-              ) : (
-                user.name.charAt(0).toUpperCase()
-              )}
-            </Link>
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-sm font-semibold shrink-0 overflow-hidden">
-              {user.avatarUrl ? (
-                <Image
-                  src={user.avatarUrl}
-                  alt={user.name}
-                  width={32}
-                  height={32}
-                  className="rounded-full object-cover w-full h-full"
-                />
-              ) : (
-                user.name.charAt(0).toUpperCase()
-              )}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
+          <Link
+            href="/profile"
+            className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-sm font-semibold shrink-0 overflow-hidden hover:ring-2 hover:ring-[var(--color-accent)] hover:ring-offset-2 transition-all"
+            aria-label="Go to my profile"
+          >
+            {user.avatarUrl ? (
+              <Image
+                src={user.avatarUrl}
+                alt={user.name}
+                width={32}
+                height={32}
+                className="rounded-full object-cover w-full h-full"
+              />
+            ) : (
+              user.name.charAt(0).toUpperCase()
+            )}
+          </Link>
+          <Link href="/profile" className="min-w-0 flex-1">
             <p className="text-sm font-medium text-[var(--color-primary)] truncate">{user.name}</p>
             <p className="text-xs text-[var(--color-muted)] truncate">
               {ROLE_LABEL[user.role as Role]}
             </p>
-          </div>
+          </Link>
           <button
             onClick={() => signOut()}
             aria-label="Sign out"
