@@ -28,7 +28,7 @@ export default async function NewProposalPage({ searchParams }: Props) {
     const client = await prisma.client.findUnique({
       where: { id: clientId },
       include: {
-        contacts: { where: { isPrimary: true }, take: 1 },
+        contacts: { where: { isPrimary: true, isArchived: false }, take: 1 },
       },
     })
     if (client) {

@@ -169,6 +169,7 @@ model ClientContact {
   email        String?
   phone        String?
   isPrimary    Boolean  @default(false)
+  isArchived   Boolean  @default(false)
   notes        String?  @db.Text
   createdById  String
   createdAt    DateTime @default(now())
