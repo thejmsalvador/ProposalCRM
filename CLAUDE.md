@@ -340,23 +340,25 @@ model ClientContact {
 
 Use `lib/permissions.ts` — a `can(user, action)` function — for all permission checks. Apply at both the API route and UI layer (hide/disable, don't just block server-side).
 
-| Action | SALES_EXEC | SALES_MANAGER | ADMIN | SUPER_ADMIN |
-|---|---|---|---|---|
-| `create:proposal` | ✓ | ✓ | ✓ | ✓ |
-| `edit:own_proposal` | ✓ | ✓ | ✓ | ✓ |
-| `edit:any_proposal` | — | ✓ | ✓ | ✓ |
-| `approve:proposal` | — | ✓ | ✓ | ✓ |
-| `manage:catalog` | — | ✓ | ✓ | ✓ |
-| `manage:templates` | — | — | ✓ | ✓ |
-| `manage:users` | — | — | — | ✓ |
-| `view:audit_log` | — | — | ✓ | ✓ |
-| `force:status_override` | — | — | — | ✓ |
-| `lock:tc_template` | — | — | — | ✓ |
+Approval is a **fixed two-stage COO → CEO chain** (see Approval Workflow below), not a single manager approval. `COO` and `CEO` are dedicated roles with approval + oversight access but no catalog/template/user management.
+
+| Action | SALES_EXEC | SALES_MANAGER | COO | CEO | ADMIN | SUPER_ADMIN |
+|---|---|---|---|---|---|---|
+| `create:proposal` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `edit:own_proposal` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `edit:any_proposal` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `approve:proposal` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `manage:catalog` | — | ✓ | — | — | ✓ | ✓ |
+| `manage:templates` | — | — | — | — | ✓ | ✓ |
+| `manage:users` | — | — | — | — | — | ✓ |
+| `view:audit_log` | — | — | ✓ | ✓ | ✓ | ✓ |
+| `force:status_override` | — | — | — | — | — | ✓ |
+| `lock:tc_template` | — | — | — | — | — | ✓ |
 
 **Proposal visibility:**
 - `SALES_EXEC` → own proposals only (`createdById = currentUser.id`)
 - `SALES_MANAGER` → all proposals in their team (`createdBy.teamId = currentUser.teamId`)
-- `ADMIN` / `SUPER_ADMIN` → all proposals
+- `COO` / `CEO` / `ADMIN` / `SUPER_ADMIN` → all proposals
 
 ---
 
@@ -393,13 +395,16 @@ async function generateProposalNumber(): Promise<string> {
 
 Valid transitions only — enforce in server actions, not just the UI.
 
+`PENDING_APPROVAL` covers **two internal stages** — COO review, then CEO review — before a proposal reaches `APPROVED`. The status column doesn't change between stages; progress is tracked on the proposal via `cooApprovedAt`/`cooApprovedById` and `ceoApprovedAt`/`ceoApprovedById` (see Approval Workflow below).
+
 | From | Action | To |
 |---|---|---|
-| DRAFT | Submit for approval | PENDING_APPROVAL |
-| PENDING_APPROVAL | Approver approves | APPROVED |
-| PENDING_APPROVAL | Approver requests revision | REVISION_REQUIRED |
-| PENDING_APPROVAL | Approver rejects | LOST |
-| REVISION_REQUIRED | Re-submit | PENDING_APPROVAL |
+| DRAFT | Submit for approval | PENDING_APPROVAL (routes to COO) |
+| PENDING_APPROVAL (COO stage) | COO approves | PENDING_APPROVAL (routes to CEO) |
+| PENDING_APPROVAL (CEO stage) | CEO approves | APPROVED |
+| PENDING_APPROVAL (either stage) | Approver requests revision | REVISION_REQUIRED |
+| PENDING_APPROVAL (either stage) | Approver rejects | LOST |
+| REVISION_REQUIRED | Re-submit | PENDING_APPROVAL (restarts at COO) |
 | APPROVED | Mark as sent | SENT |
 | SENT | Mark as won | WON |
 | SENT or APPROVED | Mark as lost | LOST |
@@ -428,13 +433,19 @@ Status badges always include a text label AND color. Never color alone.
 
 ## Approval Workflow Rules
 
-1. **Submit** → validates all required fields, sets `PENDING_APPROVAL`, locks proposal from editing, creates `ApprovalEvent` (action: `'submitted'`), sends notification to `assignedApprover`
-2. **Approve** → sets `APPROVED`, creates `ApprovalEvent`, notifies creator, unlocks PDF generation
-3. **Request Revision** → sets `REVISION_REQUIRED`, requires a comment, creates `ApprovalEvent` with comment, notifies creator, unlocks editing
-4. **Reject** → sets `LOST`, `lostReason = 'Rejected internally: ' + reason`, creates `ApprovalEvent`
-5. **SLA escalation** → if `PENDING_APPROVAL` and `updatedAt < now - APPROVAL_SLA_HOURS`, send reminder notification to approver (cron: hourly)
-6. **Force override** → SUPER_ADMIN only, any status → any status, requires comment, writes to `AuditLog`
-7. **Below-floor pricing** → if any `lineItem.unitRate < service.minRate`, set `hasBelowFloorPricing = true` and escalate to nearest SALES_MANAGER regardless of assigned approver
+Approval is a **fixed two-stage COO → CEO chain**. Every non-SUPER_ADMIN submission routes to the COO first; only after the COO approves does it advance to the CEO. A proposal is not `APPROVED` — and PDF generation is not unlocked — until **both** stages have signed off.
+
+- `resolveCOO()` / `resolveCEO()` (in `lib/actions/proposals.ts`) each look up the first active user with role `COO` / `CEO` (oldest `createdAt` wins if more than one exists). If no active COO (or, at the CEO stage, no active CEO) is configured, submission/approval is blocked with an error asking an admin to assign the role in Users.
+- Stage progress lives on the `Proposal` record: `cooApprovedAt` / `cooApprovedById` are null while awaiting COO review; once the COO approves, they're stamped and `assignedApproverId` is switched to the CEO — the proposal stays `PENDING_APPROVAL` awaiting `ceoApprovedAt` / `ceoApprovedById`.
+
+1. **Submit** → validates all required fields, sets `PENDING_APPROVAL`, locks proposal from editing, creates `ApprovalEvent` (action: `'submitted'`), resolves the COO and sets `assignedApproverId` to them, sends notification + email to the COO
+2. **COO approves** (first stage) → stamps `cooApprovedAt`/`cooApprovedById`, resolves the CEO and re-points `assignedApproverId` to them, creates `ApprovalEvent` (action: `'coo_approved'`), status stays `PENDING_APPROVAL`, notifies the CEO (action needed) and the creator (progress update), emails the CEO
+3. **CEO approves** (final stage) → stamps `ceoApprovedAt`/`ceoApprovedById`, sets status to `APPROVED`, creates `ApprovalEvent` (action: `'approved'`), notifies + emails the creator ("approved (COO + CEO)"), unlocks PDF generation
+4. **Request Revision** → sets `REVISION_REQUIRED`, requires a comment, **resets both `cooApprovedAt/ById` and `ceoApprovedAt/ById` to null** so a re-submission restarts the chain at the COO stage, creates `ApprovalEvent` with comment, notifies + emails creator, unlocks editing
+5. **Reject** → sets `LOST`, `lostReason = 'Rejected internally: ' + reason`, resets both stages' approval fields to null, creates `ApprovalEvent`
+6. **SLA escalation** → if `PENDING_APPROVAL` and `updatedAt < now - APPROVAL_SLA_HOURS`, send reminder notification to the current `assignedApprover` (whichever stage is active) (cron: hourly)
+7. **Force override** → SUPER_ADMIN only. A SUPER_ADMIN can approve at either stage in one action: it stamps both `cooApprovedAt/ById` (if not already set) and `ceoApprovedAt/ById`, and sets status straight to `APPROVED`. `forceOverrideStatus` (any status → any status) still requires a comment and writes to `AuditLog`.
+8. **Below-floor pricing** → if any `lineItem.unitRate < service.minRate`, set `hasBelowFloorPricing = true`; the submission notification flags this to the approver, but routing still follows the standard COO → CEO chain (there is no separate SALES_MANAGER escalation path in the current implementation)
 
 ---
 
