@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getSession } from '../auth'
 import { can } from '../permissions'
+import { canViewProposal } from '../proposal-visibility'
 import { prisma } from '../prisma'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -35,9 +36,15 @@ export async function saveAsTemplate(
 
   const proposal = await prisma.proposal.findUnique({
     where: { id: proposalId },
-    include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
+    include: {
+      lineItems: { orderBy: { sortOrder: 'asc' } },
+      createdBy: { select: { teamId: true } },
+    },
   })
   if (!proposal) return { error: 'Proposal not found' }
+  // Only snapshot a proposal the caller is allowed to see, so a template can't
+  // be used to exfiltrate another user's/team's scope, pricing, and notes.
+  if (!canViewProposal(session.user, proposal)) return { error: 'Proposal not found' }
 
   const snapshotJson = {
     proposal: {
