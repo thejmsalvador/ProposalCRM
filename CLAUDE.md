@@ -104,128 +104,16 @@ prisma/
 
 ## Database Schema
 
-Use these exact model names and field names everywhere. Do not rename or abbreviate.
+Use these exact model names and field names everywhere. Do not rename or abbreviate. This mirrors `prisma/schema.prisma` as it stands today — the schema has grown considerably beyond the original PRD (see notes after the block).
 
 ```prisma
-model User {
-  id                String    @id @default(cuid())
-  name              String
-  email             String    @unique
-  role              Role      @default(SALES_EXEC)
-  jobTitle          String?
-  avatarUrl         String?
-  teamId            String?
-  defaultApproverId String?
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  lastLoginAt       DateTime?
-  team              Team?     @relation(fields: [teamId], references: [id])
-  defaultApprover   User?     @relation("ApproverRelation", fields: [defaultApproverId], references: [id])
-  proposals         Proposal[] @relation("CreatedBy")
-  approvals         Proposal[] @relation("ApprovedBy")
-  approvalEvents    ApprovalEvent[]
-  auditLogs         AuditLog[]
-  notifications     Notification[]
-}
-
 enum Role {
   SALES_EXEC
   SALES_MANAGER
   ADMIN
+  COO
+  CEO
   SUPER_ADMIN
-}
-
-model Team {
-  id        String  @id @default(cuid())
-  name      String
-  managerId String?
-  users     User[]
-}
-
-model Service {
-  id            String   @id @default(cuid())
-  name          String
-  category      String
-  description   String
-  defaultScope  String   @db.Text
-  unit          String
-  defaultRate   Decimal  @db.Decimal(12, 2)
-  minRate       Decimal? @db.Decimal(12, 2)
-  maxRate       Decimal? @db.Decimal(12, 2)
-  tcTemplateId  String?
-  paymentTplId  String?
-  isActive      Boolean  @default(true)
-  internalNotes String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  tcTemplate      TCTemplate?      @relation(fields: [tcTemplateId], references: [id])
-  paymentTemplate PaymentTemplate? @relation(fields: [paymentTplId], references: [id])
-  lineItems       ProposalLineItem[]
-}
-
-model PaymentTemplate {
-  id           String   @id @default(cuid())
-  name         String
-  bodyRichText String   @db.Text
-  isDefault    Boolean  @default(false)
-  isArchived   Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  services     Service[]
-  proposals    Proposal[]
-}
-
-model TCTemplate {
-  id           String   @id @default(cuid())
-  name         String
-  bodyRichText String   @db.Text
-  categories   String[]
-  isArchived   Boolean  @default(false)
-  isLocked     Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  services     Service[]
-  proposals    Proposal[]
-}
-
-model Proposal {
-  id                    String         @id @default(cuid())
-  number                String         @unique
-  version               Int            @default(1)
-  clientName            String
-  contactName           String?
-  contactTitle          String?
-  projectTitle          String
-  date                  DateTime
-  validUntil            DateTime
-  status                ProposalStatus @default(DRAFT)
-  createdById           String
-  assignedApproverId    String?
-  currency              String         @default("PHP")
-  subtotal              Decimal        @db.Decimal(12, 2)
-  discountType          String?
-  discountValue         Decimal?       @db.Decimal(12, 2)
-  vatRate               Decimal?       @db.Decimal(5, 2)
-  total                 Decimal        @db.Decimal(12, 2)
-  pricingNotes          String?
-  introText             String?        @db.Text
-  paymentTemplateId     String?
-  paymentTermsOverride  String?        @db.Text
-  tcTemplateId          String?
-  tcOverride            String?        @db.Text
-  confidentialWatermark Boolean        @default(false)
-  hasBelowFloorPricing  Boolean        @default(false)
-  lostReason            String?
-  internalNotes         String?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  createdBy             User           @relation("CreatedBy", fields: [createdById], references: [id])
-  assignedApprover      User?          @relation("ApprovedBy", fields: [assignedApproverId], references: [id])
-  paymentTemplate       PaymentTemplate? @relation(fields: [paymentTemplateId], references: [id])
-  tcTemplate            TCTemplate?    @relation(fields: [tcTemplateId], references: [id])
-  lineItems             ProposalLineItem[]
-  versions              ProposalVersion[]
-  approvalEvents        ApprovalEvent[]
 }
 
 enum ProposalStatus {
@@ -240,6 +128,222 @@ enum ProposalStatus {
   EXPIRED
 }
 
+model User {
+  id                String    @id @default(cuid())
+  name              String
+  email             String    @unique
+  role              Role      @default(SALES_EXEC)
+  jobTitle          String?
+  avatarUrl         String?
+  // Sign-off signature image (data URI) shown on approved proposal PDFs for
+  // internal approvers (COO/CEO). Optional; uploaded in the Users admin.
+  signatureImageUrl String?
+  teamId            String?
+  defaultApproverId String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  lastLoginAt       DateTime?
+
+  team              Team?             @relation("TeamMembers", fields: [teamId], references: [id])
+  managedTeams      Team[]            @relation("TeamManager")
+  createdProposals  Proposal[]        @relation("ProposalCreatedBy")
+  approvedProposals Proposal[]        @relation("ProposalApprover")
+  proposalVersions  ProposalVersion[]
+  approvalEvents    ApprovalEvent[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+}
+
+model Team {
+  id        String  @id @default(cuid())
+  name      String
+  managerId String?
+
+  manager User?  @relation("TeamManager", fields: [managerId], references: [id])
+  members User[] @relation("TeamMembers")
+}
+
+model Service {
+  id              String    @id @default(cuid())
+  name            String
+  category        String
+  description     String
+  defaultScope    String    @db.Text
+  unit            String
+  defaultRate     Decimal   @db.Decimal(12, 2)
+  minRate         Decimal?  @db.Decimal(12, 2)
+  maxRate         Decimal?  @db.Decimal(12, 2)
+  engagementTerm  Int       @default(1)
+  currency        String    @default("PHP")
+  exchangeRate    Decimal?  @db.Decimal(12, 6)
+  estimatedExpenses Json?
+  tcTemplateId    String?
+  paymentTplId    String?
+  isActive        Boolean   @default(true)
+  internalNotes   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tcTemplate      TCTemplate?      @relation(fields: [tcTemplateId], references: [id])
+  paymentTemplate PaymentTemplate? @relation(fields: [paymentTplId], references: [id])
+  lineItems       ProposalLineItem[]
+}
+
+model PaymentTemplate {
+  id           String    @id @default(cuid())
+  name         String
+  bodyRichText String    @db.Text
+  milestones   Json?
+  // How milestone percentages are calculated: 'total' (share of grand total) or
+  // 'remaining' (upfront % of total, succeeding rows % of the leftover). Null = legacy 'total'.
+  milestoneBasis String? @db.Text
+  isDefault    Boolean   @default(false)
+  isArchived   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  services  Service[]
+  proposals Proposal[]
+}
+
+model TCTemplate {
+  id           String    @id @default(cuid())
+  name         String
+  bodyRichText String    @db.Text
+  categories   String[]
+  isArchived   Boolean   @default(false)
+  isLocked     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  services  Service[]
+  proposals Proposal[]
+}
+
+// A reusable company bank account / "mode of payment". Multi-selected per
+// proposal and stored as Proposal.modesOfPayment JSON (no FK, mirroring tcSections).
+model ModeOfPayment {
+  id            String   @id @default(cuid())
+  label         String // category/label, e.g. "Foreign Clients (BDO)"
+  bankName      String
+  accountName   String
+  accountNumber String
+  branch        String?
+  swiftCode     String?
+  sortOrder     Int      @default(0)
+  isArchived    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  companyName String
+  // Short internal account code (e.g. "SUNB" for Sunrise Beverages). Free-form,
+  // typically 3–5 letters; used for naming conventions. Not client-facing.
+  accountCode String?
+  industry    String?
+  website     String?
+  address     String?
+  notes       String?  @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contacts  ClientContact[]
+  proposals Proposal[]
+}
+
+model ClientContact {
+  id           String   @id @default(cuid())
+  clientId     String?
+  contactName  String?
+  contactTitle String?
+  department   String?
+  email        String?
+  phone        String?
+  isPrimary    Boolean  @default(false)
+  notes        String?  @db.Text
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+}
+
+model Proposal {
+  id                    String         @id @default(cuid())
+  number                String         @unique
+  version               Int            @default(1)
+  clientId              String?
+  clientName            String
+  // Snapshot of the client's account code at proposal time (see Client.accountCode).
+  accountCode           String?
+  contactName           String?
+  contactTitle          String?
+  department            String?
+  contactEmail          String?
+  contactPhone          String?
+  businessAddress       String?
+  tin                   String?
+  brandName             String?
+  projectTitle          String
+  date                  DateTime
+  validUntil            DateTime
+  status                ProposalStatus @default(DRAFT)
+  createdById           String
+  assignedApproverId    String?
+  cooApprovedAt         DateTime?
+  cooApprovedById       String?
+  ceoApprovedAt         DateTime?
+  ceoApprovedById       String?
+  currency              String         @default("PHP")
+  exchangeRate          Decimal?       @db.Decimal(12, 6)
+  subtotal              Decimal        @db.Decimal(12, 2)
+  discountType          String?
+  discountValue         Decimal?       @db.Decimal(12, 2)
+  vatRate               Decimal?       @db.Decimal(5, 2)
+  total                 Decimal        @db.Decimal(12, 2)
+  pricingNotes          String?
+  introText             String?        @db.Text
+  paymentTemplateId     String?
+  paymentTermsOverride  String?        @db.Text
+  paymentMilestones     Json?
+  // Calculation basis for this proposal's milestone override. Null = inherit the template's.
+  milestoneBasis        String?        @db.Text
+  tcTemplateId          String?
+  tcOverride            String?        @db.Text
+  // Ordered per-proposal T&C section selection: [{ tcTemplateId, override }].
+  // Supersedes the single tcTemplateId/tcOverride above (kept for legacy fallback).
+  tcSections            Json?
+  // Ordered per-proposal Mode-of-Payment (bank account) selection: [{ modeOfPaymentId }].
+  modesOfPayment        Json?
+  // Client-side "Conforme" signatories rendered on the PDF: [{ name, position,
+  // companyName }]. The client signs the printed PDF by hand (off-platform).
+  signatories           Json?
+  confidentialWatermark Boolean        @default(false)
+  hasBelowFloorPricing  Boolean        @default(false)
+  lostReason            String?
+  internalNotes         String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  client          Client?           @relation(fields: [clientId], references: [id])
+  createdBy       User              @relation("ProposalCreatedBy", fields: [createdById], references: [id])
+  assignedApprover User?            @relation("ProposalApprover", fields: [assignedApproverId], references: [id])
+  paymentTemplate PaymentTemplate?  @relation(fields: [paymentTemplateId], references: [id])
+  tcTemplate      TCTemplate?       @relation(fields: [tcTemplateId], references: [id])
+  lineItems       ProposalLineItem[]
+  versions        ProposalVersion[]
+  approvalEvents  ApprovalEvent[]
+
+  @@index([createdById])
+  @@index([clientId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
 model ProposalLineItem {
   id           String   @id @default(cuid())
   proposalId   String
@@ -248,14 +352,18 @@ model ProposalLineItem {
   description  String
   scopeOfWork  String   @db.Text
   unit         String
-  quantity     Decimal  @db.Decimal(10, 2)
+  quantity     Decimal  @db.Decimal(12, 4)
   unitRate     Decimal  @db.Decimal(12, 2)
   lineTotal    Decimal  @db.Decimal(12, 2)
   isOptional   Boolean  @default(false)
   internalNote String?
+  expenses     Json?
   sortOrder    Int
-  proposal     Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  service      Service? @relation(fields: [serviceId], references: [id])
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  service  Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([proposalId])
 }
 
 model ProposalVersion {
@@ -268,7 +376,11 @@ model ProposalVersion {
   changeSummary String?
   status        ProposalStatus
   createdAt     DateTime       @default(now())
-  proposal      Proposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  proposal  Proposal @relation(fields: [proposalId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([proposalId])
 }
 
 model ApprovalEvent {
@@ -278,8 +390,11 @@ model ApprovalEvent {
   actorId    String
   comment    String?
   createdAt  DateTime @default(now())
-  proposal   Proposal @relation(fields: [proposalId], references: [id])
-  actor      User     @relation(fields: [actorId], references: [id])
+
+  proposal Proposal @relation(fields: [proposalId], references: [id])
+  actor    User     @relation(fields: [actorId], references: [id])
+
+  @@index([proposalId])
 }
 
 model AuditLog {
@@ -290,7 +405,21 @@ model AuditLog {
   actorId    String
   diffJson   Json?
   createdAt  DateTime @default(now())
-  actor      User     @relation(fields: [actorId], references: [id])
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+}
+
+model SystemSettings {
+  id                  String   @id @default(cuid())
+  agencyName          String
+  agencyLogoUrl       String?
+  brandColorHex       String   @default("#4F46E5")
+  defaultValidityDays Int      @default(30)
+  defaultCurrency     String   @default("PHP")
+  defaultVatRate      Decimal  @default(12.00) @db.Decimal(5, 2)
+  updatedAt           DateTime @updatedAt
 }
 
 model Notification {
@@ -300,18 +429,10 @@ model Notification {
   link      String?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-}
 
-model SystemSettings {
-  id                 String   @id @default(cuid())
-  agencyName         String
-  agencyLogoUrl      String?
-  brandColorHex      String   @default("#4F46E5")
-  defaultValidityDays Int     @default(30)
-  defaultCurrency    String   @default("PHP")
-  defaultVatRate     Decimal  @db.Decimal(5, 2) @default(12.00)
-  updatedAt          DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
 }
 
 model ProposalTemplate {
@@ -322,17 +443,17 @@ model ProposalTemplate {
   snapshotJson Json
   createdAt    DateTime @default(now())
 }
-
-model ClientContact {
-  id          String   @id @default(cuid())
-  companyName String
-  contactName String?
-  contactTitle String?
-  email       String?
-  createdById String
-  createdAt   DateTime @default(now())
-}
 ```
+
+**What changed vs. the original PRD:**
+- **`Client`** is a new CRM model (`companyName`, `accountCode`, `industry`, `website`, `address`, `notes`) that owns a proposal's contacts and history. `ClientContact` was reworked to hang off `clientId` (not a flat company name) and gained `department`, `phone`, `isPrimary`, `notes`.
+- **`ModeOfPayment`** is a new model — a library of company bank accounts, multi-selected per proposal via `Proposal.modesOfPayment` (JSON, no FK — same pattern as `tcSections`).
+- **`Proposal`** gained roughly twenty fields since the PRD: `clientId` + snapshot `accountCode`; contact/business fields `department`, `contactEmail`, `contactPhone`, `businessAddress`, `tin`, `brandName`; approval-chain stamps `cooApprovedAt`/`cooApprovedById`, `ceoApprovedAt`/`ceoApprovedById`; FX `exchangeRate`; `paymentMilestones` + `milestoneBasis`; the multi-select `tcSections` and `modesOfPayment` JSON columns; and `signatories` (client-side Conforme signers).
+- **`Service`** gained `engagementTerm`, `currency`, `exchangeRate`, `estimatedExpenses` (internal, never client-facing).
+- **`PaymentTemplate`** gained `milestones` + `milestoneBasis`.
+- **`ProposalLineItem`** gained `expenses` (Json) and `quantity` widened from `Decimal(10,2)` to `Decimal(12,4)`.
+- **`User`** gained `signatureImageUrl` for rendering COO/CEO sign-off marks on the PDF.
+- Indexes were added across `Proposal`, `ProposalLineItem`, `ProposalVersion`, `ApprovalEvent`, `AuditLog`, `Notification`, and `ClientContact` to support the larger data volume.
 
 ---
 
