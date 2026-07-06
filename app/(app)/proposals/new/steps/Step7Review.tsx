@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, X, Loader2, AlertTriangle, Wallet } from 'lucide-react'
 import { useWizard } from '../WizardContext'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -322,7 +323,7 @@ export function Step7Review() {
             <div
               className="prose prose-sm max-w-none"
               dangerouslySetInnerHTML={{
-                __html: data.paymentTermsOverride || paymentTemplate.bodyRichText,
+                __html: sanitizeHtml(data.paymentTermsOverride || paymentTemplate.bodyRichText),
               }}
             />
 
@@ -439,7 +440,7 @@ export function Step7Review() {
                   </p>
                   <div
                     className="prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: section.html }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.html) }}
                   />
                 </div>
               ))}

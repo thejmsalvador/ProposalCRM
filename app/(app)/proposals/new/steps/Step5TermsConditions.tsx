@@ -27,6 +27,7 @@ import {
   ChevronUp,
 } from 'lucide-react'
 import { useWizard } from '../WizardContext'
+import { sanitizeHtml } from '@/lib/sanitize'
 import type { TCTemplateOption } from '@/lib/actions/proposals'
 import type { TcSectionFormData } from '@/lib/validations/proposals'
 import { Label } from '@/components/ui/label'
@@ -408,7 +409,7 @@ function SortableSection({
           ) : (
             <div
               className="prose prose-sm max-w-none px-3 py-2.5 bg-slate-50 rounded-[var(--radius-sm)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
-              dangerouslySetInnerHTML={{ __html: effectiveHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(effectiveHtml) }}
             />
           )}
         </div>

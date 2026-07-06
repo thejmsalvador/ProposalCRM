@@ -1,6 +1,7 @@
 'use client'
 
 import { useWizard } from '../WizardContext'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -197,7 +198,7 @@ export function Step4PaymentTerms() {
               <Label>Additional terms &amp; conditions</Label>
               <div
                 className="prose prose-sm max-w-none px-4 py-3 bg-slate-50 rounded-[var(--radius-sm)] border border-[var(--color-border)]"
-                dangerouslySetInnerHTML={{ __html: selectedTemplate.bodyRichText }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedTemplate.bodyRichText) }}
               />
             </div>
           ) : null}
