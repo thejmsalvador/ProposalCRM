@@ -250,6 +250,34 @@ async function generateProposalNumber(): Promise<string> {
   return `${prefix}${String(next).padStart(4, '0')}`
 }
 
+/**
+ * Create a Proposal, allocating its unique number with retry. generateProposalNumber
+ * is a non-atomic findFirst→+1, so two concurrent creates in the same month can
+ * compute the same NNNN and one insert would hit the @unique constraint (P2002).
+ * On that collision we regenerate the number and retry, so neither create 500s.
+ */
+async function createProposalWithUniqueNumber(
+  data: Omit<Prisma.ProposalUncheckedCreateInput, 'number'>,
+) {
+  const MAX_ATTEMPTS = 5
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const number = await generateProposalNumber()
+    try {
+      return await prisma.proposal.create({ data: { ...data, number } })
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002' &&
+        attempt < MAX_ATTEMPTS - 1
+      ) {
+        continue // number collided with a concurrent create — regenerate and retry
+      }
+      throw e
+    }
+  }
+  throw new Error('Could not allocate a unique proposal number')
+}
+
 // ─── Approver resolution ─────────────────────────────────────────────────────
 // ─── Two-stage approval routing (COO reviews first, then CEO) ─────────────────
 //
@@ -401,17 +429,13 @@ export async function saveProposalDraft(
     savedId = existing.id
     savedNumber = existing.number
   } else {
-    // Create new
-    const number = await generateProposalNumber()
-
-    const proposal = await prisma.proposal.create({
-      data: {
-        ...proposalData,
-        number,
-        status: 'DRAFT',
-        createdById: session.user.id,
-      },
+    // Create new (number allocated with retry-on-conflict)
+    const proposal = await createProposalWithUniqueNumber({
+      ...proposalData,
+      status: 'DRAFT',
+      createdById: session.user.id,
     })
+    const number = proposal.number
 
     if (data.lineItems.length > 0) {
       await prisma.proposalLineItem.createMany({
@@ -1212,14 +1236,10 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
   const validUntil = new Date(today)
   validUntil.setDate(validUntil.getDate() + defaultValidityDays)
 
-  const newNumber = await generateProposalNumber()
-
-  const newProposal = await prisma.proposal.create({
-    data: {
-      number: newNumber,
-      version: 1,
-      status: 'DRAFT',
-      clientName: '',
+  const newProposal = await createProposalWithUniqueNumber({
+    version: 1,
+    status: 'DRAFT',
+    clientName: '',
       accountCode: source.accountCode,
       contactName: source.contactName,
       contactTitle: source.contactTitle,
@@ -1266,7 +1286,6 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       confidentialWatermark: source.confidentialWatermark,
       hasBelowFloorPricing: source.hasBelowFloorPricing,
       internalNotes: source.internalNotes,
-    },
   })
 
   if (source.lineItems.length > 0) {
