@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Clock, Check, AlertCircle, ChevronDown, Bookmark, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, ChevronRight, Clock, Check, AlertCircle, ChevronDown, Bookmark, X, LogOut } from 'lucide-react'
 import {
   WizardProvider,
   useWizard,
@@ -98,9 +99,19 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
     proposalId,
     proposalNumber,
     syncProposalId,
+    saveDraft,
     saveStatus: explicitSaveStatus,
     lastSavedAt: explicitLastSaved,
   } = useWizard()
+
+  const router = useRouter()
+  const [savingExit, setSavingExit] = useState(false)
+
+  async function handleSaveAndExit() {
+    setSavingExit(true)
+    await saveDraft()
+    router.push('/proposals')
+  }
 
   const { status: autoSaveStatus, lastSavedAt: autoLastSaved } = useAutoSave(
     form,
@@ -220,7 +231,20 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
             </p>
           )}
         </div>
-        <SaveIndicator status={displayStatus} lastSavedAt={lastSaved} />
+        <div className="flex items-center gap-3">
+          <SaveIndicator status={displayStatus} lastSavedAt={lastSaved} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleSaveAndExit}
+            disabled={savingExit || displayStatus === 'saving'}
+            className="min-h-[44px] gap-1.5"
+          >
+            <LogOut size={14} />
+            {savingExit ? 'Saving…' : 'Save draft & exit'}
+          </Button>
+        </div>
       </div>
 
       {/* Template picker — shown before step 1 content */}
