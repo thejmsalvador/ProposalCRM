@@ -1193,9 +1193,15 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
 
   const source = await prisma.proposal.findUnique({
     where: { id },
-    include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
+    include: {
+      lineItems: { orderBy: { sortOrder: 'asc' } },
+      createdBy: { select: { teamId: true } },
+    },
   })
   if (!source) return { error: 'Proposal not found' }
+  // Enforce the same read visibility as listings/detail so a user cannot clone
+  // (and thereby read) a proposal they aren't allowed to see.
+  if (!canViewProposal(session.user, source)) return { error: 'Proposal not found' }
 
   const settings = await prisma.systemSettings.findFirst()
   const defaultValidityDays = settings?.defaultValidityDays ?? 30
