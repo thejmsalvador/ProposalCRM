@@ -7,7 +7,7 @@ import { getSession } from '../auth'
 import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { logAudit } from '../audit'
-import { canViewProposal } from '../proposal-visibility'
+import { canViewProposal, canEditProposal } from '../proposal-visibility'
 import { createNotification } from '../notifications'
 import {
   sendEmail,
@@ -354,14 +354,12 @@ export async function saveProposalDraft(
     // Update existing
     const existing = await prisma.proposal.findUnique({
       where: { id: proposalId },
+      include: { createdBy: { select: { teamId: true } } },
     })
     if (!existing) return { error: 'Proposal not found' }
 
-    // Only the creator or someone with edit:any_proposal can edit
-    if (
-      existing.createdById !== session.user.id &&
-      !can(session.user, 'edit:any_proposal')
-    ) {
+    // Only the creator, a same-team SALES_MANAGER, or an org-wide role can edit
+    if (!canEditProposal(session.user, existing)) {
       return { error: 'Unauthorized' }
     }
 
@@ -1565,14 +1563,14 @@ export async function markAsSent(
   const session = await getSession()
   if (!session) return { error: 'Unauthenticated' }
 
-  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } })
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { createdBy: { select: { teamId: true } } },
+  })
   if (!proposal) return { error: 'Proposal not found' }
   if (proposal.status !== 'APPROVED') return { error: 'Only approved proposals can be marked as sent' }
 
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
@@ -1606,10 +1604,7 @@ export async function markAsWon(
     return { error: 'Only sent or approved proposals can be marked as won' }
   }
 
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
@@ -1658,10 +1653,7 @@ export async function markAsLost(
     return { error: 'Only sent or approved proposals can be marked as lost' }
   }
 
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
@@ -1740,14 +1732,14 @@ export async function submitExistingProposal(
 
   const proposal = await prisma.proposal.findUnique({
     where: { id: proposalId },
-    include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
+    include: {
+      lineItems: { orderBy: { sortOrder: 'asc' } },
+      createdBy: { select: { teamId: true } },
+    },
   })
   if (!proposal) return { error: 'Proposal not found' }
 
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
@@ -2010,15 +2002,13 @@ export async function getProposalForEdit(
         orderBy: { sortOrder: 'asc' },
         include: { service: { select: { id: true, name: true, minRate: true } } },
       },
+      createdBy: { select: { teamId: true } },
     },
   })
   if (!proposal) return { error: 'Proposal not found' }
 
-  // Permission check
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  // Permission check (own, same-team manager, or org-wide role)
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
@@ -2360,7 +2350,10 @@ export async function markOnHold(
   const session = await getSession()
   if (!session) return { error: 'Unauthenticated' }
 
-  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } })
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { createdBy: { select: { teamId: true } } },
+  })
   if (!proposal) return { error: 'Proposal not found' }
 
   const activeStatuses = ['DRAFT', 'PENDING_APPROVAL', 'REVISION_REQUIRED', 'APPROVED', 'SENT']
@@ -2368,10 +2361,7 @@ export async function markOnHold(
     return { error: 'Only active proposals can be put on hold' }
   }
 
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
@@ -2395,17 +2385,17 @@ export async function revertToDraft(
   const session = await getSession()
   if (!session) return { error: 'Unauthenticated' }
 
-  const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } })
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { createdBy: { select: { teamId: true } } },
+  })
   if (!proposal) return { error: 'Proposal not found' }
 
   if (proposal.status !== 'ON_HOLD') {
     return { error: 'Only on-hold proposals can be reverted to draft' }
   }
 
-  if (
-    proposal.createdById !== session.user.id &&
-    !can(session.user, 'edit:any_proposal')
-  ) {
+  if (!canEditProposal(session.user, proposal)) {
     return { error: 'Unauthorized' }
   }
 
