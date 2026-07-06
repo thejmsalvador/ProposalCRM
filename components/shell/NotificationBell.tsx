@@ -18,7 +18,6 @@ import {
 } from '@/lib/actions/notifications'
 
 type Props = {
-  userId: string
   initialNotifications: NotificationItem[]
   initialUnreadCount: number
 }
@@ -33,7 +32,7 @@ function timeAgo(date: Date): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-export function NotificationBell({ userId, initialNotifications, initialUnreadCount }: Props) {
+export function NotificationBell({ initialNotifications, initialUnreadCount }: Props) {
   const router = useRouter()
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications)
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
@@ -41,12 +40,12 @@ export function NotificationBell({ userId, initialNotifications, initialUnreadCo
 
   const refresh = useCallback(async () => {
     const [fresh, count] = await Promise.all([
-      getNotifications(userId),
-      getUnreadCount(userId),
+      getNotifications(),
+      getUnreadCount(),
     ])
     setNotifications(fresh)
     setUnreadCount(count)
-  }, [userId])
+  }, [])
 
   useEffect(() => {
     const id = setInterval(refresh, 30_000)
@@ -70,7 +69,7 @@ export function NotificationBell({ userId, initialNotifications, initialUnreadCo
 
   const handleMarkAllRead = () => {
     startTransition(async () => {
-      await markAllRead(userId)
+      await markAllRead()
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
       setUnreadCount(0)
     })

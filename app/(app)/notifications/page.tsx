@@ -10,13 +10,12 @@ export default async function NotificationsPage() {
   if (!session) redirect('/login')
 
   const [notifications, unreadCount] = await Promise.all([
-    getAllNotifications(session.user.id),
-    getUnreadCount(session.user.id),
+    getAllNotifications(),
+    getUnreadCount(),
   ])
 
   return (
     <NotificationsClient
-      userId={session.user.id}
       initialNotifications={notifications}
       initialUnreadCount={unreadCount}
     />

@@ -13,7 +13,7 @@ export default async function AppLayout({
   if (!session) redirect('/login')
 
   const [unreadCount, settings] = await Promise.all([
-    getUnreadCount(session.user.id),
+    getUnreadCount(),
     getCachedSystemSettings(),
   ])
 
