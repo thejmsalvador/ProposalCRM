@@ -237,8 +237,14 @@ export default async function DashboardPage() {
   if (!session) redirect('/login')
 
   const { user } = session
+  // "Manager-like" bucket: gets the oversight dashboard (pipeline funnel, win-rate,
+  // recent activity) and the Pending Approvals inbox. COO and CEO are the actual
+  // approvers in the two-stage chain, so they belong here — previously they fell
+  // through to the plain SALES_EXEC dashboard with no approval queue (U3).
   const isManager =
     user.role === 'SALES_MANAGER' ||
+    user.role === 'COO' ||
+    user.role === 'CEO' ||
     user.role === 'ADMIN' ||
     user.role === 'SUPER_ADMIN'
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
