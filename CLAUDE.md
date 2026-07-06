@@ -622,7 +622,7 @@ const lineItemSchema = z.object({
 })
 ```
 
-`unitRate` below `service.minRate`: warn inline (amber banner on the line item card), but do not block saving. Do block submission if `hasBelowFloorPricing = true` and no SALES_MANAGER is assigned as approver.
+`unitRate` below `service.minRate`: warn inline (amber banner on the line item card), but do not block saving. The below-floor **block/escalation rule has been retired** — the fixed COO → CEO chain reviews all pricing, so there is no submission block and no SALES_MANAGER escalation. `hasBelowFloorPricing` is still computed and stored (informational only, surfaced to the creator), and the unused `HIGH_VALUE_THRESHOLD` env var is vestigial.
 
 ---
 

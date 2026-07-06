@@ -542,7 +542,9 @@ export async function submitProposalForApproval(
     return { error: parsed.error.issues[0]?.message ?? 'Validation failed' }
   }
 
-  // Check below-floor pricing — escalation to SALES_MANAGER if needed
+  // Below-floor pricing is informational only (surfaced to the creator and
+  // flagged on the approver notification). The block/escalation rule is retired
+  // — the fixed COO → CEO chain reviews all pricing, so routing is unaffected.
   const hasBelowFloor = raw.lineItems.some(
     (li) => li.serviceMinRate != null && li.unitRate < li.serviceMinRate,
   )

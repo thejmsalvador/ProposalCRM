@@ -1345,7 +1345,7 @@ export function ProposalDetailClient({
         {proposal.hasBelowFloorPricing && (
           <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            This proposal contains below-floor pricing and requires a Sales Manager approver.
+            This proposal contains below-floor pricing (one or more rates are below the service minimum).
           </div>
         )}
 
