@@ -6,6 +6,7 @@ import { canViewProposal } from '@/lib/proposal-visibility'
 import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { signPdfToken } from '@/lib/pdf-token'
+import { rateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 60 // Vercel: 60-second timeout
 
@@ -78,6 +79,16 @@ export async function POST(req: NextRequest) {
   }
   if (!can(session.user, 'create:proposal')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // ── Rate limit ────────────────────────────────────────────────────────────
+  // Puppeteer rendering is resource-heavy; cap per user to blunt DoS abuse.
+  const limit = rateLimit(`pdf:${session.user.id}`, 10, 60 * 1000)
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many PDF requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } },
+    )
   }
 
   // ── Input ─────────────────────────────────────────────────────────────────

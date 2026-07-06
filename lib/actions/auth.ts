@@ -1,12 +1,13 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { prisma } from '../prisma'
 import { getSession } from '../auth'
 import { logAudit } from '../audit'
 import { changeOwnPasswordSchema, type ChangeOwnPasswordInput } from '../validations/profile'
+import { rateLimit } from '../rate-limit'
 
 function makeSupabaseServerClient() {
   return createClient(cookies())
@@ -16,6 +17,13 @@ export async function signIn(
   email: string,
   password: string,
 ): Promise<{ error: string } | never> {
+  // Throttle brute-force attempts: max 5 tries per 5 minutes per email+IP.
+  const ip = headers().get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const limit = rateLimit(`login:${email.toLowerCase()}:${ip}`, 5, 5 * 60 * 1000)
+  if (!limit.ok) {
+    return { error: `Too many attempts. Try again in ${limit.retryAfterSeconds}s.` }
+  }
+
   const supabase = makeSupabaseServerClient()
 
   const { error } = await supabase.auth.signInWithPassword({ email, password })
