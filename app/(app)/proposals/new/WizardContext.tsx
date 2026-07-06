@@ -43,6 +43,9 @@ type WizardContextValue = {
   stepError: StepError | null
   proposalId: string | null
   proposalNumber: string | null
+  /** Adopt an id created by the background auto-save so later explicit
+   *  Save/Submit reuse it instead of creating a duplicate proposal. */
+  syncProposalId: (id: string) => void
   saveStatus: SaveStatus
   lastSavedAt: Date | null
   errorMessage: string | null
@@ -258,6 +261,16 @@ export function WizardProvider({
     }
   }, [form])
 
+  // Adopt an id created by the 30s auto-save into the context's ref + state so
+  // the next explicit Save/Submit reuses it (fixes the duplicate-proposal bug
+  // where auto-save and the context kept separate id refs).
+  const syncProposalId = useCallback((id: string) => {
+    if (!proposalIdRef.current) {
+      proposalIdRef.current = id
+      setProposalId(id)
+    }
+  }, [])
+
   // Expose saveExplicit as the "Save Draft" button action
   // (saveDraft is for auto-save — no version snapshot)
   // We override saveDraft for the explicit save button in Step 6
@@ -270,6 +283,7 @@ export function WizardProvider({
     stepError,
     proposalId,
     proposalNumber,
+    syncProposalId,
     saveStatus,
     lastSavedAt,
     errorMessage,

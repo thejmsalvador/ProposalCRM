@@ -12,7 +12,7 @@ type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 export function useAutoSave(
   form: UseFormReturn<ProposalFormData>,
   proposalId: string | null,
-  onSaved: () => void,
+  onSaved: (newProposalId: string) => void,
 ) {
   const [status, setStatus] = useState<AutoSaveStatus>('idle')
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
@@ -50,7 +50,9 @@ export function useAutoSave(
 
       if (!proposalIdRef.current) {
         proposalIdRef.current = result.proposalId
-        onSaved()
+        // Lift the newly-created id into the wizard context so the next
+        // explicit Save/Submit reuses it instead of creating a second proposal.
+        onSaved(result.proposalId)
       }
 
       setStatus('saved')
