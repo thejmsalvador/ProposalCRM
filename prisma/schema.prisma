@@ -58,6 +58,8 @@ model User {
   approvalEvents    ApprovalEvent[]
   auditLogs         AuditLog[]
   notifications     Notification[]
+
+  @@index([teamId])
 }
 
 model Team {
@@ -67,6 +69,8 @@ model Team {
 
   manager User?  @relation("TeamManager", fields: [managerId], references: [id])
   members User[] @relation("TeamMembers")
+
+  @@index([managerId])
 }
 
 model Service {
@@ -93,6 +97,9 @@ model Service {
   tcTemplate      TCTemplate?      @relation(fields: [tcTemplateId], references: [id])
   paymentTemplate PaymentTemplate? @relation(fields: [paymentTplId], references: [id])
   lineItems       ProposalLineItem[]
+
+  @@index([tcTemplateId])
+  @@index([paymentTplId])
 }
 
 model PaymentTemplate {
@@ -248,6 +255,9 @@ model Proposal {
   @@index([clientId])
   @@index([status])
   @@index([updatedAt])
+  @@index([assignedApproverId])
+  @@index([paymentTemplateId])
+  @@index([tcTemplateId])
 }
 
 model ProposalLineItem {
@@ -270,6 +280,7 @@ model ProposalLineItem {
   service  Service? @relation(fields: [serviceId], references: [id])
 
   @@index([proposalId])
+  @@index([serviceId])
 }
 
 model ProposalVersion {
@@ -287,6 +298,7 @@ model ProposalVersion {
   createdBy User     @relation(fields: [createdById], references: [id])
 
   @@index([proposalId])
+  @@index([createdById])
 }
 
 model ApprovalEvent {
@@ -301,6 +313,7 @@ model ApprovalEvent {
   actor    User     @relation(fields: [actorId], references: [id])
 
   @@index([proposalId])
+  @@index([actorId])
 }
 
 model AuditLog {
@@ -315,6 +328,7 @@ model AuditLog {
   actor User @relation(fields: [actorId], references: [id])
 
   @@index([entityType, entityId])
+  @@index([actorId])
 }
 
 model SystemSettings {
