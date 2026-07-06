@@ -502,12 +502,13 @@ Flow:
 
 PDF template at `app/pdf/[proposalId]/page.tsx` — server component, no app shell. Sections in order:
 1. Cover page (logo, client, proposal number, dates, salesperson)
-2. Executive Summary (only if `introText` exists)
-3. Scope of Work (one section per non-optional line item)
-4. Investment Summary (itemized table + totals)
-5. Optional Add-ons table (only if any `isOptional = true` items)
-6. Payment Terms
-7. Terms & Conditions
+2. Scope of Work (one section per non-optional line item) — omitted if there are none
+3. Investment Summary (itemized table + totals; includes the Optional Add-ons table inline when any `isOptional = true` items exist — not a separate top-level section)
+4. Payment Terms (rich text, payment schedule/milestones, and Mode of Payment bank accounts)
+5. Terms & Conditions
+6. Signatories — client-side "Conforme" signatories (name, position, company; signed off-platform) plus, once the proposal is `APPROVED`, the internal COO + CEO who approved it (name, job title, and stored signature image if the approver has one on file)
+
+There is no Executive Summary section (its retirement is tracked separately — see the PRD's Common Mistakes / prior "remove Executive Summary" work); do not reintroduce it here.
 
 Every page: footer with proposal number, page X of Y, agency name, "Confidential — For Addressee Only".
 If `confidentialWatermark = true`: diagonal "CONFIDENTIAL" watermark via CSS `::before` on `body`.
@@ -584,7 +585,7 @@ Font: **Inter** via Google Fonts (`next/font/google`).
 |---|---|
 | `< 640px` (mobile) | Single column, bottom tab nav (5 items), wizard steps as full-screen sheets, proposal list as cards |
 | `640–1024px` (tablet) | Two-column form, collapsible sidebar |
-| `> 1024px` (desktop) | Full sidebar, multi-column, inline preview on wizard Step 6 |
+| `> 1024px` (desktop) | Full sidebar, multi-column, inline preview on wizard Step 7 (Review) |
 
 - Touch targets: minimum `44×44px` (`min-h-[44px] min-w-[44px]`)
 - Modals/dialogs: use shadcn Sheet on mobile, Dialog on desktop
@@ -744,7 +745,7 @@ Work through features in this order. Each must be verified working before moving
 6. Service catalog (full CRUD, audit trail — ADMIN+)
 7. Payment terms library (CRUD, rich text, default — ADMIN+)
 8. T&C library (CRUD, rich text, lock, category association — ADMIN+)
-9. Proposal creation wizard (Steps 1–6, auto-save, validation, line items, pricing)
+9. Proposal creation wizard (Steps 1–7, auto-save, validation, line items, pricing) — 1 Client & Project, 2 Services, 3 Pricing, 4 Payment Terms, 5 T&C, 6 Signatories, 7 Review
 10. Proposal repository (list, filters, sort, duplicate, detail page)
 11. Approval workflow (submit, approve, revise, reject, SLA cron, force override)
 12. Version history (snapshots, diff summary, timeline UI, restore)
