@@ -1,11 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
+import { PDFDocument } from 'pdf-lib'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
 import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const maxDuration = 60 // Vercel: 60-second timeout
+
+const escapeHtml = (s: string) =>
+  s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+// Minimal structural page type shared by `puppeteer` and `puppeteer-core`.
+type PdfCapablePage = {
+  goto: (url: string, opts: { waitUntil: 'networkidle0'; timeout: number }) => Promise<unknown>
+  emulateMediaType: (type: string) => Promise<unknown>
+  pdf: (opts: Record<string, unknown>) => Promise<Uint8Array>
+}
+
+// Renders the proposal in two passes and merges them:
+//   1. cover  — full-bleed A4 page, zero margins, no footer (unnumbered)
+//   2. body   — continuous flow with page margins + a running footer whose
+//               "Page X of Y" comes from Puppeteer's own pagination
+async function renderProposalPdf(
+  page: PdfCapablePage,
+  pdfUrl: string,
+  footer: { proposalNumber: string; agencyName: string },
+): Promise<Buffer> {
+  await page.goto(`${pdfUrl}&part=cover`, { waitUntil: 'networkidle0', timeout: 30000 })
+  await page.emulateMediaType('print')
+  const coverBuf = await page.pdf({
+    printBackground: true,
+    // Full bleed: the cover's @page rule is A4 with zero margins.
+    preferCSSPageSize: true,
+    margin: { top: '0', right: '0', bottom: '0', left: '0' },
+  })
+
+  const footerTemplate = `
+    <div style="width:100%; margin:0 15mm; padding-top:6px; border-top:1px solid #E2E8F0; font-size:8px; font-family:Helvetica,Arial,sans-serif; color:#64748B; display:flex; justify-content:space-between; align-items:center;">
+      <span>${escapeHtml(footer.proposalNumber)}</span>
+      <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+      <span>${escapeHtml(footer.agencyName)} &nbsp;·&nbsp; Confidential — For Addressee Only</span>
+    </div>`
+
+  await page.goto(`${pdfUrl}&part=body`, { waitUntil: 'networkidle0', timeout: 30000 })
+  await page.emulateMediaType('print')
+  const bodyBuf = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    displayHeaderFooter: true,
+    headerTemplate: '<span></span>',
+    footerTemplate,
+    // Option margins define the printable area and the footer band; the body's
+    // CSS deliberately sets no @page margin so these win.
+    margin: { top: '16mm', right: '15mm', bottom: '20mm', left: '15mm' },
+  })
+
+  const merged = await PDFDocument.create()
+  for (const buf of [coverBuf, bodyBuf]) {
+    const doc = await PDFDocument.load(buf)
+    const pages = await merged.copyPages(doc, doc.getPageIndices())
+    for (const p of pages) merged.addPage(p)
+  }
+  return Buffer.from(await merged.save())
+}
 
 export async function POST(req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -27,11 +89,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  // ── Fetch proposal ────────────────────────────────────────────────────────
-  const proposal = await prisma.proposal.findUnique({
-    where: { id: proposalId },
-    select: { id: true, status: true, version: true },
-  })
+  // ── Fetch proposal (+ agency name for the running footer) ────────────────
+  const [proposal, settings] = await Promise.all([
+    prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { id: true, status: true, version: true, number: true },
+    }),
+    prisma.systemSettings.findFirst({ select: { agencyName: true } }),
+  ])
 
   if (!proposal) {
     return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
@@ -54,6 +119,10 @@ export async function POST(req: NextRequest) {
   // ── Generate signed token for the PDF template URL ────────────────────────
   const token = createHmac('sha256', secret).update(proposalId).digest('hex')
   const pdfUrl = `${appUrl}/pdf/${proposalId}?token=${token}`
+  const footer = {
+    proposalNumber: proposal.number,
+    agencyName: settings?.agencyName ?? 'The Agency',
+  }
 
   // ── Launch Puppeteer ──────────────────────────────────────────────────────
   let pdfBuffer: Buffer
@@ -74,20 +143,12 @@ export async function POST(req: NextRequest) {
         executablePath,
         headless: true,
       })
-
-      const page = await browser.newPage()
-      await page.goto(pdfUrl, { waitUntil: 'networkidle0', timeout: 30000 })
-      await page.emulateMediaType('print')
-      const buf = await page.pdf({
-        format: 'A4',
-        // Margins are handled in CSS (each .sheet is a full A4 page) so the
-        // full-bleed cover and per-page footers reach the paper edge.
-        margin: { top: '0', right: '0', bottom: '0', left: '0' },
-        printBackground: true,
-        preferCSSPageSize: true,
-      })
-      await browser.close()
-      pdfBuffer = Buffer.from(buf)
+      try {
+        const page = await browser.newPage()
+        pdfBuffer = await renderProposalPdf(page, pdfUrl, footer)
+      } finally {
+        await browser.close()
+      }
     } else {
       // Local dev: use bundled puppeteer
       const puppeteer = (await import('puppeteer')).default
@@ -95,18 +156,12 @@ export async function POST(req: NextRequest) {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       })
-      const page = await browser.newPage()
-      await page.goto(pdfUrl, { waitUntil: 'networkidle0', timeout: 30000 })
-      await page.emulateMediaType('print')
-      const buf = await page.pdf({
-        format: 'A4',
-        // Margins handled in CSS — see note above.
-        margin: { top: '0', right: '0', bottom: '0', left: '0' },
-        printBackground: true,
-        preferCSSPageSize: true,
-      })
-      await browser.close()
-      pdfBuffer = Buffer.from(buf)
+      try {
+        const page = await browser.newPage()
+        pdfBuffer = await renderProposalPdf(page, pdfUrl, footer)
+      } finally {
+        await browser.close()
+      }
     }
   } catch (err) {
     console.error('[pdf/generate] Puppeteer error:', err)

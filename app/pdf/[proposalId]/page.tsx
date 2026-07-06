@@ -21,7 +21,7 @@ import { resolveModesOfPayment } from '@/lib/mode-of-payment-sections'
 
 type Props = {
   params: { proposalId: string }
-  searchParams: { token?: string }
+  searchParams: { token?: string; part?: string }
 }
 
 function fmtDate(iso: string | Date): string {
@@ -54,6 +54,17 @@ export default async function PdfPage({ params, searchParams }: Props) {
       .digest('hex')
     if (searchParams.token !== expected) notFound()
   }
+
+  // The generate route renders the document in two passes: the full-bleed cover
+  // (no Puppeteer footer) and the continuously flowing body (Puppeteer margins +
+  // footer with real page numbers), merged afterwards. Without ?part= both are
+  // rendered, for previewing the template directly in the browser.
+  const part =
+    searchParams.part === 'cover' || searchParams.part === 'body'
+      ? searchParams.part
+      : 'all'
+  const showCover = part !== 'body'
+  const showBody = part !== 'cover'
 
   // ── Fetch data ───────────────────────────────────────────────────────────────
   const [proposal, settings] = await Promise.all([
@@ -197,19 +208,20 @@ export default async function PdfPage({ params, searchParams }: Props) {
   const scheduleDownpayment = paymentSchedule?.installments[0]?.downpaymentAmount ?? 0
   const scheduleDownpaymentPct = paymentSchedule?.installments[0]?.downpaymentPercent ?? 0
 
-  // ── Page ordering (for "Page X of Y") ────────────────────────────────────────
+  // ── Section numbering (cover is 01; body sections continue the sequence) ────
+  // Page numbers are no longer computed here — the body flows continuously and
+  // Puppeteer's footer template stamps the real "Page X of Y" per physical page.
   const order: string[] = ['cover']
   if (nonOptionalItems.length > 0) order.push('scope')
   order.push('invest')
   if (paymentHtml || hasManualMilestones || hasModesOfPayment) order.push('payment')
   if (hasTc) order.push('tc')
   if (hasSignatories) order.push('signatories')
-  const totalPages = order.length
-  const pageNum = (key: string) => order.indexOf(key) + 1
+  const secNum = (key: string) => order.indexOf(key) + 1
   const pad = (n: number) => String(n).padStart(2, '0')
 
-  // ── Reusable inner-sheet chrome ──────────────────────────────────────────────
-  function Sheet({
+  // ── Flowing body section: numbered heading + content, no page chrome ────────
+  function FlowSection({
     pageKey,
     title,
     children,
@@ -218,39 +230,25 @@ export default async function PdfPage({ params, searchParams }: Props) {
     title: string
     children: React.ReactNode
   }) {
-    const n = pageNum(pageKey)
     return (
-      <section className="sheet">
-        <div className="sheet-inner">
-          <div className="sheet-top">
-            <div className="rh">
-              <span className="rh-agency">{agencyName.toUpperCase()}</span>
-              <span className="rh-num">{proposal!.number}</span>
-            </div>
-            <hr className="rule" />
-            <div className="head">
-              <div className="eyebrow">{pad(n)}</div>
-              <h2 className="sheet-title">{title}</h2>
-            </div>
-            <div className="section-body">{children}</div>
-          </div>
-          <div className="sheet-foot">
-            <hr className="foot-rule" />
-            <div className="ft">
-              <span>{proposal!.number}</span>
-              <span>
-                Page {n} of {totalPages}
-              </span>
-              <span>Confidential — For Addressee Only</span>
-            </div>
-          </div>
+      <section className="flow-section">
+        <div className="head">
+          <div className="eyebrow">{pad(secNum(pageKey))}</div>
+          <h2 className="section-title">{title}</h2>
         </div>
+        <div className="section-body">{children}</div>
       </section>
     )
   }
 
   const css = `
-    @page { size: A4; margin: 0; }
+    ${
+      part === 'body'
+        ? // Body pass: page size only — margins come from Puppeteer's pdf() options
+          // (a CSS @page margin would override them and clip the footer template).
+          `@page { size: A4; }`
+        : `@page { size: A4; margin: 0; }`
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     #pdf-root {
@@ -284,29 +282,28 @@ export default async function PdfPage({ params, searchParams }: Props) {
         : ''
     }
 
+    /* Cover: a fixed full-bleed A4 page (794×1123px at 96dpi) */
     .sheet { position: relative; z-index: 1; width: 794px; min-height: 1120px; background: #fff; }
     .sheet:not(:last-child) { break-after: page; page-break-after: always; }
-    .sheet-inner { min-height: 1120px; padding: 52px 64px 40px; display: flex; flex-direction: column; }
-    .sheet-foot { margin-top: auto; padding-top: 24px; }
 
-    /* Running header */
-    .rh { display: flex; justify-content: space-between; align-items: center; }
-    .rh-agency { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
-    .rh-num { font-size: 9px; font-weight: 500; letter-spacing: 0.04em; color: var(--muted); }
-    .rule { border: 0; border-top: 1px solid var(--border); margin-top: 12px; }
-    .foot-rule { border: 0; border-top: 1px solid var(--border); margin-bottom: 10px; }
-    .ft { display: flex; justify-content: space-between; font-size: 8px; color: var(--muted); }
+    /* ── Continuous body flow ─────────────────────────────────────────────── */
+    /* Width comes from the printable area (Puppeteer page margins); sections
+       follow one another with a divider and break across pages naturally. */
+    #doc-flow { position: relative; z-index: 1; background: #fff; }
+    /* Browser preview only (?part absent): simulate the print margins */
+    #doc-flow.preview-pad { width: 794px; padding: 52px 64px; }
+    .flow-section + .flow-section { border-top: 1px solid var(--border); margin-top: 34px; padding-top: 30px; }
 
-    /* Section head */
-    .head { margin-top: 40px; }
+    /* Section head — never left alone at the bottom of a page */
+    .head { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
     .eyebrow { font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 0.06em; }
-    .sheet-title { font-size: 30px; font-weight: 700; color: var(--primary); line-height: 1.22; margin-top: 12px; }
-    .section-body { margin-top: 26px; }
+    .section-title { font-size: 26px; font-weight: 700; color: var(--primary); line-height: 1.22; margin-top: 10px; }
+    .section-body { margin-top: 22px; }
 
     /* Rich text */
     .rich { font-size: 12.5px; line-height: 1.7; color: var(--text); }
     .rich p { margin: 0 0 12px; }
-    .rich h1, .rich h2, .rich h3, .rich h4 { color: var(--primary); font-weight: 600; margin: 18px 0 8px; line-height: 1.3; }
+    .rich h1, .rich h2, .rich h3, .rich h4 { color: var(--primary); font-weight: 600; margin: 18px 0 8px; line-height: 1.3; break-after: avoid; page-break-after: avoid; }
     .rich h1 { font-size: 18px; } .rich h2 { font-size: 16px; } .rich h3 { font-size: 14px; } .rich h4 { font-size: 12.5px; }
     .rich ul, .rich ol { margin: 0 0 12px; padding-left: 20px; }
     .rich li { margin: 4px 0; }
@@ -315,14 +312,14 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .rich a { color: var(--accent); text-decoration: none; }
     .rich blockquote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--muted); margin: 0 0 12px; }
 
-    /* T&C compiled sections */
-    .tc-section { break-inside: avoid; page-break-inside: avoid; }
+    /* T&C compiled sections — long clauses may span pages, but a clause title
+       always stays attached to the start of its body */
     .tc-section + .tc-section { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
-    .tc-section-title { font-size: 14px; font-weight: 600; color: var(--primary); margin: 0 0 8px; line-height: 1.3; }
+    .tc-section-title { font-size: 14px; font-weight: 600; color: var(--primary); margin: 0 0 8px; line-height: 1.3; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
 
     /* Signatories */
     .sig-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
-    .sig-col-head { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 28px; }
+    .sig-col-head { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 28px; break-after: avoid; page-break-after: avoid; }
     .sig-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 40px; }
     .sig-mark { height: 64px; display: flex; align-items: flex-end; }
     .sig-mark img { max-height: 64px; max-width: 240px; object-fit: contain; }
@@ -338,6 +335,10 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .scope-badge { width: 34px; height: 34px; border-radius: 9px; background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
     .scope-name { font-size: 17px; font-weight: 600; color: var(--primary); flex: 1; }
     .tag { font-size: 9px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 11px; white-space: nowrap; }
+
+    /* Tables: repeat column headers on page continuation, keep rows whole */
+    .itable thead, .stable thead { display: table-header-group; }
+    .itable tr, .stable tr { break-inside: avoid; page-break-inside: avoid; }
 
     /* Investment table */
     .itable { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -357,7 +358,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .amount { font-weight: 600; color: var(--primary); }
 
     /* Totals */
-    .totals { display: flex; margin-top: 22px; }
+    .totals { display: flex; margin-top: 22px; break-inside: avoid; page-break-inside: avoid; }
     .totals-box { margin-left: auto; width: 330px; }
     .trow { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; font-size: 12.5px; }
     .trow .tl { color: var(--muted); }
@@ -396,7 +397,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .mop-row .v { color: var(--text); }
 
     /* Optional add-ons */
-    .addon-head { display: flex; align-items: center; justify-content: space-between; margin-top: 34px; margin-bottom: 14px; }
+    .addon-head { display: flex; align-items: center; justify-content: space-between; margin-top: 34px; margin-bottom: 14px; break-after: avoid; page-break-after: avoid; }
     .addon-title { font-size: 15px; font-weight: 600; color: var(--primary); }
     .lead-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 24px; }
 
@@ -424,7 +425,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
       <style dangerouslySetInnerHTML={{ __html: css }} />
 
       <div id="pdf-root">
-        {/* ── 1. COVER ───────────────────────────────────────────────────────── */}
+        {/* ── 1. COVER (own full-bleed page, rendered without a footer) ──────── */}
+        {showCover && (
         <section className="sheet cover">
           <div className="cover-inner">
             <div className="cover-bar" />
@@ -468,10 +470,15 @@ export default async function PdfPage({ params, searchParams }: Props) {
             </div>
           </div>
         </section>
+        )}
+
+        {/* ── BODY: sections flow continuously; breaks fall naturally ────────── */}
+        {showBody && (
+        <main id="doc-flow" className={part === 'all' ? 'preview-pad' : undefined}>
 
         {/* ── 3. SCOPE OF WORK ───────────────────────────────────────────────── */}
         {nonOptionalItems.length > 0 && (
-          <Sheet pageKey="scope" title="Scope of Work">
+          <FlowSection pageKey="scope" title="Scope of Work">
             {nonOptionalItems.map((li, i) => (
               <div key={li.id} className="scope-item">
                 <div className="scope-head">
@@ -484,11 +491,11 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 )}
               </div>
             ))}
-          </Sheet>
+          </FlowSection>
         )}
 
         {/* ── 4. INVESTMENT SUMMARY ──────────────────────────────────────────── */}
-        <Sheet pageKey="invest" title="Investment Summary">
+        <FlowSection pageKey="invest" title="Investment Summary">
           <div className="lead-note">
             All figures in {displayCurrency}
             {displayCurrency !== 'PHP' ? ', converted from Philippine Peso at the agreed rate' : ''}.
@@ -594,11 +601,11 @@ export default async function PdfPage({ params, searchParams }: Props) {
               </table>
             </>
           )}
-        </Sheet>
+        </FlowSection>
 
         {/* ── 5. PAYMENT TERMS ───────────────────────────────────────────────── */}
         {(paymentHtml || hasManualMilestones || hasModesOfPayment) && (
-          <Sheet pageKey="payment" title="Payment Terms">
+          <FlowSection pageKey="payment" title="Payment Terms">
             {paymentHtml && (
               <div className="rich" dangerouslySetInnerHTML={{ __html: paymentHtml }} />
             )}
@@ -769,12 +776,12 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 </div>
               </div>
             )}
-          </Sheet>
+          </FlowSection>
         )}
 
         {/* ── 6. TERMS & CONDITIONS ──────────────────────────────────────────── */}
         {hasTc && (
-          <Sheet pageKey="tc" title="Terms & Conditions">
+          <FlowSection pageKey="tc" title="Terms & Conditions">
             {tcSections.length > 0 ? (
               <div className="tc-sections">
                 {tcSections.map((section, i) => (
@@ -787,12 +794,12 @@ export default async function PdfPage({ params, searchParams }: Props) {
             ) : (
               <div className="rich" dangerouslySetInnerHTML={{ __html: tcHtml }} />
             )}
-          </Sheet>
+          </FlowSection>
         )}
 
         {/* ── 7. SIGNATORIES ─────────────────────────────────────────────────── */}
         {hasSignatories && (
-          <Sheet pageKey="signatories" title="Signatories">
+          <FlowSection pageKey="signatories" title="Signatories">
             <div className="sig-cols">
               {internalSignatories.length > 0 && (
                 <div className="sig-agency">
@@ -830,7 +837,10 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 </div>
               )}
             </div>
-          </Sheet>
+          </FlowSection>
+        )}
+
+        </main>
         )}
       </div>
     </>
