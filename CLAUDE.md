@@ -821,21 +821,21 @@ Save to `proposal.lostReason`. Create `ApprovalEvent` with `action: 'won'` or `'
 
 ## Seed Data (prisma/seed.ts)
 
-Make seed idempotent using `upsert`. Include:
+Make seed idempotent using `upsert`. The current seed (counts verified directly against `prisma/seed.ts`) includes:
 
-- 1 SUPER_ADMIN: `admin@agency.com` / `Admin1234!`
-- 1 SALES_EXEC: `juan@agency.com` / `Sales1234!`
-- 1 SALES_MANAGER: `manager@agency.com` / `Manager1234!`
-- 1 COO: `coo@agency.com` / `Coo1234!` (first-stage approver in the COO → CEO chain)
-- 1 CEO: `ceo@agency.com` / `Ceo1234!` (second-stage / final approver)
-- 1 Team: "Sales Team", manager = manager user
-- 3 Services across 2 categories (Strategy + Digital)
-- 2 PaymentTemplates (one set as default)
-- 1 TCTemplate with categories `['Strategy', 'Digital']`
-- 1 SystemSettings row: `agencyName = 'The Agency'`
-- 1 ClientContact: "Acme Corp"
-- 5 Proposals in varying statuses: DRAFT, PENDING_APPROVAL, APPROVED, WON, LOST
-- ProposalVersion history on the APPROVED proposal (at least v1 and v2)
+- 1 SUPER_ADMIN: `admin@agency.com` (no password set in seed — created via Supabase Auth Dashboard, see below)
+- 1 SALES_EXEC: `juan@agency.com`, "Juan Sales", jobTitle "Account Executive"
+- 1 SALES_MANAGER: `manager@agency.com`, "Maria Manager", jobTitle "Sales Manager"
+- 1 COO: `coo@agency.com`, "Olivia Operations", jobTitle "Chief Operating Officer" — first-stage approver in the COO → CEO chain
+- 1 CEO: `ceo@agency.com`, "Ethan Executive", jobTitle "Chief Executive Officer" — second-stage / final approver
+- 1 Team: "Sales Team", manager = manager user; manager and juan assigned to it
+- **4 ModeOfPayment** bank accounts: Foreign Clients (BDO), Local Clients (Union Bank), Filinvest (EastWest), URC (Robinsons Bank)
+- **4 PaymentTemplates**: "Full Payment — 100% on Kick-Off" (default), "Milestone — 50% / 30% / 20%", "Monthly Retainer", "Retainer — 20% Downpayment"
+- **4 TCTemplates**: a locked "General Terms & Conditions" master (categories: all four below) plus three category-tagged supplements — "Brand Identity & Development Terms" (Branding), "Strategy & Consulting Terms" (Strategy), "Collaterals & Production Terms" (Property Brand Applications + Sales Materials)
+- **14 Services** across **4 categories** — **Branding**, **Strategy**, **Property Brand Applications**, **Sales Materials** (there is no "Digital" category): Brand Identity Development (Branding); Social Media Strategy (Strategy); Key Visual / Omnibus Poster, Lamppost Banners, Billboard Design, Signage & Facade, Hoardings / Board-Ups, Wayfinding / Environmental Graphic Design (Property Brand Applications); Digital Company Profile / Property Overview, Brochure Design, One-Page Flyer, Pull-Up Banner, Collapsible Booth Design, Newsletter Design (Sales Materials)
+- 1 SystemSettings row: `agencyName = 'Sunday Studio'`
+- **3 Clients** with contacts: Acme Corp (Retail, 2 contacts), BuildRight Construction (Real Estate, 1 contact), FreshBite Food Group (Food & Beverage, 1 contact, no proposals)
+- **7 Proposals**: 1 DRAFT, 1 PENDING_APPROVAL, 1 APPROVED (with ProposalVersion history — v1 and v2 — plus approval events), 1 WON, 1 LOST, and 2 additional APPROVED proposals built specifically to exercise the PDF payment-schedule breakdown (one-time-fee-plus-monthly-retainer, and pure-retainer-with-downpayment)
 
 Also create these users in **Supabase Auth Dashboard** manually (Auth is separate from Prisma):
 `admin@agency.com`, `juan@agency.com`, `manager@agency.com`, `coo@agency.com`, `ceo@agency.com`
