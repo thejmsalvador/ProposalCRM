@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHmac } from 'crypto'
 import { PDFDocument } from 'pdf-lib'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
 import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
+import { signPdfToken } from '@/lib/pdf-token'
 
 export const maxDuration = 60 // Vercel: 60-second timeout
 
@@ -116,9 +116,9 @@ export async function POST(req: NextRequest) {
   const bucketName = process.env.STORAGE_BUCKET_NAME ?? 'proposals'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-  // ── Generate signed token for the PDF template URL ────────────────────────
-  const token = createHmac('sha256', secret).update(proposalId).digest('hex')
-  const pdfUrl = `${appUrl}/pdf/${proposalId}?token=${token}`
+  // ── Generate signed, short-lived token for the PDF template URL ──────────
+  const token = signPdfToken(proposalId, secret)
+  const pdfUrl = `${appUrl}/pdf/${proposalId}?token=${encodeURIComponent(token)}`
   const footer = {
     proposalNumber: proposal.number,
     agencyName: settings?.agencyName ?? 'The Agency',
