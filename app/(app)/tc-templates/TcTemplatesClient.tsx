@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useMemo, useTransition, useRef, useEffect, useCallback } from 'react'
-import { ScrollText, Plus, Lock, LockOpen, Copy, Pencil } from 'lucide-react'
+import { ScrollText, Plus, Lock, LockOpen, Copy, Pencil, Archive, RotateCcw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import {
   lockTcTemplate,
   unlockTcTemplate,
   duplicateTcTemplate,
+  archiveTcTemplate,
+  restoreTcTemplate,
 } from '@/lib/actions/tc-templates'
 import type { TcTemplateListItem } from '@/lib/actions/tc-templates'
 import { TcTemplateDialog } from './TcTemplateDialog'
@@ -135,6 +137,17 @@ export function TcTemplatesClient({
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       } else {
         toast({ title: 'Template duplicated', description: 'A new editable copy has been created.' })
+      }
+    })
+  }
+
+  function handleToggleArchive(t: TcTemplateListItem) {
+    startTransition(async () => {
+      const result = t.isArchived ? await restoreTcTemplate(t.id) : await archiveTcTemplate(t.id)
+      if ('error' in result) {
+        toast({ title: 'Error', description: result.error, variant: 'destructive' })
+      } else {
+        toast({ title: t.isArchived ? 'Section restored' : 'Section archived' })
       }
     })
   }
@@ -320,6 +333,22 @@ export function TcTemplatesClient({
                             </Button>
                           )
                         )}
+
+                        {/* Archive / Restore */}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="min-h-[36px] min-w-[36px] text-[var(--color-muted)]"
+                          onClick={() => handleToggleArchive(t)}
+                          aria-label={t.isArchived ? `Restore ${t.name}` : `Archive ${t.name}`}
+                        >
+                          {t.isArchived ? (
+                            <RotateCcw size={15} aria-hidden="true" />
+                          ) : (
+                            <Archive size={15} aria-hidden="true" />
+                          )}
+                        </Button>
                       </div>
                     </td>
                   </tr>

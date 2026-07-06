@@ -1,9 +1,15 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Landmark, Plus, Pencil } from 'lucide-react'
+import { useState, useMemo, useTransition } from 'react'
+import { Landmark, Plus, Pencil, Star, Archive, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ModeOfPaymentListItem } from '@/lib/actions/mode-of-payment'
+import { toast } from '@/hooks/use-toast'
+import {
+  type ModeOfPaymentListItem,
+  setDefaultModeOfPayment,
+  archiveModeOfPayment,
+  restoreModeOfPayment,
+} from '@/lib/actions/mode-of-payment'
 import { ModeOfPaymentDialog } from './ModeOfPaymentDialog'
 
 type StatusFilter = 'active' | 'archived' | 'all'
@@ -16,6 +22,18 @@ export function ModeOfPaymentClient({ modes }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<ModeOfPaymentListItem | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function runAction(
+    action: () => Promise<{ success: true } | { error: string }>,
+    okMessage: string,
+  ) {
+    startTransition(async () => {
+      const result = await action()
+      if ('error' in result) toast({ title: result.error, variant: 'destructive' })
+      else toast({ title: okMessage })
+    })
+  }
 
   const filtered = useMemo(() => {
     return modes.filter((m) => {
@@ -137,6 +155,11 @@ export function ModeOfPaymentClient({ modes }: Props) {
                   <tr key={m.id} className="hover:bg-[var(--color-surface)] transition-colors">
                     <td className="px-4 py-3 font-medium text-[var(--color-primary)]">
                       <span className="truncate max-w-[200px] block">{m.label}</span>
+                      {m.isDefault && (
+                        <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          <Star size={9} aria-hidden="true" /> Default
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-[var(--color-primary)]">{m.bankName}</td>
                     <td className="px-4 py-3 text-[var(--color-muted)] hidden md:table-cell">
@@ -157,7 +180,53 @@ export function ModeOfPaymentClient({ modes }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
+                        {!m.isArchived && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1.5 min-h-[36px] text-xs"
+                            disabled={isPending}
+                            onClick={() =>
+                              runAction(
+                                () => setDefaultModeOfPayment(m.id),
+                                m.isDefault ? 'Default cleared' : 'Set as default',
+                              )
+                            }
+                            aria-label={m.isDefault ? `Clear default on ${m.label}` : `Set ${m.label} as default`}
+                          >
+                            <Star
+                              size={13}
+                              aria-hidden="true"
+                              className={m.isDefault ? 'fill-amber-400 text-amber-500' : ''}
+                            />
+                            {m.isDefault ? 'Unset' : 'Default'}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 min-h-[36px] text-xs"
+                          disabled={isPending}
+                          onClick={() =>
+                            m.isArchived
+                              ? runAction(() => restoreModeOfPayment(m.id), 'Account restored')
+                              : runAction(() => archiveModeOfPayment(m.id), 'Account archived')
+                          }
+                          aria-label={m.isArchived ? `Restore ${m.label}` : `Archive ${m.label}`}
+                        >
+                          {m.isArchived ? (
+                            <>
+                              <RotateCcw size={13} aria-hidden="true" /> Restore
+                            </>
+                          ) : (
+                            <>
+                              <Archive size={13} aria-hidden="true" /> Archive
+                            </>
+                          )}
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"

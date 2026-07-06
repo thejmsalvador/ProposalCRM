@@ -18,6 +18,7 @@ export type ModeOfPaymentListItem = {
   branch: string
   swiftCode: string
   sortOrder: number
+  isDefault: boolean
   isArchived: boolean
   createdAt: string
   updatedAt: string
@@ -149,6 +150,32 @@ export async function restoreModeOfPayment(
   return { success: true }
 }
 
+// Set (or clear) the library's single default bank account. Passing an id makes
+// that account the sole default; the previous default is cleared atomically.
+export async function setDefaultModeOfPayment(
+  modeId: string,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+  if (!can(session.user, 'manage:templates')) return { error: 'Unauthorized' }
+
+  const mode = await prisma.modeOfPayment.findUnique({ where: { id: modeId } })
+  if (!mode) return { error: 'Mode of payment not found' }
+  if (mode.isArchived) return { error: 'Cannot set an archived account as default' }
+
+  const makeDefault = !mode.isDefault
+  await prisma.$transaction([
+    prisma.modeOfPayment.updateMany({ where: { isDefault: true }, data: { isDefault: false } }),
+    ...(makeDefault
+      ? [prisma.modeOfPayment.update({ where: { id: modeId }, data: { isDefault: true } })]
+      : []),
+  ])
+
+  await logAudit('ModeOfPayment', modeId, makeDefault ? 'set_default' : 'unset_default', session.user.id)
+  revalidatePath('/mode-of-payment')
+  return { success: true }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toListItem(m: {
@@ -160,6 +187,7 @@ function toListItem(m: {
   branch: string | null
   swiftCode: string | null
   sortOrder: number
+  isDefault: boolean
   isArchived: boolean
   createdAt: Date
   updatedAt: Date
@@ -173,6 +201,7 @@ function toListItem(m: {
     branch: m.branch ?? '',
     swiftCode: m.swiftCode ?? '',
     sortOrder: m.sortOrder,
+    isDefault: m.isDefault,
     isArchived: m.isArchived,
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),

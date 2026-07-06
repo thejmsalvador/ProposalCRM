@@ -137,6 +137,7 @@ model ModeOfPayment {
   branch        String?
   swiftCode     String?
   sortOrder     Int      @default(0)
+  isDefault     Boolean  @default(false)
   isArchived    Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
