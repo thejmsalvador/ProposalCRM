@@ -158,6 +158,9 @@ type Props = {
   canEdit: boolean
   canApprove: boolean
   canForceOverride: boolean
+  /** Set when the linked Client record was renamed after this proposal was
+   *  created (point-in-time snapshot is now stale). Null otherwise. */
+  clientUpdate?: { clientId: string; currentName: string } | null
 }
 
 // ─── Snapshot preview component ───────────────────────────────────────────────
@@ -294,6 +297,7 @@ export function ProposalDetailClient({
   canEdit,
   canApprove,
   canForceOverride,
+  clientUpdate,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1260,6 +1264,21 @@ export function ProposalDetailClient({
         <ArrowLeft className="h-4 w-4" />
         Back to Proposals
       </Link>
+
+      {/* Client-record-updated staleness note (never auto-propagated) */}
+      {clientUpdate && (
+        <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-slate-400" />
+          <span>
+            The linked client record has been renamed to{' '}
+            <span className="font-medium text-slate-700">{clientUpdate.currentName}</span>{' '}
+            since this proposal was created. This document keeps its original details.{' '}
+            <Link href={`/clients/${clientUpdate.clientId}`} className="text-[var(--color-accent)] hover:underline">
+              View client
+            </Link>
+          </span>
+        </div>
+      )}
 
       {/* Approval action bar */}
       {approvalActionBar}
