@@ -8,10 +8,20 @@ import type { NextRequest } from 'next/server'
  * Exchanges the code for a session, sets the auth cookies,
  * then redirects to the app.
  */
+// Only allow same-origin, single-leading-slash paths as redirect targets, so a
+// crafted ?next= cannot bounce the user to an external site or a protocol-
+// relative URL after login.
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return '/dashboard'
+  }
+  return raw
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/app/dashboard'
+  const next = safeNext(searchParams.get('next'))
 
   if (code) {
     const supabase = createClient(cookies())
