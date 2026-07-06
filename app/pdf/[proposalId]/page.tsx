@@ -19,6 +19,7 @@ import {
 import { resolveTcSections } from '@/lib/tc-sections'
 import { resolveModesOfPayment } from '@/lib/mode-of-payment-sections'
 import { sanitizeHtml } from '@/lib/sanitize'
+import { DEFAULT_AGENCY_NAME } from '@/lib/branding'
 
 type Props = {
   params: { proposalId: string }
@@ -86,7 +87,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
   if (!proposal) notFound()
 
   const accent = settings?.brandColorHex ?? '#4F46E5'
-  const agencyName = settings?.agencyName ?? 'The Agency'
+  const agencyName = settings?.agencyName ?? DEFAULT_AGENCY_NAME
 
   const nonOptionalItems = proposal.lineItems.filter((li) => !li.isOptional)
   const optionalItems = proposal.lineItems.filter((li) => li.isOptional)

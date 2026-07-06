@@ -8,6 +8,7 @@ import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { logAudit } from '../audit'
 import { canViewProposal, canEditProposal } from '../proposal-visibility'
+import { DEFAULT_AGENCY_NAME } from '../branding'
 import { createNotification } from '../notifications'
 import {
   sendEmail,
@@ -215,7 +216,7 @@ export async function getWizardData(): Promise<{
       defaultValidityDays: settings?.defaultValidityDays ?? 30,
       defaultCurrency: settings?.defaultCurrency ?? 'PHP',
       defaultVatRate: String(settings?.defaultVatRate ?? 12),
-      agencyName: settings?.agencyName ?? 'Sunday Studio',
+      agencyName: settings?.agencyName ?? DEFAULT_AGENCY_NAME,
     },
   }
 }

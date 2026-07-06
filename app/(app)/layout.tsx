@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { getUnreadCount } from '@/lib/actions/notifications'
 import { getCachedSystemSettings } from '@/lib/queries/settings'
+import { DEFAULT_AGENCY_NAME } from '@/lib/branding'
 import { AppShell } from '@/components/shell/AppShell'
 
 export default async function AppLayout({
@@ -21,7 +22,7 @@ export default async function AppLayout({
     <AppShell
       user={session.user}
       unreadCount={unreadCount}
-      agencyName={settings?.agencyName ?? 'Sunday Studio'}
+      agencyName={settings?.agencyName ?? DEFAULT_AGENCY_NAME}
       agencyLogoUrl={settings?.agencyLogoUrl ?? null}
     >
       {children}
