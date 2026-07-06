@@ -36,19 +36,22 @@ Do not deviate from this stack.
 
 ## Environment Variables
 
+The block below matches what the app actually reads via `process.env` (grepped across the repo) and mirrors `.env.example`. Note the real Supabase var names carry the `NEXT_PUBLIC_` prefix (they're read client-side too), which differs from earlier drafts of this doc.
+
 ```env
 DATABASE_URL=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-NEXTAUTH_SECRET=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
+# Signs the internal Puppeteer PDF URL (app/pdf/[proposalId]) so it can't be
+# hit directly without a valid HMAC token. Required in production; skipped in
+# dev so the template can be previewed unauthenticated in the browser.
+PDF_SECRET=
 RESEND_API_KEY=
 NEXT_PUBLIC_APP_URL=
 STORAGE_BUCKET_NAME=proposals
 APPROVAL_SLA_HOURS=48
-HIGH_VALUE_THRESHOLD=500000
 CRON_SECRET=
 ```
 
