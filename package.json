@@ -44,6 +44,7 @@
     "lucide-react": "^1.7.0",
     "next": "14.2.35",
     "papaparse": "^5.5.3",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.20.0",
     "puppeteer": "^24.40.0",
     "react": "^18",
