@@ -1,10 +1,14 @@
 'use client'
 
 import { useState, useMemo, useTransition } from 'react'
-import { CreditCard, Plus, Star, Pencil } from 'lucide-react'
+import { CreditCard, Plus, Star, Pencil, Archive, RotateCcw } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
-import { setDefaultPaymentTerm } from '@/lib/actions/payment-terms'
+import {
+  setDefaultPaymentTerm,
+  archivePaymentTerm,
+  restorePaymentTerm,
+} from '@/lib/actions/payment-terms'
 import type { PaymentTermListItem } from '@/lib/actions/payment-terms'
 import { PaymentTermDialog } from './PaymentTermDialog'
 
@@ -49,6 +53,17 @@ export function PaymentTermsClient({ templates }: Props) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       } else {
         toast({ title: 'Default template updated' })
+      }
+    })
+  }
+
+  function handleToggleArchive(t: PaymentTermListItem) {
+    startTransition(async () => {
+      const result = t.isArchived ? await restorePaymentTerm(t.id) : await archivePaymentTerm(t.id)
+      if ('error' in result) {
+        toast({ title: 'Error', description: result.error, variant: 'destructive' })
+      } else {
+        toast({ title: t.isArchived ? 'Template restored' : 'Template archived' })
       }
     })
   }
@@ -211,6 +226,24 @@ export function PaymentTermsClient({ templates }: Props) {
                             Set default
                           </Button>
                         )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 min-h-[36px] text-xs text-[var(--color-muted)]"
+                          onClick={() => handleToggleArchive(t)}
+                          aria-label={t.isArchived ? `Restore ${t.name}` : `Archive ${t.name}`}
+                        >
+                          {t.isArchived ? (
+                            <>
+                              <RotateCcw size={13} aria-hidden="true" /> Restore
+                            </>
+                          ) : (
+                            <>
+                              <Archive size={13} aria-hidden="true" /> Archive
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </td>
                   </tr>
