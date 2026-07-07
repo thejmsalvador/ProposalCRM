@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
-import { createHmac } from 'crypto'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
+import { verifyPdfToken } from '@/lib/pdf-token'
 import { engagementLabel } from '@/lib/validations/catalog'
 import {
   formatCurrency,
@@ -50,10 +50,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
   if (!isDev) {
     const secret = process.env.PDF_SECRET
     if (!secret) notFound()
-    const expected = createHmac('sha256', secret)
-      .update(params.proposalId)
-      .digest('hex')
-    if (searchParams.token !== expected) notFound()
+    if (!verifyPdfToken(searchParams.token, params.proposalId, secret)) notFound()
   }
 
   // The generate route renders the document in two passes: the full-bleed cover
