@@ -3,6 +3,7 @@ import { createHmac } from 'crypto'
 import { PDFDocument } from 'pdf-lib'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
+import { canViewProposal } from '@/lib/proposal-visibility'
 import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -93,12 +94,24 @@ export async function POST(req: NextRequest) {
   const [proposal, settings] = await Promise.all([
     prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { id: true, status: true, version: true, number: true },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        number: true,
+        createdById: true,
+        createdBy: { select: { teamId: true } },
+      },
     }),
     prisma.systemSettings.findFirst({ select: { agencyName: true } }),
   ])
 
   if (!proposal) {
+    return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
+  }
+  // Scope to the caller's visibility (SALES_EXEC → own, SALES_MANAGER → team)
+  // so a user cannot render a proposal they aren't allowed to see.
+  if (!canViewProposal(session.user, proposal)) {
     return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
   }
   if (proposal.status !== 'APPROVED') {

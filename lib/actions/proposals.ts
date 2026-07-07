@@ -7,6 +7,7 @@ import { getSession } from '../auth'
 import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { logAudit } from '../audit'
+import { canViewProposal } from '../proposal-visibility'
 import { createNotification } from '../notifications'
 import {
   sendEmail,
@@ -1059,16 +1060,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
   const resolvedModesOfPayment = await resolveModesOfPayment(proposal.modesOfPayment)
 
   // Enforce visibility rules
-  if (
-    user.role === 'SALES_EXEC' &&
-    proposal.createdById !== user.id
-  ) return null
-
-  if (
-    user.role === 'SALES_MANAGER' &&
-    proposal.createdById !== user.id &&
-    proposal.createdBy.teamId !== user.teamId
-  ) return null
+  if (!canViewProposal(user, proposal)) return null
 
   return {
     id: proposal.id,
