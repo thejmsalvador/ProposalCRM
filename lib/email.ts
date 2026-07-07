@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-const FROM = 'ProposalCRM <noreply@proposals.theagency.com>'
+const FROM = 'ProposalCRM <proposals@no-reply.sunday.ph>'
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
@@ -11,7 +11,16 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   // actually sent — keeps the production build independent of RESEND_API_KEY.
   if (!apiKey) return
   const resend = new Resend(apiKey)
-  await resend.emails.send({ from: FROM, to, subject, html })
+  // Best-effort: a failed notification email must never break the caller's core
+  // mutation (status transitions, cron runs). The Resend SDK returns { error }
+  // for API failures (e.g. an unverified sending domain) instead of throwing, so
+  // log it explicitly — otherwise sends fail silently and invisibly.
+  try {
+    const { error } = await resend.emails.send({ from: FROM, to, subject, html })
+    if (error) console.error(`[email] Resend rejected send to ${to}:`, error)
+  } catch (err) {
+    console.error(`[email] Failed to send to ${to}:`, err)
+  }
 }
 
 // Escape user-supplied values before interpolating them into email HTML so an
