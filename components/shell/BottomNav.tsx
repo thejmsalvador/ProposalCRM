@@ -12,6 +12,7 @@ import {
   CreditCard,
   Landmark,
   ScrollText,
+  User,
   UserCog,
   Settings,
 } from 'lucide-react'
@@ -29,6 +30,12 @@ type OverflowItem = {
 }
 
 const OVERFLOW_ITEMS: OverflowItem[] = [
+  {
+    label: 'My Profile',
+    href: '/profile',
+    icon: User,
+    // No roles restriction — every authenticated user can reach their own profile.
+  },
   {
     label: 'Service Catalog',
     href: '/catalog',

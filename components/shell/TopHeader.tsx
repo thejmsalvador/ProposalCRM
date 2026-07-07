@@ -1,7 +1,7 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
-import { LogOut } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { LogOut, User } from 'lucide-react'
 import Image from 'next/image'
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ function pageTitleFromPath(pathname: string): string {
     users: 'Users',
     settings: 'Settings',
     notifications: 'Notifications',
+    profile: 'My Profile',
   }
   return map[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1)
 }
@@ -37,6 +38,7 @@ type Props = {
 
 export function TopHeader({ user }: Props) {
   const pathname = usePathname()
+  const router = useRouter()
   const pageTitle = pageTitleFromPath(pathname)
 
   return (
@@ -74,6 +76,14 @@ export function TopHeader({ user }: Props) {
                 <span className="text-xs text-[var(--color-muted)] truncate">{user.email}</span>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="cursor-pointer flex items-center gap-2"
+              onSelect={() => router.push('/profile')}
+            >
+              <User size={14} />
+              My Profile
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer text-red-600 focus:text-red-600 flex items-center gap-2"
