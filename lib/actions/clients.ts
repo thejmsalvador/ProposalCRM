@@ -161,6 +161,7 @@ export async function addContact(
     },
   })
 
+  await logAudit('ClientContact', contact.id, 'created', session.user.id)
   revalidatePath('/clients')
   revalidatePath(`/clients/${clientId}`)
   return { success: true, id: contact.id }
@@ -206,6 +207,7 @@ export async function createContact(
     },
   })
 
+  await logAudit('ClientContact', contact.id, 'created', session.user.id)
   revalidatePath('/clients')
   if (clientId) revalidatePath(`/clients/${clientId}`)
   return { success: true, id: contact.id }
@@ -257,6 +259,7 @@ export async function updateContact(
     },
   })
 
+  await logAudit('ClientContact', id, 'updated', session.user.id)
   revalidatePath('/clients')
   if (existing.clientId) revalidatePath(`/clients/${existing.clientId}`)
   if (clientId && clientId !== existing.clientId) revalidatePath(`/clients/${clientId}`)
@@ -274,8 +277,11 @@ export async function removeContact(
   const existing = await prisma.clientContact.findUnique({ where: { id } })
   if (!existing) return { error: 'Contact not found' }
 
-  await prisma.clientContact.delete({ where: { id } })
+  // Soft-delete: archive instead of hard-deleting, consistent with the
+  // archive-everywhere pattern used elsewhere, and audit the action.
+  await prisma.clientContact.update({ where: { id }, data: { isArchived: true } })
 
+  await logAudit('ClientContact', id, 'archived', session.user.id)
   revalidatePath('/clients')
   if (existing.clientId) revalidatePath(`/clients/${existing.clientId}`)
   return { success: true }
@@ -293,7 +299,7 @@ export async function searchClients(query: string): Promise<ClientOption[]> {
     },
     include: {
       contacts: {
-        where: { isPrimary: true },
+        where: { isPrimary: true, isArchived: false },
         take: 1,
         select: {
           contactName: true,
@@ -401,6 +407,7 @@ export async function syncClientFromProposal(
     where: {
       clientId: resolvedClientId,
       contactName: { equals: name, mode: 'insensitive' },
+      isArchived: false,
     },
   })
 
@@ -416,7 +423,7 @@ export async function syncClientFromProposal(
     })
   } else {
     const hasPrimary = await prisma.clientContact.findFirst({
-      where: { clientId: resolvedClientId, isPrimary: true },
+      where: { clientId: resolvedClientId, isPrimary: true, isArchived: false },
       select: { id: true },
     })
     await prisma.clientContact.create({

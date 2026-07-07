@@ -157,7 +157,7 @@ export async function getClientList(
       website: true,
       createdAt: true,
       contacts: {
-        where: { isPrimary: true },
+        where: { isPrimary: true, isArchived: false },
         take: 1,
         select: { contactName: true, contactTitle: true },
       },
@@ -250,6 +250,7 @@ export async function getClientDetail(
     where: { id: clientId, ...where },
     include: {
       contacts: {
+        where: { isArchived: false },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
       proposals: {
@@ -374,7 +375,7 @@ export async function getContactList(
       : { OR: [{ client: clientWhere }, { createdById: userId }] }
 
   const contacts = await prisma.clientContact.findMany({
-    where,
+    where: { isArchived: false, ...where },
     include: { client: { select: { id: true, companyName: true } } },
     orderBy: [{ contactName: 'asc' }],
   })
