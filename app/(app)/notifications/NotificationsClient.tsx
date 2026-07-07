@@ -20,12 +20,11 @@ function timeAgo(date: Date): string {
 }
 
 type Props = {
-  userId: string
   initialNotifications: NotificationItem[]
   initialUnreadCount: number
 }
 
-export function NotificationsClient({ userId, initialNotifications, initialUnreadCount }: Props) {
+export function NotificationsClient({ initialNotifications, initialUnreadCount }: Props) {
   const router = useRouter()
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications)
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
@@ -46,7 +45,7 @@ export function NotificationsClient({ userId, initialNotifications, initialUnrea
 
   const handleMarkAllRead = () => {
     startTransition(async () => {
-      await markAllRead(userId)
+      await markAllRead()
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
       setUnreadCount(0)
     })
