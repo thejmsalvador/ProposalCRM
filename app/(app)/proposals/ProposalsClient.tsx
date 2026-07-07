@@ -22,12 +22,18 @@ import {
   KanbanSquare,
   Columns3,
   ListFilter,
+  Send,
+  PauseCircle,
+  FileSpreadsheet,
+  CircleCheck,
+  CircleX,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -36,13 +42,26 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { duplicateProposal } from '@/lib/actions/proposals'
+import {
+  duplicateProposal,
+  markAsSent,
+  markAsWon,
+  markAsLost,
+  markOnHold,
+} from '@/lib/actions/proposals'
 import type {
   ProposalListItem,
   ProposalsPage,
@@ -122,6 +141,52 @@ const STATUS_STYLES: Record<ProposalStatus, string> = {
   EXPIRED: 'bg-gray-100 text-gray-500',
 }
 
+// Roles that can perform bulk operations (selection column + toolbar) on the proposal list.
+const BULK_ACTION_ROLES = new Set(['SALES_MANAGER', 'ADMIN', 'COO', 'CEO', 'SUPER_ADMIN'])
+
+// ─── Bulk status-change config ────────────────────────────────────────────────
+// `fromStatuses` mirrors the guard clause inside each server action in
+// lib/actions/proposals.ts — kept in sync so the toolbar only ever offers a
+// transition the action will actually accept. The action itself remains the
+// enforcement point; this is just what determines whether to show the button.
+
+type BulkStatusAction = {
+  key: string
+  label: string
+  fromStatuses: ProposalStatus[]
+  run: (id: string) => Promise<{ success: true } | { error: string }>
+}
+
+const BULK_MARK_AS_SENT: BulkStatusAction = {
+  key: 'SENT',
+  label: 'Mark as Sent',
+  fromStatuses: ['APPROVED'],
+  run: (id) => markAsSent(id),
+}
+
+const BULK_ON_HOLD: BulkStatusAction = {
+  key: 'ON_HOLD',
+  label: 'Put on Hold',
+  fromStatuses: ['DRAFT', 'PENDING_APPROVAL', 'REVISION_REQUIRED', 'APPROVED', 'SENT'],
+  run: (id) => markOnHold(id),
+}
+
+// Won/Lost need extra input (signed date / reason) collected via a shared modal,
+// so they're handled separately from the simple one-click actions above but use
+// the same fromStatuses gating rule.
+const BULK_WON_LOST_FROM: ProposalStatus[] = ['SENT', 'APPROVED']
+
+const BULK_SIMPLE_ACTIONS: BulkStatusAction[] = [BULK_MARK_AS_SENT, BULK_ON_HOLD]
+
+const LOST_REASONS = [
+  'Budget',
+  'Competitor Selected',
+  'Timeline',
+  'No Response',
+  'Scope Mismatch',
+  'Other',
+]
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(value: string) {
@@ -136,6 +201,124 @@ function formatDate(iso: string) {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function escapeCSV(value: string | number): string {
+  const str = String(value)
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"'
+  }
+  return str
+}
+
+// ─── Bulk Won/Lost modal ───────────────────────────────────────────────────────
+// Mirrors the single-proposal Win/Loss modal in KanbanBoard.tsx: one signed
+// date / reason is collected and applied to every selected proposal.
+
+function BulkWinLossModal({
+  type,
+  count,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  type: 'WON' | 'LOST'
+  count: number
+  onClose: () => void
+  onConfirm: (data: { signedDate?: string; lostReason?: string }) => void
+  isPending: boolean
+}) {
+  const [signedDate, setSignedDate] = useState('')
+  const [lostReason, setLostReason] = useState('')
+  const [lostOther, setLostOther] = useState('')
+
+  const isWon = type === 'WON'
+  const effectiveReason = lostReason === 'Other' ? lostOther.trim() : lostReason
+
+  function handleConfirm() {
+    if (!isWon && !effectiveReason) {
+      toast({ title: 'Reason required', description: 'Please select a reason for the loss.', variant: 'destructive' })
+      return
+    }
+    onConfirm(isWon ? { signedDate: signedDate || undefined } : { lostReason: effectiveReason })
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Mark {count} proposal{count > 1 ? 's' : ''} as {isWon ? 'Won' : 'Lost'}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4 py-2">
+          {isWon ? (
+            <div>
+              <Label htmlFor="bulk-signed-date" className="text-sm mb-1.5 block">
+                Signed Date <span className="text-slate-400">(optional)</span>
+              </Label>
+              <Input
+                id="bulk-signed-date"
+                type="date"
+                value={signedDate}
+                onChange={(e) => setSignedDate(e.target.value)}
+              />
+              <p className="text-xs text-slate-400 mt-1">Applied to all {count} selected proposals.</p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="bulk-lost-reason" className="text-sm mb-1.5 block">
+                  Reason <span className="text-red-500">*</span>
+                </Label>
+                <Select value={lostReason} onValueChange={setLostReason}>
+                  <SelectTrigger id="bulk-lost-reason">
+                    <SelectValue placeholder="Select a reason…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOST_REASONS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-400 mt-1">Applied to all {count} selected proposals.</p>
+              </div>
+              {lostReason === 'Other' && (
+                <div>
+                  <Label htmlFor="bulk-lost-other" className="text-sm mb-1.5 block">
+                    Please describe
+                  </Label>
+                  <Textarea
+                    id="bulk-lost-other"
+                    value={lostOther}
+                    onChange={(e) => setLostOther(e.target.value)}
+                    rows={2}
+                    placeholder="Enter reason…"
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={isPending}
+            className={isWon ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}
+          >
+            {isPending ? 'Saving…' : isWon ? 'Mark as Won' : 'Mark as Lost'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 // ─── Sort types ───────────────────────────────────────────────────────────────
@@ -323,10 +506,100 @@ export function ProposalsClient({
     })
   }
 
-  // Multi-select for bulk PDF
+  // Multi-select — selection column + bulk toolbar are visible to managers and above.
+  // Bulk ZIP download stays scoped to ADMIN/SUPER_ADMIN as before; it is nested
+  // inside the broader toolbar rather than gating the whole selection UI.
+  const canBulkActions = BULK_ACTION_ROLES.has(currentUserRole)
   const canBulkDownload = currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN'
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkDownloading, setIsBulkDownloading] = useState(false)
+  const [isBulkActionPending, setIsBulkActionPending] = useState(false)
+  const [bulkWinLossModal, setBulkWinLossModal] = useState<'WON' | 'LOST' | null>(null)
+
+  const selectedItems = items.filter((p) => selectedIds.has(p.id))
+
+  function availableBulkAction(action: BulkStatusAction): boolean {
+    return (
+      selectedItems.length > 0 &&
+      selectedItems.every((p) => action.fromStatuses.includes(p.status as ProposalStatus))
+    )
+  }
+
+  const bulkWonAvailable =
+    selectedItems.length > 0 &&
+    selectedItems.every((p) => BULK_WON_LOST_FROM.includes(p.status as ProposalStatus))
+  const bulkLostAvailable = bulkWonAvailable // same fromStatuses set
+
+  /** Runs `action` against every selected proposal, then reports a summary toast. */
+  async function runBulkStatusAction(
+    label: string,
+    action: (id: string) => Promise<{ success: true } | { error: string }>,
+  ) {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setIsBulkActionPending(true)
+    try {
+      const results = await Promise.all(ids.map((id) => action(id)))
+      const succeeded = results.filter((r) => 'success' in r).length
+      const failed = results.length - succeeded
+      if (failed === 0) {
+        toast({
+          title: `${succeeded} proposal${succeeded > 1 ? 's' : ''} marked as ${label}`,
+        })
+      } else if (succeeded === 0) {
+        toast({
+          title: 'Bulk action failed',
+          description: `Could not update any of the ${failed} selected proposal${failed > 1 ? 's' : ''}.`,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: `${succeeded} marked as ${label}, ${failed} skipped`,
+          description: 'Skipped proposals no longer meet the required status or permissions.',
+        })
+      }
+      setSelectedIds(new Set())
+      router.refresh()
+    } finally {
+      setIsBulkActionPending(false)
+    }
+  }
+
+  function handleBulkWinLossConfirm(data: { signedDate?: string; lostReason?: string }) {
+    if (!bulkWinLossModal) return
+    const isWon = bulkWinLossModal === 'WON'
+    setBulkWinLossModal(null)
+    runBulkStatusAction(
+      isWon ? 'Won' : 'Lost',
+      isWon
+        ? (id) => markAsWon(id, data.signedDate)
+        : (id) => markAsLost(id, data.lostReason ?? ''),
+    )
+  }
+
+  function handleBulkExportCSV() {
+    if (selectedItems.length === 0) return
+    const headers = ['Number', 'Client', 'Project', 'Status', 'Total', 'Created Date']
+    const rows = selectedItems.map((p) => [
+      p.number,
+      p.clientName || 'Untitled',
+      p.projectTitle,
+      STATUS_LABELS[p.status as ProposalStatus] ?? p.status,
+      p.total,
+      formatDate(p.createdAt),
+    ])
+    const csv = [headers, ...rows]
+      .map((row) => row.map(escapeCSV).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `proposals-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast({ title: `Exported ${selectedItems.length} proposal${selectedItems.length > 1 ? 's' : ''} to CSV` })
+  }
 
   function canEdit(p: ProposalListItem) {
     if (p.status !== 'DRAFT' && p.status !== 'REVISION_REQUIRED') return false
@@ -672,21 +945,100 @@ export function ProposalsClient({
         )}
       </div>
 
-      {/* Bulk action bar */}
-      {canBulkDownload && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+      {/* Bulk action toolbar — managers and above */}
+      {canBulkActions && selectedIds.size > 0 && (
+        <div
+          role="toolbar"
+          aria-label="Bulk proposal actions"
+          className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 flex-wrap"
+        >
           <span className="text-sm font-medium text-indigo-800">
             {selectedIds.size} proposal{selectedIds.size > 1 ? 's' : ''} selected
           </span>
+
+          {/* Bulk status change — only transitions valid for every selected proposal are offered */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isBulkActionPending}
+                className="bg-white"
+              >
+                Change status
+                <ChevronDown className="h-4 w-4 ml-1.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {BULK_SIMPLE_ACTIONS.map((action) => (
+                <DropdownMenuItem
+                  key={action.key}
+                  disabled={!availableBulkAction(action)}
+                  onClick={() => runBulkStatusAction(STATUS_LABELS[action.key as ProposalStatus], action.run)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  {action.key === 'SENT' ? (
+                    <Send className="h-4 w-4" />
+                  ) : (
+                    <PauseCircle className="h-4 w-4" />
+                  )}
+                  {action.label}
+                  {!availableBulkAction(action) && (
+                    <span className="ml-auto text-xs text-slate-400">Not valid for all selected</span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!bulkWonAvailable}
+                onClick={() => setBulkWinLossModal('WON')}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <CircleCheck className="h-4 w-4" />
+                Mark as Won
+                {!bulkWonAvailable && (
+                  <span className="ml-auto text-xs text-slate-400">Not valid for all selected</span>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!bulkLostAvailable}
+                onClick={() => setBulkWinLossModal('LOST')}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <CircleX className="h-4 w-4" />
+                Mark as Lost
+                {!bulkLostAvailable && (
+                  <span className="ml-auto text-xs text-slate-400">Not valid for all selected</span>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* CSV export */}
           <Button
             size="sm"
-            onClick={handleBulkDownload}
-            disabled={isBulkDownloading}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            variant="outline"
+            onClick={handleBulkExportCSV}
+            disabled={isBulkActionPending}
+            className="bg-white"
           >
-            <Archive className="h-4 w-4 mr-1.5" />
-            {isBulkDownloading ? 'Preparing ZIP…' : `Download ${selectedIds.size} PDF${selectedIds.size > 1 ? 's' : ''} as ZIP`}
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+            Export CSV
           </Button>
+
+          {/* Bulk ZIP download — unchanged from before, ADMIN/SUPER_ADMIN only */}
+          {canBulkDownload && (
+            <Button
+              size="sm"
+              onClick={handleBulkDownload}
+              disabled={isBulkDownloading}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              <Archive className="h-4 w-4 mr-1.5" />
+              {isBulkDownloading ? 'Preparing ZIP…' : `Download PDFs as ZIP`}
+            </Button>
+          )}
+
           <button
             onClick={() => setSelectedIds(new Set())}
             className="text-xs text-indigo-600 hover:underline ml-auto"
@@ -747,7 +1099,7 @@ export function ProposalsClient({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  {canBulkDownload && (
+                  {canBulkActions && (
                     <Checkbox
                       checked={selectedIds.has(p.id)}
                       onCheckedChange={() => toggleSelect(p.id)}
@@ -837,7 +1189,7 @@ export function ProposalsClient({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
-                  {canBulkDownload && (
+                  {canBulkActions && (
                     <th className="px-4 py-3 text-left w-10">
                       <Checkbox
                         checked={items.length > 0 && items.every((p) => selectedIds.has(p.id))}
@@ -892,7 +1244,7 @@ export function ProposalsClient({
                       i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
                     }`}
                   >
-                    {canBulkDownload && (
+                    {canBulkActions && (
                       <td className="px-4 py-3 w-10">
                         <Checkbox
                           checked={selectedIds.has(p.id)}
@@ -1045,6 +1397,16 @@ export function ProposalsClient({
         isPending={isDuplicating}
         onConfirm={confirmDuplicate}
       />
+
+      {bulkWinLossModal && (
+        <BulkWinLossModal
+          type={bulkWinLossModal}
+          count={selectedItems.length}
+          onClose={() => setBulkWinLossModal(null)}
+          onConfirm={handleBulkWinLossConfirm}
+          isPending={isBulkActionPending}
+        />
+      )}
     </div>
   )
 }
