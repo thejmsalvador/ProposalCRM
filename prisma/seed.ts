@@ -896,8 +896,6 @@ async function main() {
       subtotal: 352000,
       vatRate: 12,
       total: 394240,
-      introText:
-        '<p>Thank you for the opportunity to partner with Acme Corp on the on-site brand application rollout for this development.</p>',
       paymentTemplateId: paymentTemplate.id,
       tcTemplateId: tcCollaterals.id,
       // New multi-select model: two sections compiled in order, the second
@@ -1124,8 +1122,6 @@ async function main() {
       assignedApproverId: manager.id,
       subtotal: 900000,
       total: 900000,
-      introText:
-        '<p>A one-time brand foundation sprint followed by a six-month always-on social retainer.</p>',
       paymentTemplateId: paymentTemplate3.id, // Monthly Retainer
       tcTemplateId: tcTemplate.id,
       lineItems: {
@@ -1183,7 +1179,6 @@ async function main() {
       assignedApproverId: manager.id,
       subtotal: 600000,
       total: 600000,
-      introText: '<p>A six-month always-on social media retainer with a standard 20% downpayment.</p>',
       paymentTemplateId: paymentTemplate4.id, // Retainer — 20% Downpayment
       tcTemplateId: tcTemplate.id,
       lineItems: {
