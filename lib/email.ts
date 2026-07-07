@@ -14,6 +14,17 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   await resend.emails.send({ from: FROM, to, subject, html })
 }
 
+// Escape user-supplied values before interpolating them into email HTML so an
+// internal user can't inject markup/links into emails delivered to colleagues.
+function esc(value: string | number): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // ─── Button helper ────────────────────────────────────────────────────────────
 
 function viewButton(href: string, label = 'View Proposal') {
@@ -52,10 +63,10 @@ export function approvalRequestEmail(params: {
     subject: `Action Required: ${params.proposalNumber} awaits your approval`,
     html: layout(`
       <h2 style="margin:0 0 16px;font-size:20px;">Approval Request</h2>
-      <p style="margin:0 0 8px;font-size:15px;">Hi ${params.approverName},</p>
+      <p style="margin:0 0 8px;font-size:15px;">Hi ${esc(params.approverName)},</p>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#334155;">
-        <strong>${params.senderName}</strong> has submitted proposal
-        <strong>${params.proposalNumber}</strong> for your approval.
+        <strong>${esc(params.senderName)}</strong> has submitted proposal
+        <strong>${esc(params.proposalNumber)}</strong> for your approval.
         Please review it and take action.
       </p>
       ${viewButton(href)}
@@ -75,9 +86,9 @@ export function proposalApprovedEmail(params: {
     subject: `${params.proposalNumber} has been approved`,
     html: layout(`
       <h2 style="margin:0 0 16px;font-size:20px;">Proposal Approved</h2>
-      <p style="margin:0 0 8px;font-size:15px;">Hi ${params.creatorName},</p>
+      <p style="margin:0 0 8px;font-size:15px;">Hi ${esc(params.creatorName)},</p>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#334155;">
-        Great news! Proposal <strong>${params.proposalNumber}</strong> has been approved.
+        Great news! Proposal <strong>${esc(params.proposalNumber)}</strong> has been approved.
         You can now generate and send the PDF to your client.
       </p>
       ${viewButton(href, 'Generate PDF')}
@@ -99,13 +110,13 @@ export function revisionRequestedEmail(params: {
     subject: `Revisions requested on ${params.proposalNumber}`,
     html: layout(`
       <h2 style="margin:0 0 16px;font-size:20px;">Revision Requested</h2>
-      <p style="margin:0 0 8px;font-size:15px;">Hi ${params.creatorName},</p>
+      <p style="margin:0 0 8px;font-size:15px;">Hi ${esc(params.creatorName)},</p>
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155;">
-        <strong>${params.approverName}</strong> has requested revisions on proposal
-        <strong>${params.proposalNumber}</strong>.
+        <strong>${esc(params.approverName)}</strong> has requested revisions on proposal
+        <strong>${esc(params.proposalNumber)}</strong>.
       </p>
       <div style="background:#FFF7ED;border-left:4px solid #D97706;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 24px;">
-        <p style="margin:0;font-size:14px;color:#92400E;font-style:italic;">"${params.comment}"</p>
+        <p style="margin:0;font-size:14px;color:#92400E;font-style:italic;">"${esc(params.comment)}"</p>
       </div>
       ${viewButton(href, 'View & Edit Proposal')}
     `),
@@ -125,10 +136,10 @@ export function slaReminderEmail(params: {
     subject: `Reminder: ${params.proposalNumber} awaiting approval for ${params.hoursWaiting}h`,
     html: layout(`
       <h2 style="margin:0 0 16px;font-size:20px;">Approval Reminder</h2>
-      <p style="margin:0 0 8px;font-size:15px;">Hi ${params.approverName},</p>
+      <p style="margin:0 0 8px;font-size:15px;">Hi ${esc(params.approverName)},</p>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#334155;">
-        This is a reminder that proposal <strong>${params.proposalNumber}</strong> has been
-        awaiting your approval for <strong>${params.hoursWaiting} hours</strong>.
+        This is a reminder that proposal <strong>${esc(params.proposalNumber)}</strong> has been
+        awaiting your approval for <strong>${esc(params.hoursWaiting)} hours</strong>.
         Please review it at your earliest convenience.
       </p>
       ${viewButton(href)}
