@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Clock, Check, AlertCircle, ChevronDown, Bookmark, X } from 'lucide-react'
 import {
   WizardProvider,
@@ -99,17 +99,15 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
     stepError,
     proposalId,
     proposalNumber,
+    syncProposalId,
     saveStatus: explicitSaveStatus,
     lastSavedAt: explicitLastSaved,
   } = useWizard()
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  const handleAutoSaved = useCallback(() => {}, [])
-
   const { status: autoSaveStatus, lastSavedAt: autoLastSaved } = useAutoSave(
     form,
     proposalId,
-    handleAutoSaved,
+    syncProposalId,
   )
 
   // Combine save statuses — explicit save takes priority
