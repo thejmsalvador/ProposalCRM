@@ -2231,6 +2231,17 @@ export async function restoreVersion(
   const canEditAny = can(session.user, 'edit:any_proposal')
   if (!canEditOwn && !canEditAny) return { error: 'Unauthorized' }
 
+  // Restore rewrites all fields and forces status to DRAFT, which would bypass
+  // the "cannot edit while pending approval" lock (enforced in saveProposalDraft)
+  // and silently discard an in-flight or completed approval. Only allow it while
+  // the proposal is already editable.
+  if (proposal.status !== 'DRAFT' && proposal.status !== 'REVISION_REQUIRED') {
+    return {
+      error:
+        'This proposal can only be restored while it is a draft or awaiting revision.',
+    }
+  }
+
   const version = await prisma.proposalVersion.findUnique({ where: { id: versionId } })
   if (!version || version.proposalId !== proposalId) return { error: 'Version not found' }
 
