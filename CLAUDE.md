@@ -659,7 +659,7 @@ Always call `createNotification(userId, message, link)` AND `sendEmail(email, su
 
 Both routes are `GET` handlers protected by checking `Authorization: Bearer ${CRON_SECRET}`.
 
-**`/api/cron/approval-sla`** — runs hourly
+**`/api/cron/approval-sla`** — runs **daily** at 01:00 UTC (Hobby-plan limit; intended hourly on Pro — see plan note below)
 - Find proposals: `status = PENDING_APPROVAL` AND `updatedAt < now - APPROVAL_SLA_HOURS`
 - Create notification + send email to `assignedApprover`
 
@@ -671,11 +671,13 @@ Both routes are `GET` handlers protected by checking `Authorization: Bearer ${CR
 ```json
 {
   "crons": [
-    { "path": "/api/cron/approval-sla", "schedule": "0 * * * *" },
+    { "path": "/api/cron/approval-sla", "schedule": "0 1 * * *" },
     { "path": "/api/cron/expire-proposals", "schedule": "0 2 * * *" }
   ]
 }
 ```
+
+> **⚠️ Vercel plan constraint (temporary — revisit at launch):** The Vercel **Hobby** plan only permits **daily** cron jobs, so `approval-sla` runs daily (`0 1 * * *`) instead of the hourly cadence this doc originally specified. Deploys fail on Hobby with any sub-daily schedule. **At launch, upgrade to Vercel Pro** and restore `0 * * * *` for a timely SLA cadence. Before switching back to hourly, add per-proposal reminder throttling — the cron currently has **no dedup**, so an hourly schedule re-emails approvers on every run (~24×/day per overdue proposal).
 
 ---
 

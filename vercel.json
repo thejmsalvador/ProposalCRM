@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/approval-sla", "schedule": "0 * * * *" },
+    { "path": "/api/cron/approval-sla", "schedule": "0 1 * * *" },
     { "path": "/api/cron/expire-proposals", "schedule": "0 2 * * *" }
   ]
 }
