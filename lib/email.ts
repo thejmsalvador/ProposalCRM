@@ -1,11 +1,16 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 const FROM = 'ProposalCRM <noreply@proposals.theagency.com>'
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  if (!process.env.RESEND_API_KEY) return
+  const apiKey = process.env.RESEND_API_KEY
+  // Instantiate lazily: the Resend constructor throws when the key is missing,
+  // and this module is imported by routes Next evaluates at build time (e.g. the
+  // cron routes). Constructing here — only when a key exists and an email is
+  // actually sent — keeps the production build independent of RESEND_API_KEY.
+  if (!apiKey) return
+  const resend = new Resend(apiKey)
   await resend.emails.send({ from: FROM, to, subject, html })
 }
 
