@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
+import { sanitizeHtml } from '@/lib/sanitize'
 import {
   getServiceById,
   getServiceAuditLog,
@@ -162,7 +163,7 @@ export default async function ServiceDetailPage({ params }: { params: Params }) 
         </h2>
         <div
           className="bg-white rounded-xl border border-[var(--color-border)] px-5 py-4 prose prose-sm max-w-none text-[var(--color-primary)]"
-          dangerouslySetInnerHTML={{ __html: service.defaultScope || '<p class="text-[var(--color-muted)]">No scope defined.</p>' }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(service.defaultScope) || '<p class="text-[var(--color-muted)]">No scope defined.</p>' }}
         />
       </section>
 

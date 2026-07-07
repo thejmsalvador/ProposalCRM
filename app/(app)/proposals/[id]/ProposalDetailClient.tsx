@@ -23,6 +23,7 @@ import {
 import { toast } from '@/hooks/use-toast'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { sanitizeHtml } from '@/lib/sanitize'
 import {
   Dialog,
   DialogContent,
@@ -267,7 +268,7 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Payment Terms</p>
           <div
             className="prose prose-sm max-w-none text-slate-700 rounded-lg border border-slate-200 bg-white p-3"
-            dangerouslySetInnerHTML={{ __html: sp.paymentTermsOverride }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(sp.paymentTermsOverride) }}
           />
         </div>
       )}
@@ -278,7 +279,7 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Terms & Conditions</p>
           <div
             className="prose prose-sm max-w-none text-slate-700 rounded-lg border border-slate-200 bg-white p-3 max-h-40 overflow-y-auto"
-            dangerouslySetInnerHTML={{ __html: sp.tcOverride }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(sp.tcOverride) }}
           />
         </div>
       )}
@@ -876,14 +877,14 @@ export function ProposalDetailClient({
           {proposal.paymentTermsOverride ? (
             <div
               className="prose prose-sm max-w-none text-slate-700"
-              dangerouslySetInnerHTML={{ __html: proposal.paymentTermsOverride }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(proposal.paymentTermsOverride) }}
             />
           ) : proposal.paymentTemplate ? (
             <>
               <p className="text-xs text-slate-400 mb-2">Template: {proposal.paymentTemplate.name}</p>
               <div
                 className="prose prose-sm max-w-none text-slate-700"
-                dangerouslySetInnerHTML={{ __html: proposal.paymentTemplate.bodyRichText }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(proposal.paymentTemplate.bodyRichText) }}
               />
             </>
           ) : (
@@ -1017,7 +1018,7 @@ export function ProposalDetailClient({
                   </p>
                   <div
                     className="prose prose-sm max-w-none text-slate-700"
-                    dangerouslySetInnerHTML={{ __html: section.html }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.html) }}
                   />
                 </div>
               ))}
@@ -1025,14 +1026,14 @@ export function ProposalDetailClient({
           ) : proposal.tcOverride ? (
             <div
               className="prose prose-sm max-w-none text-slate-700"
-              dangerouslySetInnerHTML={{ __html: proposal.tcOverride }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(proposal.tcOverride) }}
             />
           ) : proposal.tcTemplate ? (
             <>
               <p className="text-xs text-slate-400 mb-2">Template: {proposal.tcTemplate.name}</p>
               <div
                 className="prose prose-sm max-w-none text-slate-700"
-                dangerouslySetInnerHTML={{ __html: proposal.tcTemplate.bodyRichText }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(proposal.tcTemplate.bodyRichText) }}
               />
             </>
           ) : (

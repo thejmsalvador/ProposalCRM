@@ -18,6 +18,7 @@ import {
 } from '@/lib/payment-schedule'
 import { resolveTcSections } from '@/lib/tc-sections'
 import { resolveModesOfPayment } from '@/lib/mode-of-payment-sections'
+import { sanitizeHtml } from '@/lib/sanitize'
 
 type Props = {
   params: { proposalId: string }
@@ -487,7 +488,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
                   {li.service?.category && <span className="tag">{li.service.category}</span>}
                 </div>
                 {li.scopeOfWork && (
-                  <div className="rich" dangerouslySetInnerHTML={{ __html: li.scopeOfWork }} />
+                  <div className="rich" dangerouslySetInnerHTML={{ __html: sanitizeHtml(li.scopeOfWork) }} />
                 )}
               </div>
             ))}
@@ -607,7 +608,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
         {(paymentHtml || hasManualMilestones || hasModesOfPayment) && (
           <FlowSection pageKey="payment" title="Payment Terms">
             {paymentHtml && (
-              <div className="rich" dangerouslySetInnerHTML={{ __html: paymentHtml }} />
+              <div className="rich" dangerouslySetInnerHTML={{ __html: sanitizeHtml(paymentHtml) }} />
             )}
 
             {hasManualMilestones && (
@@ -787,12 +788,12 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 {tcSections.map((section, i) => (
                   <div key={`${section.tcTemplateId}-${i}`} className="tc-section">
                     <h3 className="tc-section-title">{section.name}</h3>
-                    <div className="rich" dangerouslySetInnerHTML={{ __html: section.html }} />
+                    <div className="rich" dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.html) }} />
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="rich" dangerouslySetInnerHTML={{ __html: tcHtml }} />
+              <div className="rich" dangerouslySetInnerHTML={{ __html: sanitizeHtml(tcHtml) }} />
             )}
           </FlowSection>
         )}
