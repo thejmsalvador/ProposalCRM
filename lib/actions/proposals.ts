@@ -125,23 +125,14 @@ export type CurrentUserData = {
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
 export async function getWizardData(): Promise<{
-  approvers: ApproverOption[]
   services: ServiceOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
   modesOfPayment: ModeOfPaymentOption[]
   systemSettings: SystemSettingsData
 }> {
-  const [approvers, services, paymentTemplates, tcTemplates, modesOfPayment, settings] =
+  const [services, paymentTemplates, tcTemplates, modesOfPayment, settings] =
     await Promise.all([
-      prisma.user.findMany({
-        where: {
-          role: { in: ['SALES_MANAGER', 'SUPER_ADMIN'] },
-          isActive: true,
-        },
-        select: { id: true, name: true, role: true },
-        orderBy: { name: 'asc' },
-      }),
       prisma.service.findMany({
         where: { isActive: true },
         select: {
@@ -184,11 +175,6 @@ export async function getWizardData(): Promise<{
     ])
 
   return {
-    approvers: approvers.map((a) => ({
-      id: a.id,
-      name: a.name,
-      role: a.role,
-    })),
     services: services.map((s) => ({
       id: s.id,
       name: s.name,

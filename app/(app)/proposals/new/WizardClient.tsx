@@ -52,7 +52,6 @@ const Step7Review = dynamic(
 )
 import { Button } from '@/components/ui/button'
 import type {
-  ApproverOption,
   ServiceOption,
   PaymentTemplateOption,
   TCTemplateOption,
@@ -67,7 +66,6 @@ import type { ProposalTemplateOption } from '@/lib/actions/templates'
 
 type WizardClientProps = {
   services: ServiceOption[]
-  approvers: ApproverOption[]
   paymentTemplates: PaymentTemplateOption[]
   tcTemplates: TCTemplateOption[]
   modesOfPayment: ModeOfPaymentOption[]

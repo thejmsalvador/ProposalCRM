@@ -27,11 +27,10 @@ import type { UserListItem, TeamListItem } from '@/lib/actions/users'
 type Props = {
   user: UserListItem | null
   teams: TeamListItem[]
-  allUsers: UserListItem[]
   onClose: () => void
 }
 
-export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
+export function EditUserSheet({ user, teams, onClose }: Props) {
   const [isPending, startTransition] = useTransition()
 
   const {
@@ -53,7 +52,6 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
         jobTitle: user.jobTitle ?? '',
         role: user.role as UpdateUserInput['role'],
         teamId: user.teamId ?? undefined,
-        defaultApproverId: user.defaultApproverId ?? undefined,
         signatureImageUrl: user.signatureImageUrl ?? '',
         isActive: user.isActive,
       })
@@ -72,9 +70,6 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
       }
     })
   }
-
-  // Sales Managers for the Default Approver dropdown
-  const managers = allUsers.filter((u) => u.role === 'SALES_MANAGER')
 
   const signatureImageUrl = watch('signatureImageUrl')
 
@@ -212,29 +207,6 @@ export function EditUserSheet({ user, teams, allUsers, onClose }: Props) {
                 {teams.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Default approver */}
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-approver">Default approver</Label>
-            <Select
-              value={watch('defaultApproverId') ?? '_none'}
-              onValueChange={(v) =>
-                setValue('defaultApproverId', v === '_none' ? undefined : v)
-              }
-            >
-              <SelectTrigger id="edit-approver">
-                <SelectValue placeholder="None" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">None</SelectItem>
-                {managers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
                   </SelectItem>
                 ))}
               </SelectContent>
