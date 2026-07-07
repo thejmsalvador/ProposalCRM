@@ -22,13 +22,29 @@ if (localUrl) process.env.NEXT_PUBLIC_SUPABASE_URL = localUrl
 
 import { createClient } from '@supabase/supabase-js'
 
+// Passwords are read from the environment, never hardcoded. Set these before
+// running (e.g. in .env.local): COO_INITIAL_PASSWORD, CEO_INITIAL_PASSWORD.
+// The script never prints passwords to stdout.
 const EXECS = [
-  { name: 'Olivia COO', email: 'coo@agency.com', password: 'Coo1234!', role: 'COO', jobTitle: 'Chief Operating Officer' },
-  { name: 'Ethan CEO', email: 'ceo@agency.com', password: 'Ceo1234!', role: 'CEO', jobTitle: 'Chief Executive Officer' },
+  { name: 'Olivia COO', email: 'coo@agency.com', passwordEnv: 'COO_INITIAL_PASSWORD', role: 'COO', jobTitle: 'Chief Operating Officer' },
+  { name: 'Ethan CEO', email: 'ceo@agency.com', passwordEnv: 'CEO_INITIAL_PASSWORD', role: 'CEO', jobTitle: 'Chief Executive Officer' },
 ] as const
 
 async function main() {
   const { prisma } = await import('../lib/prisma')
+
+  // Fail closed if any required password env var is missing/weak.
+  const missing = EXECS.filter((u) => {
+    const pw = process.env[u.passwordEnv]
+    return !pw || pw.length < 12
+  })
+  if (missing.length > 0) {
+    throw new Error(
+      `Set a strong (≥12 char) password for each exec via env before running: ` +
+        missing.map((u) => u.passwordEnv).join(', '),
+    )
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -39,7 +55,7 @@ async function main() {
     // 1) Supabase Auth user (with password so they can log in immediately)
     const { error: authErr } = await supabase.auth.admin.createUser({
       email: u.email,
-      password: u.password,
+      password: process.env[u.passwordEnv]!,
       email_confirm: true,
       user_metadata: { name: u.name },
     })
@@ -60,7 +76,8 @@ async function main() {
         isActive: true,
       },
     })
-    console.log(`✓ ${u.role}: ${u.email} / ${u.password}  ${authNote}`)
+    // Never print the password.
+    console.log(`✓ ${u.role}: ${u.email}  ${authNote}`)
   }
 
   await prisma.$disconnect()
