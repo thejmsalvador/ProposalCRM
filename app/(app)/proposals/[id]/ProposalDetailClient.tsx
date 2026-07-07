@@ -54,6 +54,7 @@ import {
   submitExistingProposal,
   restoreVersion,
   getVersionSnapshot,
+  setProposalTemperature,
 } from '@/lib/actions/proposals'
 import { saveAsTemplate } from '@/lib/actions/templates'
 import { engagementLabel } from '@/lib/validations/catalog'
@@ -303,6 +304,20 @@ export function ProposalDetailClient({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [temperature, setTemperatureState] = useState(proposal.temperature)
+
+  function handleSetTemperature(next: 'HOT' | 'WARM' | 'COLD') {
+    const value = temperature === next ? null : next // click active chip to clear
+    const previous = temperature
+    setTemperatureState(value) // optimistic
+    startTransition(async () => {
+      const result = await setProposalTemperature(proposal.id, value)
+      if ('error' in result) {
+        setTemperatureState(previous)
+        toast({ title: result.error, variant: 'destructive' })
+      }
+    })
+  }
 
   // Items are costed in ₱; `currency` is the client-facing currency. For non-PHP
   // proposals the converted total = ₱ total ÷ rate (rate is ₱ per 1 unit).
@@ -1302,6 +1317,46 @@ export function ProposalDetailClient({
               </span>
               <span className="text-xs text-slate-400">v{proposal.version}</span>
             </div>
+
+            {/* Lead temperature (Hot / Warm / Cold) — independent of workflow status */}
+            {(() => {
+              const canSet = currentUser.id === proposal.createdBy.id || canApprove
+              const TEMPS: { key: 'HOT' | 'WARM' | 'COLD'; label: string; on: string; off: string }[] = [
+                { key: 'HOT', label: 'Hot', on: 'bg-red-500 text-white border-red-500', off: 'text-red-600 border-red-200 hover:bg-red-50' },
+                { key: 'WARM', label: 'Warm', on: 'bg-amber-500 text-white border-amber-500', off: 'text-amber-600 border-amber-200 hover:bg-amber-50' },
+                { key: 'COLD', label: 'Cold', on: 'bg-sky-500 text-white border-sky-500', off: 'text-sky-600 border-sky-200 hover:bg-sky-50' },
+              ]
+              if (!canSet) {
+                if (!temperature) return null
+                const t = TEMPS.find((x) => x.key === temperature)!
+                return (
+                  <span className={cn('inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-semibold', t.on)}>
+                    {t.label}
+                  </span>
+                )
+              }
+              return (
+                <div className="flex items-center gap-1.5" role="group" aria-label="Lead temperature">
+                  <span className="text-xs text-slate-400">Temperature:</span>
+                  {TEMPS.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => handleSetTemperature(t.key)}
+                      disabled={isPending}
+                      aria-pressed={temperature === t.key}
+                      className={cn(
+                        'rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors disabled:opacity-50',
+                        temperature === t.key ? t.on : cn('bg-white', t.off),
+                      )}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
+
             <h1 className="text-xl font-bold text-slate-900">{proposal.projectTitle}</h1>
             <p className="text-slate-600">
               {proposal.clientName || (

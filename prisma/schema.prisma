@@ -32,6 +32,14 @@ enum ProposalStatus {
   EXPIRED
 }
 
+// Lead/deal temperature — likelihood-to-close signal, independent of the
+// workflow `status`. Nullable (unset by default).
+enum ProposalTemperature {
+  HOT
+  WARM
+  COLD
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -207,6 +215,7 @@ model Proposal {
   date                  DateTime
   validUntil            DateTime
   status                ProposalStatus @default(DRAFT)
+  temperature           ProposalTemperature?
   createdById           String
   assignedApproverId    String?
   cooApprovedAt         DateTime?

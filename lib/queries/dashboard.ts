@@ -180,6 +180,40 @@ export async function recentProposals(filter: RoleFilter): Promise<RecentProposa
   return rows.map(r => ({ ...r, total: Number(r.total) }))
 }
 
+// ─── Hot proposals (temperature) ──────────────────────────────────────────────
+
+export type HotProposal = {
+  id: string
+  number: string
+  clientName: string
+  projectTitle: string
+  total: number
+  updatedAt: Date
+}
+
+// Open (not WON/LOST/EXPIRED) proposals flagged HOT, for a "prioritize follow-up"
+// dashboard widget. Scoped to the caller's visibility like every other widget.
+export async function hotProposals(filter: RoleFilter): Promise<HotProposal[]> {
+  const rows = await prisma.proposal.findMany({
+    where: {
+      ...proposalWhere(filter),
+      temperature: 'HOT',
+      status: { notIn: ['WON', 'LOST', 'EXPIRED'] },
+    },
+    select: {
+      id: true,
+      number: true,
+      clientName: true,
+      projectTitle: true,
+      total: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 8,
+  })
+  return rows.map(r => ({ ...r, total: Number(r.total) }))
+}
+
 // ─── Active proposal count ────────────────────────────────────────────────────
 
 // Derived from the proposalsByStatus result (same role filter) — no extra query.
