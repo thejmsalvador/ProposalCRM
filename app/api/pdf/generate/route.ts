@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { signPdfToken } from '@/lib/pdf-token'
 import { rateLimit } from '@/lib/rate-limit'
+import { DEFAULT_AGENCY_NAME } from '@/lib/branding'
 
 export const maxDuration = 60 // Vercel: 60-second timeout
 
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest) {
   const pdfUrl = `${appUrl}/pdf/${proposalId}?token=${encodeURIComponent(token)}`
   const footer = {
     proposalNumber: proposal.number,
-    agencyName: settings?.agencyName ?? 'The Agency',
+    agencyName: settings?.agencyName ?? DEFAULT_AGENCY_NAME,
   }
 
   // ── Launch Puppeteer ──────────────────────────────────────────────────────

@@ -683,14 +683,17 @@ Both routes are `GET` handlers protected by checking `Authorization: Bearer ${CR
 
 Apply globally via `tailwind.config.ts` and `globals.css`.
 
+Rebranded to the "Sunday Studio" blue palette (source of truth: `app/globals.css`):
+
 ```css
 :root {
-  --color-primary:      #1A1A2E;
-  --color-accent:       #4F46E5;
-  --color-accent-light: #EEF2FF;
-  --color-surface:      #F8FAFC;
-  --color-border:       #E2E8F0;
-  --color-muted:        #64748B;
+  --color-primary:      #0D1B4B;  /* Deep navy — headings / sidebar text     */
+  --color-accent:       #214ADE;  /* Brand blue — buttons, active indicators */
+  --color-accent-hover: #1A3DB8;  /* Hover — slightly darker brand blue      */
+  --color-accent-light: #EEF3FF;  /* Active bg tint — light brand blue       */
+  --color-surface:      #F4F7FF;  /* Page surface — cool blue-white          */
+  --color-border:       #D0D9F5;  /* Borders — blue-tinted neutral           */
+  --color-muted:        #5B6B9A;  /* Muted text — WCAG AA on white           */
   --color-success:      #16A34A;
   --color-warning:      #D97706;
   --color-danger:       #DC2626;
@@ -700,6 +703,11 @@ Apply globally via `tailwind.config.ts` and `globals.css`.
 ```
 
 Font: **Inter** via Google Fonts (`next/font/google`).
+
+The agency name shown in the app shell, PDF, and wizard resolves from
+`SystemSettings.agencyName`, falling back to a single shared constant
+`DEFAULT_AGENCY_NAME` (`lib/branding.ts`, currently `'Sunday Studio'`) — do not
+hardcode a different fallback anywhere.
 
 ---
 
