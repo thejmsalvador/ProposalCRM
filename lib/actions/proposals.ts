@@ -8,6 +8,11 @@ import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { logAudit } from '../audit'
 import { canViewProposal, canEditProposal } from '../proposal-visibility'
+import {
+  activityInclude,
+  serializeActivity,
+  type ProposalActivityItem,
+} from '../activity-shared'
 import { DEFAULT_AGENCY_NAME } from '../branding'
 import { createNotification } from '../notifications'
 import {
@@ -1021,6 +1026,8 @@ export type ProposalDetail = {
     actor: { id: string; name: string }
   }[]
   versions: ProposalVersionEntry[]
+  // User-posted feed items (tasks/notes/files/links), newest first.
+  activities: ProposalActivityItem[]
 }
 
 export async function getProposalDetail(id: string): Promise<ProposalDetail | null> {
@@ -1060,6 +1067,10 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
           createdAt: true,
           createdBy: { select: { id: true, name: true } },
         },
+      },
+      activities: {
+        orderBy: { createdAt: 'desc' },
+        include: activityInclude,
       },
     },
   })
@@ -1163,6 +1174,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       createdAt: v.createdAt.toISOString(),
       createdBy: v.createdBy,
     })),
+    activities: proposal.activities.map(serializeActivity),
   }
 }
 

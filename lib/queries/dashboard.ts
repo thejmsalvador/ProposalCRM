@@ -150,6 +150,34 @@ export async function pendingApprovalsForUser(userId: string): Promise<PendingAp
   return rows.map(r => ({ ...r, total: Number(r.total) }))
 }
 
+// ─── My open tasks (proposal activity feed) ───────────────────────────────────
+
+export type OpenTask = {
+  id: string
+  title: string | null
+  dueDate: Date | null
+  createdBy: { name: string }
+  proposal: { id: string; number: string; projectTitle: string }
+}
+
+// Incomplete feed tasks assigned to the user, soonest due first (undated last).
+// No extra role scoping needed: tasks can only be assigned to users who can
+// view the proposal (enforced in lib/actions/activity.ts).
+export async function openTasksForUser(userId: string): Promise<OpenTask[]> {
+  return prisma.proposalActivity.findMany({
+    where: { type: 'TASK', completedAt: null, assigneeId: userId },
+    select: {
+      id: true,
+      title: true,
+      dueDate: true,
+      createdBy: { select: { name: true } },
+      proposal: { select: { id: true, number: true, projectTitle: true } },
+    },
+    orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+    take: 8,
+  })
+}
+
 // ─── Recent proposals ─────────────────────────────────────────────────────────
 
 export type RecentProposal = {

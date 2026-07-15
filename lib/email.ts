@@ -132,6 +132,35 @@ export function revisionRequestedEmail(params: {
   }
 }
 
+// ─── Template: Task Assigned ─────────────────────────────────────────────────
+
+export function taskAssignedEmail(params: {
+  assigneeName: string
+  assignerName: string
+  taskTitle: string
+  dueDate?: string | null // preformatted display date, e.g. "Jul 21, 2026"
+  proposalNumber: string
+  proposalId: string
+}) {
+  const href = `${APP_URL}/proposals/${params.proposalId}?tab=activity`
+  return {
+    subject: `New task on ${params.proposalNumber}: ${params.taskTitle}`,
+    html: layout(`
+      <h2 style="margin:0 0 16px;font-size:20px;">Task Assigned</h2>
+      <p style="margin:0 0 8px;font-size:15px;">Hi ${esc(params.assigneeName)},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155;">
+        <strong>${esc(params.assignerName)}</strong> assigned you a task on proposal
+        <strong>${esc(params.proposalNumber)}</strong>:
+      </p>
+      <div style="background:#EEF3FF;border-left:4px solid #214ADE;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 24px;">
+        <p style="margin:0;font-size:14px;color:#0D1B4B;font-weight:600;">${esc(params.taskTitle)}</p>
+        ${params.dueDate ? `<p style="margin:4px 0 0;font-size:13px;color:#5B6B9A;">Due ${esc(params.dueDate)}</p>` : ''}
+      </div>
+      ${viewButton(href, 'View Task')}
+    `),
+  }
+}
+
 // ─── Template: SLA Reminder ───────────────────────────────────────────────────
 
 export function slaReminderEmail(params: {

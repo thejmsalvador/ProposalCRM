@@ -400,6 +400,50 @@ model ApprovalEvent {
   @@index([proposalId])
 }
 
+enum ActivityType {
+  TASK
+  NOTE
+  FILE
+  LINK
+}
+
+// User-posted collaboration item on a proposal's Activity Feed: a task (due
+// date + assignee + complete toggle), rich-text note, file attachment
+// (Supabase Storage, signed upload URLs), or link. Single-table union —
+// type-specific columns are nullable. Interleaved in the UI with system
+// events (ProposalVersion + ApprovalEvent). Access = canViewProposal;
+// posting is allowed in ANY proposal status (the PENDING_APPROVAL edit-lock
+// covers proposal content only).
+model ProposalActivity {
+  id            String       @id @default(cuid())
+  proposalId    String
+  type          ActivityType
+  title         String?      // TASK title; LINK label
+  body          String?      @db.Text // NOTE rich HTML (sanitized); TASK description; LINK comment
+  dueDate       DateTime?
+  assigneeId    String?
+  completedAt   DateTime?
+  completedById String?
+  url           String?      // LINK
+  storagePath   String?      // FILE object key; signed download URLs minted on demand
+  fileName      String?
+  fileSize      Int?
+  mimeType      String?
+  createdById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("ActivityCreatedBy", fields: [createdById], references: [id])
+  assignee    User?    @relation("ActivityAssignee", fields: [assigneeId], references: [id])
+  completedBy User?    @relation("ActivityCompletedBy", fields: [completedById], references: [id])
+
+  @@index([proposalId])
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([completedById])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   entityType String
@@ -456,6 +500,7 @@ model ProposalTemplate {
 - **`PaymentTemplate`** gained `milestones` + `milestoneBasis`.
 - **`ProposalLineItem`** gained `expenses` (Json) and `quantity` widened from `Decimal(10,2)` to `Decimal(12,4)`.
 - **`User`** gained `signatureImageUrl` for rendering COO/CEO sign-off marks on the PDF.
+- **`ProposalActivity`** (+ `ActivityType` enum) powers the proposal detail Activity Feed: user-posted tasks (due date, assignee, complete toggle — assignment notifies in-app + email), rich-text notes, file attachments (browser → Supabase Storage via signed upload URLs at `proposals/{id}/attachments/…`, 25 MB cap + extension/MIME allowlist), and links, interleaved with system events. Assigned open tasks also surface in the dashboard "My Tasks" widget. Server actions: `lib/actions/activity.ts`; shared DTO/include: `lib/activity-shared.ts`; UI: `components/proposals/activity/`. The detail tab is URL-synced (`?tab=activity`) so notification links deep-link to the feed.
 - Indexes were added across `Proposal`, `ProposalLineItem`, `ProposalVersion`, `ApprovalEvent`, `AuditLog`, `Notification`, and `ClientContact` to support the larger data volume.
 
 ---

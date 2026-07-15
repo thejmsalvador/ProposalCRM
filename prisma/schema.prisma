@@ -40,6 +40,14 @@ enum ProposalTemperature {
   COLD
 }
 
+// Kind of user-posted collaboration item on a proposal's activity feed.
+enum ActivityType {
+  TASK
+  NOTE
+  FILE
+  LINK
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -66,6 +74,9 @@ model User {
   approvalEvents    ApprovalEvent[]
   auditLogs         AuditLog[]
   notifications     Notification[]
+  proposalActivities  ProposalActivity[] @relation("ActivityCreatedBy")
+  assignedActivities  ProposalActivity[] @relation("ActivityAssignee")
+  completedActivities ProposalActivity[] @relation("ActivityCompletedBy")
 
   @@index([teamId])
 }
@@ -261,6 +272,7 @@ model Proposal {
   lineItems       ProposalLineItem[]
   versions        ProposalVersion[]
   approvalEvents  ApprovalEvent[]
+  activities      ProposalActivity[]
 
   @@index([createdById])
   @@index([clientId])
@@ -325,6 +337,46 @@ model ApprovalEvent {
 
   @@index([proposalId])
   @@index([actorId])
+}
+
+// User-posted collaboration item on a proposal's activity feed: a task, note,
+// file attachment, or link. Single-table union — type-specific columns are
+// nullable and only populated for the matching `type`. Interleaved in the UI
+// with system events (ProposalVersion + ApprovalEvent) by createdAt.
+model ProposalActivity {
+  id            String       @id @default(cuid())
+  proposalId    String
+  type          ActivityType
+  // TASK: title (required at the API layer); LINK: display label
+  title         String?
+  // NOTE: sanitized rich-text HTML; TASK: plain-text description; LINK: comment
+  body          String?      @db.Text
+  // TASK-only fields
+  dueDate       DateTime?
+  assigneeId    String?
+  completedAt   DateTime?
+  completedById String?
+  // LINK-only
+  url           String?
+  // FILE-only. storagePath is the Supabase Storage object key — signed download
+  // URLs are minted on demand (never persisted; they expire).
+  storagePath   String?
+  fileName      String?
+  fileSize      Int?
+  mimeType      String?
+  createdById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("ActivityCreatedBy", fields: [createdById], references: [id])
+  assignee    User?    @relation("ActivityAssignee", fields: [assigneeId], references: [id])
+  completedBy User?    @relation("ActivityCompletedBy", fields: [completedById], references: [id])
+
+  @@index([proposalId])
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([completedById])
 }
 
 model AuditLog {
