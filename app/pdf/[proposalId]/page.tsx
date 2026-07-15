@@ -437,7 +437,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
               </div>
 
               <div className="cover-hero">
-                <span className="cover-pill">PROPOSAL</span>
+                <span className="cover-pill">COST ESTIMATE</span>
                 <h1 className="cover-title">{proposal.projectTitle}</h1>
                 <div className="cover-sub">Prepared for {proposal.clientName}</div>
               </div>
@@ -447,7 +447,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
               <hr className="cover-divider" />
               <div className="cover-meta">
                 <div className="cover-meta-col">
-                  <div className="l">Proposal No.</div>
+                  <div className="l">CE No.</div>
                   <div className="v">{proposal.number}</div>
                 </div>
                 <div className="cover-meta-col">

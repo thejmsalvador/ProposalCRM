@@ -533,12 +533,13 @@ Approval is a **fixed two-stage COO → CEO chain** (see Approval Workflow below
 
 ## Proposal Number Format
 
-Generated server-side on first save. Format: `PROP-[YYYY]-[MM]-[NNNN]`
+Generated server-side on first save. Format: `CE-[YYYY]-[MM]-[NNNN]`
 
-- Example: `PROP-2026-03-0042`
+- `CE` = **Cost Estimate**, the company's term for these documents (the prefix was `PROP-` before Jul 2026).
+- Example: `CE-2026-03-0042`
 - NNNN is zero-padded, sequential per month, resets each month
 - Revisions use the same root number with a version suffix in display only (the `version` field on Proposal increments)
-- The number is immutable once assigned
+- The number is immutable once assigned — proposals created under the old `PROP-` prefix keep their original number; only newly created proposals get `CE-`.
 
 ```ts
 // lib/proposals.ts
@@ -546,7 +547,7 @@ async function generateProposalNumber(): Promise<string> {
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const prefix = `PROP-${yyyy}-${mm}-`
+  const prefix = `CE-${yyyy}-${mm}-`
   const latest = await prisma.proposal.findFirst({
     where: { number: { startsWith: prefix } },
     orderBy: { number: 'desc' },
@@ -679,7 +680,11 @@ PDF template at `app/pdf/[proposalId]/page.tsx` — server component, no app she
 
 There is no Executive Summary section (its retirement is tracked separately — see the PRD's Common Mistakes / prior "remove Executive Summary" work); do not reintroduce it here.
 
-Every page: footer with proposal number, page X of Y, agency name, "Confidential — For Addressee Only".
+Running footer on every body page (the cover is unnumbered): a descriptive
+document label on the left — `Account Code / Company Name / Project Title / Year /
+Grand Total` (account code omitted when blank; grand total in the client-facing
+currency, matching the Investment Summary) — and `Page X of Y` hard against the
+right edge. Built as Puppeteer's `footerTemplate` in `app/api/pdf/generate/route.ts`.
 If `confidentialWatermark = true`: diagonal "CONFIDENTIAL" watermark via CSS `::before` on `body`.
 
 ---

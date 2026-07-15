@@ -232,7 +232,9 @@ async function generateProposalNumber(): Promise<string> {
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const prefix = `PROP-${yyyy}-${mm}-`
+  // "CE" = Cost Estimate, the company's term for these documents. The sequential
+  // NNNN still lands at split('-')[3] because "CE" has no internal hyphen.
+  const prefix = `CE-${yyyy}-${mm}-`
 
   const latest = await prisma.proposal.findFirst({
     where: { number: { startsWith: prefix } },
