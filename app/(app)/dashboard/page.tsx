@@ -21,6 +21,7 @@ import { getSession } from '@/lib/auth'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AutoRefresh } from '@/components/dashboard/AutoRefresh'
+import { MyOpenTasks } from '@/components/dashboard/MyOpenTasks'
 import {
   LazyStatusDonut as StatusDonut,
   LazyPipelineFunnel as PipelineFunnel,
@@ -32,6 +33,7 @@ import {
   avgDraftToSent,
   expiringProposals,
   pendingApprovalsForUser,
+  openTasksForUser,
   recentProposals,
   hotProposals,
   activeProposalCount,
@@ -258,13 +260,14 @@ export default async function DashboardPage() {
   }
 
   // Core data — all roles
-  const [statusCounts, pipeline, wonLost, expiring, recent, hot] = await Promise.all([
+  const [statusCounts, pipeline, wonLost, expiring, recent, hot, myTasks] = await Promise.all([
     proposalsByStatus(filter),
     pipelineValue(filter),
     wonLostThisMonth(filter),
     expiringProposals(filter),
     recentProposals(filter),
     hotProposals(filter),
+    openTasksForUser(user.id),
   ])
 
   // Derived from statusCounts — no extra queries
@@ -414,6 +417,9 @@ export default async function DashboardPage() {
             )}
           </Section>
         )}
+
+        {/* ── My open tasks (activity feed assignments) ────────────────────── */}
+        <MyOpenTasks tasks={myTasks} />
 
         {/* ── Stat cards ────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

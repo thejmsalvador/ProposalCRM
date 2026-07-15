@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
   Edit2,
@@ -16,7 +16,6 @@ import {
   History,
   Eye,
   RotateCcw,
-  GitBranch,
   Bookmark,
   Wallet,
 } from 'lucide-react'
@@ -58,32 +57,19 @@ import {
 } from '@/lib/actions/proposals'
 import { saveAsTemplate } from '@/lib/actions/templates'
 import { engagementLabel } from '@/lib/validations/catalog'
+import { ActivityFeed } from '@/components/proposals/activity/ActivityFeed'
+import {
+  STATUS_LABELS,
+  STATUS_STYLES,
+  fmtDate,
+  fmtDateTime,
+  timeAgo,
+} from '@/components/proposals/activity/helpers'
+import type { ActivityUser } from '@/lib/activity-shared'
 
 // ─── Status config ────────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  PENDING_APPROVAL: 'Pending Approval',
-  REVISION_REQUIRED: 'Revision Required',
-  APPROVED: 'Approved',
-  SENT: 'Sent',
-  WON: 'Won',
-  LOST: 'Lost',
-  ON_HOLD: 'On Hold',
-  EXPIRED: 'Expired',
-}
-
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-slate-100 text-slate-600',
-  PENDING_APPROVAL: 'bg-amber-100 text-amber-700',
-  REVISION_REQUIRED: 'bg-orange-100 text-orange-700',
-  APPROVED: 'bg-indigo-100 text-indigo-700',
-  SENT: 'bg-purple-100 text-purple-700',
-  WON: 'bg-green-100 text-green-700',
-  LOST: 'bg-red-100 text-red-700',
-  ON_HOLD: 'bg-slate-200 text-slate-600',
-  EXPIRED: 'bg-gray-100 text-gray-500',
-}
+// Status/date display helpers are shared with the activity feed — see
+// components/proposals/activity/helpers.ts.
 
 const ALL_STATUSES = [
   'DRAFT',
@@ -97,55 +83,12 @@ const ALL_STATUSES = [
   'EXPIRED',
 ]
 
-const APPROVAL_EVENT_LABELS: Record<string, string> = {
-  submitted: 'Submitted for approval',
-  coo_approved: 'Approved by COO',
-  approved: 'Approved',
-  revision_requested: 'Revision requested',
-  rejected: 'Rejected',
-  expired: 'Expired',
-  won: 'Marked as Won',
-  lost: 'Marked as Lost',
-  sent: 'Marked as Sent',
-  overridden: 'Status force-overridden',
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(value: string) {
   const n = parseFloat(value)
   if (isNaN(n)) return '₱0.00'
   return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-PH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-}
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('en-PH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  return fmtDate(iso)
 }
 
 // ─── Tab types ────────────────────────────────────────────────────────────────
@@ -157,6 +100,8 @@ type Tab = 'overview' | 'activity' | 'versions'
 type Props = {
   proposal: ProposalDetail
   currentUser: { id: string; role: string }
+  /** Active users who may be assigned tasks on this proposal's feed. */
+  assignableUsers: ActivityUser[]
   canEdit: boolean
   canApprove: boolean
   canForceOverride: boolean
@@ -296,15 +241,38 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
 export function ProposalDetailClient({
   proposal,
   currentUser,
+  assignableUsers,
   canEdit,
   canApprove,
   canForceOverride,
   clientUpdate,
 }: Props) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  // Tab selection is URL-synced (?tab=activity|versions) so notification links
+  // can deep-link straight to the feed; a bare URL means Overview.
+  const tabParam = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState<Tab>(
+    tabParam === 'activity' || tabParam === 'versions' ? tabParam : 'overview',
+  )
   const [temperature, setTemperatureState] = useState(proposal.temperature)
+
+  // Follow URL changes (notification click while already on the page, back/forward)
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    setActiveTab(t === 'activity' || t === 'versions' ? t : 'overview')
+  }, [searchParams])
+
+  function handleTabChange(tab: Tab) {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') params.delete('tab')
+    else params.set('tab', tab)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
 
   function handleSetTemperature(next: 'HOT' | 'WARM' | 'COLD') {
     const value = temperature === next ? null : next // click active chip to clear
@@ -1064,97 +1032,18 @@ export function ProposalDetailClient({
   )
 
   // ─── Activity tab ─────────────────────────────────────────────────────────────
-  // Merges ProposalVersion records + ApprovalEvents into a single chronological feed
-
-  type ActivityItem =
-    | { kind: 'version'; data: ProposalVersionEntry }
-    | { kind: 'event'; data: ProposalDetail['approvalEvents'][0] }
-
-  const activityItems: ActivityItem[] = [
-    ...proposal.versions.map((v) => ({ kind: 'version' as const, data: v })),
-    ...proposal.approvalEvents.map((e) => ({ kind: 'event' as const, data: e })),
-  ].sort((a, b) => {
-    const dateA = new Date(a.data.createdAt).getTime()
-    const dateB = new Date(b.data.createdAt).getTime()
-    return dateB - dateA
-  })
+  // User-posted tasks/notes/files/links interleaved with system events
+  // (version saves + approval events) — see components/proposals/activity/.
 
   const activityTab = (
-    <div className="flex flex-col gap-3">
-      {activityItems.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
-          <Clock className="h-8 w-8 text-slate-300" />
-          <p className="text-slate-500 text-sm">No activity yet.</p>
-        </div>
-      ) : (
-        <div className="relative pl-5">
-          <div className="absolute left-2 top-2 bottom-2 w-px bg-slate-200" />
-          {activityItems.map((item) => {
-            if (item.kind === 'version') {
-              const v = item.data
-              return (
-                <div key={`v-${v.id}`} className="relative mb-4 last:mb-0">
-                  <div className="absolute -left-3 top-1 w-2 h-2 rounded-full bg-slate-400 border-2 border-white" />
-                  <div className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <GitBranch className="h-3.5 w-3.5 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-700">
-                          Version {v.versionNumber} saved
-                        </span>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            STATUS_STYLES[v.status] ?? 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {STATUS_LABELS[v.status] ?? v.status}
-                        </span>
-                      </div>
-                      <span
-                        className="text-xs text-slate-400 cursor-default"
-                        title={fmtDateTime(v.createdAt)}
-                      >
-                        {timeAgo(v.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">by {v.createdBy.name}</p>
-                    {v.changeSummary && (
-                      <p className="text-xs text-slate-500 mt-1 italic">{v.changeSummary}</p>
-                    )}
-                  </div>
-                </div>
-              )
-            }
-
-            const e = item.data
-            return (
-              <div key={`e-${e.id}`} className="relative mb-4 last:mb-0">
-                <div className="absolute -left-3 top-1 w-2 h-2 rounded-full bg-indigo-400 border-2 border-white" />
-                <div className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-slate-800">
-                      {APPROVAL_EVENT_LABELS[e.action] ?? e.action}
-                    </span>
-                    <span
-                      className="text-xs text-slate-400 cursor-default"
-                      title={fmtDateTime(e.createdAt)}
-                    >
-                      {timeAgo(e.createdAt)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">by {e.actor.name}</p>
-                  {e.comment && (
-                    <p className="mt-2 text-sm text-slate-600 bg-slate-50 rounded p-2 border border-slate-100">
-                      {e.comment}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
+    <ActivityFeed
+      proposalId={proposal.id}
+      activities={proposal.activities}
+      versions={proposal.versions}
+      approvalEvents={proposal.approvalEvents}
+      currentUser={currentUser}
+      assignableUsers={assignableUsers}
+    />
   )
 
   // ─── Versions tab ────────────────────────────────────────────────────────────
@@ -1438,7 +1327,7 @@ export function ProposalDetailClient({
         {(['overview', 'activity', 'versions'] as Tab[]).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
             className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
               activeTab === tab
                 ? 'border-indigo-600 text-indigo-700'

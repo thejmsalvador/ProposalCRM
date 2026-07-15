@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-const FROM = 'ProposalCRM <noreply@proposals.theagency.com>'
+const FROM = 'ProposalCRM <proposals@no-reply.sunday.ph>'
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
@@ -11,7 +11,16 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   // actually sent — keeps the production build independent of RESEND_API_KEY.
   if (!apiKey) return
   const resend = new Resend(apiKey)
-  await resend.emails.send({ from: FROM, to, subject, html })
+  // Best-effort: a failed notification email must never break the caller's core
+  // mutation (status transitions, cron runs). The Resend SDK returns { error }
+  // for API failures (e.g. an unverified sending domain) instead of throwing, so
+  // log it explicitly — otherwise sends fail silently and invisibly.
+  try {
+    const { error } = await resend.emails.send({ from: FROM, to, subject, html })
+    if (error) console.error(`[email] Resend rejected send to ${to}:`, error)
+  } catch (err) {
+    console.error(`[email] Failed to send to ${to}:`, err)
+  }
 }
 
 // Escape user-supplied values before interpolating them into email HTML so an
@@ -119,6 +128,35 @@ export function revisionRequestedEmail(params: {
         <p style="margin:0;font-size:14px;color:#92400E;font-style:italic;">"${esc(params.comment)}"</p>
       </div>
       ${viewButton(href, 'View & Edit Proposal')}
+    `),
+  }
+}
+
+// ─── Template: Task Assigned ─────────────────────────────────────────────────
+
+export function taskAssignedEmail(params: {
+  assigneeName: string
+  assignerName: string
+  taskTitle: string
+  dueDate?: string | null // preformatted display date, e.g. "Jul 21, 2026"
+  proposalNumber: string
+  proposalId: string
+}) {
+  const href = `${APP_URL}/proposals/${params.proposalId}?tab=activity`
+  return {
+    subject: `New task on ${params.proposalNumber}: ${params.taskTitle}`,
+    html: layout(`
+      <h2 style="margin:0 0 16px;font-size:20px;">Task Assigned</h2>
+      <p style="margin:0 0 8px;font-size:15px;">Hi ${esc(params.assigneeName)},</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155;">
+        <strong>${esc(params.assignerName)}</strong> assigned you a task on proposal
+        <strong>${esc(params.proposalNumber)}</strong>:
+      </p>
+      <div style="background:#EEF3FF;border-left:4px solid #214ADE;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 24px;">
+        <p style="margin:0;font-size:14px;color:#0D1B4B;font-weight:600;">${esc(params.taskTitle)}</p>
+        ${params.dueDate ? `<p style="margin:4px 0 0;font-size:13px;color:#5B6B9A;">Due ${esc(params.dueDate)}</p>` : ''}
+      </div>
+      ${viewButton(href, 'View Task')}
     `),
   }
 }

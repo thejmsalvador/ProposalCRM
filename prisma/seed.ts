@@ -1,4 +1,4 @@
-import { PrismaClient, Role, ProposalStatus } from '../lib/generated/prisma/client'
+import { PrismaClient, Role, ProposalStatus, ActivityType } from '../lib/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import * as dotenv from 'dotenv'
 
@@ -1009,6 +1009,65 @@ async function main() {
     where: { id: 'seed-event-2' },
     update: {},
     create: { id: 'seed-event-2', proposalId: approvedProposal.id, action: 'approved', actorId: manager.id, comment: 'Looks great! Approved.' },
+  })
+
+  // Activity feed items for the APPROVED proposal (tasks / note / link).
+  // One open task is due yesterday to exercise the overdue treatment and the
+  // dashboard "My Tasks" widget. No FILE row — there is no storage object to
+  // back it, and the download action would 404.
+  const yesterday = new Date(Date.now() - 86_400_000)
+  yesterday.setUTCHours(0, 0, 0, 0)
+  await prisma.proposalActivity.upsert({
+    where: { id: 'seed-activity-task-open' },
+    update: {},
+    create: {
+      id: 'seed-activity-task-open',
+      proposalId: approvedProposal.id,
+      type: ActivityType.TASK,
+      title: 'Send the signed conforme copy to accounting',
+      body: 'Client promised to courier the signed printout — chase if not received.',
+      dueDate: yesterday,
+      assigneeId: juan.id,
+      createdById: manager.id,
+    },
+  })
+  await prisma.proposalActivity.upsert({
+    where: { id: 'seed-activity-task-done' },
+    update: {},
+    create: {
+      id: 'seed-activity-task-done',
+      proposalId: approvedProposal.id,
+      type: ActivityType.TASK,
+      title: 'Book kick-off call with Acme marketing team',
+      assigneeId: manager.id,
+      createdById: juan.id,
+      completedAt: new Date(),
+      completedById: manager.id,
+    },
+  })
+  await prisma.proposalActivity.upsert({
+    where: { id: 'seed-activity-note' },
+    update: {},
+    create: {
+      id: 'seed-activity-note',
+      proposalId: approvedProposal.id,
+      type: ActivityType.NOTE,
+      body: '<p>Client confirmed the <strong>rollout starts in Q3</strong>. Billboard sites are still being finalised with the mall operator — expect the final list next week.</p>',
+      createdById: juan.id,
+    },
+  })
+  await prisma.proposalActivity.upsert({
+    where: { id: 'seed-activity-link' },
+    update: {},
+    create: {
+      id: 'seed-activity-link',
+      proposalId: approvedProposal.id,
+      type: ActivityType.LINK,
+      url: 'https://drive.google.com/drive/folders/acme-brand-assets',
+      title: 'Acme brand asset folder',
+      body: 'Logos, fonts and photography shared by the client.',
+      createdById: manager.id,
+    },
   })
 
   // 4. WON — Acme Corp (contributes to lifetime value)

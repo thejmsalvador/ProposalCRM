@@ -400,6 +400,50 @@ model ApprovalEvent {
   @@index([proposalId])
 }
 
+enum ActivityType {
+  TASK
+  NOTE
+  FILE
+  LINK
+}
+
+// User-posted collaboration item on a proposal's Activity Feed: a task (due
+// date + assignee + complete toggle), rich-text note, file attachment
+// (Supabase Storage, signed upload URLs), or link. Single-table union —
+// type-specific columns are nullable. Interleaved in the UI with system
+// events (ProposalVersion + ApprovalEvent). Access = canViewProposal;
+// posting is allowed in ANY proposal status (the PENDING_APPROVAL edit-lock
+// covers proposal content only).
+model ProposalActivity {
+  id            String       @id @default(cuid())
+  proposalId    String
+  type          ActivityType
+  title         String?      // TASK title; LINK label
+  body          String?      @db.Text // NOTE rich HTML (sanitized); TASK description; LINK comment
+  dueDate       DateTime?
+  assigneeId    String?
+  completedAt   DateTime?
+  completedById String?
+  url           String?      // LINK
+  storagePath   String?      // FILE object key; signed download URLs minted on demand
+  fileName      String?
+  fileSize      Int?
+  mimeType      String?
+  createdById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("ActivityCreatedBy", fields: [createdById], references: [id])
+  assignee    User?    @relation("ActivityAssignee", fields: [assigneeId], references: [id])
+  completedBy User?    @relation("ActivityCompletedBy", fields: [completedById], references: [id])
+
+  @@index([proposalId])
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([completedById])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   entityType String
@@ -456,6 +500,7 @@ model ProposalTemplate {
 - **`PaymentTemplate`** gained `milestones` + `milestoneBasis`.
 - **`ProposalLineItem`** gained `expenses` (Json) and `quantity` widened from `Decimal(10,2)` to `Decimal(12,4)`.
 - **`User`** gained `signatureImageUrl` for rendering COO/CEO sign-off marks on the PDF.
+- **`ProposalActivity`** (+ `ActivityType` enum) powers the proposal detail Activity Feed: user-posted tasks (due date, assignee, complete toggle — assignment notifies in-app + email), rich-text notes, file attachments (browser → Supabase Storage via signed upload URLs at `proposals/{id}/attachments/…`, 25 MB cap + extension/MIME allowlist), and links, interleaved with system events. Assigned open tasks also surface in the dashboard "My Tasks" widget. Server actions: `lib/actions/activity.ts`; shared DTO/include: `lib/activity-shared.ts`; UI: `components/proposals/activity/`. The detail tab is URL-synced (`?tab=activity`) so notification links deep-link to the feed.
 - Indexes were added across `Proposal`, `ProposalLineItem`, `ProposalVersion`, `ApprovalEvent`, `AuditLog`, `Notification`, and `ClientContact` to support the larger data volume.
 
 ---
@@ -488,12 +533,13 @@ Approval is a **fixed two-stage COO → CEO chain** (see Approval Workflow below
 
 ## Proposal Number Format
 
-Generated server-side on first save. Format: `PROP-[YYYY]-[MM]-[NNNN]`
+Generated server-side on first save. Format: `CE-[YYYY]-[MM]-[NNNN]`
 
-- Example: `PROP-2026-03-0042`
+- `CE` = **Cost Estimate**, the company's term for these documents (the prefix was `PROP-` before Jul 2026).
+- Example: `CE-2026-03-0042`
 - NNNN is zero-padded, sequential per month, resets each month
 - Revisions use the same root number with a version suffix in display only (the `version` field on Proposal increments)
-- The number is immutable once assigned
+- The number is immutable once assigned — proposals created under the old `PROP-` prefix keep their original number; only newly created proposals get `CE-`.
 
 ```ts
 // lib/proposals.ts
@@ -501,7 +547,7 @@ async function generateProposalNumber(): Promise<string> {
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const prefix = `PROP-${yyyy}-${mm}-`
+  const prefix = `CE-${yyyy}-${mm}-`
   const latest = await prisma.proposal.findFirst({
     where: { number: { startsWith: prefix } },
     orderBy: { number: 'desc' },
@@ -634,7 +680,11 @@ PDF template at `app/pdf/[proposalId]/page.tsx` — server component, no app she
 
 There is no Executive Summary section (its retirement is tracked separately — see the PRD's Common Mistakes / prior "remove Executive Summary" work); do not reintroduce it here.
 
-Every page: footer with proposal number, page X of Y, agency name, "Confidential — For Addressee Only".
+Running footer on every body page (the cover is unnumbered): a descriptive
+document label on the left — `Account Code / Company Name / Project Title / Year /
+Grand Total` (account code omitted when blank; grand total in the client-facing
+currency, matching the Investment Summary) — and `Page X of Y` hard against the
+right edge. Built as Puppeteer's `footerTemplate` in `app/api/pdf/generate/route.ts`.
 If `confidentialWatermark = true`: diagonal "CONFIDENTIAL" watermark via CSS `::before` on `body`.
 
 ---
@@ -659,7 +709,7 @@ Always call `createNotification(userId, message, link)` AND `sendEmail(email, su
 
 Both routes are `GET` handlers protected by checking `Authorization: Bearer ${CRON_SECRET}`.
 
-**`/api/cron/approval-sla`** — runs hourly
+**`/api/cron/approval-sla`** — runs **daily** at 01:00 UTC (Hobby-plan limit; intended hourly on Pro — see plan note below)
 - Find proposals: `status = PENDING_APPROVAL` AND `updatedAt < now - APPROVAL_SLA_HOURS`
 - Create notification + send email to `assignedApprover`
 
@@ -671,11 +721,13 @@ Both routes are `GET` handlers protected by checking `Authorization: Bearer ${CR
 ```json
 {
   "crons": [
-    { "path": "/api/cron/approval-sla", "schedule": "0 * * * *" },
+    { "path": "/api/cron/approval-sla", "schedule": "0 1 * * *" },
     { "path": "/api/cron/expire-proposals", "schedule": "0 2 * * *" }
   ]
 }
 ```
+
+> **⚠️ Vercel plan constraint (temporary — revisit at launch):** The Vercel **Hobby** plan only permits **daily** cron jobs, so `approval-sla` runs daily (`0 1 * * *`) instead of the hourly cadence this doc originally specified. Deploys fail on Hobby with any sub-daily schedule. **At launch, upgrade to Vercel Pro** and restore `0 * * * *` for a timely SLA cadence. Before switching back to hourly, add per-proposal reminder throttling — the cron currently has **no dedup**, so an hourly schedule re-emails approvers on every run (~24×/day per overdue proposal).
 
 ---
 

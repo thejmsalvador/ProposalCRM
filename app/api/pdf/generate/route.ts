@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { signPdfToken } from '@/lib/pdf-token'
 import { rateLimit } from '@/lib/rate-limit'
-import { DEFAULT_AGENCY_NAME } from '@/lib/branding'
+import { formatCurrency } from '@/lib/validations/proposals'
 
 export const maxDuration = 60 // Vercel: 60-second timeout
 
@@ -32,7 +32,7 @@ type PdfCapablePage = {
 async function renderProposalPdf(
   page: PdfCapablePage,
   pdfUrl: string,
-  footer: { proposalNumber: string; agencyName: string },
+  footer: { label: string },
 ): Promise<Buffer> {
   await page.goto(`${pdfUrl}&part=cover`, { waitUntil: 'networkidle0', timeout: 30000 })
   await page.emulateMediaType('print')
@@ -43,11 +43,13 @@ async function renderProposalPdf(
     margin: { top: '0', right: '0', bottom: '0', left: '0' },
   })
 
+  // Running footer: descriptive document label on the left, page numbers hard
+  // against the right edge. The label ellipsizes so a long project title can't
+  // collide with the page count.
   const footerTemplate = `
-    <div style="width:100%; margin:0 15mm; padding-top:6px; border-top:1px solid #E2E8F0; font-size:8px; font-family:Helvetica,Arial,sans-serif; color:#64748B; display:flex; justify-content:space-between; align-items:center;">
-      <span>${escapeHtml(footer.proposalNumber)}</span>
-      <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-      <span>${escapeHtml(footer.agencyName)} &nbsp;·&nbsp; Confidential — For Addressee Only</span>
+    <div style="width:100%; margin:0 15mm; padding-top:6px; border-top:1px solid #E2E8F0; font-size:8px; font-family:Helvetica,Arial,sans-serif; color:#64748B; display:flex; justify-content:space-between; align-items:center; gap:16px;">
+      <span style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(footer.label)}</span>
+      <span style="white-space:nowrap; flex-shrink:0;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
     </div>`
 
   await page.goto(`${pdfUrl}&part=body`, { waitUntil: 'networkidle0', timeout: 30000 })
@@ -102,21 +104,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  // ── Fetch proposal (+ agency name for the running footer) ────────────────
-  const [proposal, settings] = await Promise.all([
-    prisma.proposal.findUnique({
-      where: { id: proposalId },
-      select: {
-        id: true,
-        status: true,
-        version: true,
-        number: true,
-        createdById: true,
-        createdBy: { select: { teamId: true } },
-      },
-    }),
-    prisma.systemSettings.findFirst({ select: { agencyName: true } }),
-  ])
+  // ── Fetch proposal (+ the fields the running-footer label is built from) ──
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      accountCode: true,
+      clientName: true,
+      projectTitle: true,
+      date: true,
+      total: true,
+      currency: true,
+      exchangeRate: true,
+      createdById: true,
+      createdBy: { select: { teamId: true } },
+    },
+  })
 
   if (!proposal) {
     return NextResponse.json({ error: 'Proposal not found' }, { status: 404 })
@@ -144,9 +149,31 @@ export async function POST(req: NextRequest) {
   // ── Generate signed, short-lived token for the PDF template URL ──────────
   const token = signPdfToken(proposalId, secret)
   const pdfUrl = `${appUrl}/pdf/${proposalId}?token=${encodeURIComponent(token)}`
+
+  // Footer label: Account Code / Company Name / Project Title / Year / Grand Total.
+  // The grand total mirrors the PDF body — converted to the client currency at the
+  // proposal's FX rate (₱ per unit), or left in ₱ when there is no rate. Account
+  // code is optional, so blank segments drop out rather than leaving a stray "/".
+  const totalPhp = parseFloat(proposal.total.toString())
+  const fxRate =
+    proposal.currency !== 'PHP' && proposal.exchangeRate
+      ? parseFloat(proposal.exchangeRate.toString())
+      : null
+  const displayCurrency = fxRate && fxRate > 0 ? proposal.currency : 'PHP'
+  const grandTotal = formatCurrency(
+    fxRate && fxRate > 0 ? totalPhp / fxRate : totalPhp,
+    displayCurrency,
+  )
   const footer = {
-    proposalNumber: proposal.number,
-    agencyName: settings?.agencyName ?? DEFAULT_AGENCY_NAME,
+    label: [
+      proposal.accountCode,
+      proposal.clientName,
+      proposal.projectTitle,
+      new Date(proposal.date).getFullYear(),
+      grandTotal,
+    ]
+      .filter(Boolean)
+      .join(' / '),
   }
 
   // ── Launch Puppeteer ──────────────────────────────────────────────────────

@@ -8,6 +8,11 @@ import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { logAudit } from '../audit'
 import { canViewProposal, canEditProposal } from '../proposal-visibility'
+import {
+  activityInclude,
+  serializeActivity,
+  type ProposalActivityItem,
+} from '../activity-shared'
 import { DEFAULT_AGENCY_NAME } from '../branding'
 import { createNotification } from '../notifications'
 import {
@@ -227,7 +232,9 @@ async function generateProposalNumber(): Promise<string> {
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const prefix = `PROP-${yyyy}-${mm}-`
+  // "CE" = Cost Estimate, the company's term for these documents. The sequential
+  // NNNN still lands at split('-')[3] because "CE" has no internal hyphen.
+  const prefix = `CE-${yyyy}-${mm}-`
 
   const latest = await prisma.proposal.findFirst({
     where: { number: { startsWith: prefix } },
@@ -1021,6 +1028,8 @@ export type ProposalDetail = {
     actor: { id: string; name: string }
   }[]
   versions: ProposalVersionEntry[]
+  // User-posted feed items (tasks/notes/files/links), newest first.
+  activities: ProposalActivityItem[]
 }
 
 export async function getProposalDetail(id: string): Promise<ProposalDetail | null> {
@@ -1060,6 +1069,10 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
           createdAt: true,
           createdBy: { select: { id: true, name: true } },
         },
+      },
+      activities: {
+        orderBy: { createdAt: 'desc' },
+        include: activityInclude,
       },
     },
   })
@@ -1163,6 +1176,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
       createdAt: v.createdAt.toISOString(),
       createdBy: v.createdBy,
     })),
+    activities: proposal.activities.map(serializeActivity),
   }
 }
 

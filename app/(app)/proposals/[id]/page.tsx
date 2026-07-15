@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
 import { prisma } from '@/lib/prisma'
 import { getProposalDetail } from '@/lib/actions/proposals'
+import { getAssignableUsers } from '@/lib/actions/activity'
 import { Breadcrumbs } from '@/components/shell/Breadcrumbs'
 import { ProposalDetailClient } from './ProposalDetailClient'
 
@@ -16,6 +17,9 @@ export default async function ProposalDetailPage({ params }: Props) {
 
   const proposal = await getProposalDetail(params.id)
   if (!proposal) notFound()
+
+  // Task-assignee options for the activity feed (users who can view this proposal)
+  const assignableUsers = await getAssignableUsers(params.id)
 
   // Proposals store the client name as a point-in-time snapshot. If the linked
   // Client record has since been renamed, surface a subtle staleness note
@@ -51,6 +55,7 @@ export default async function ProposalDetailPage({ params }: Props) {
       <ProposalDetailClient
         proposal={proposal}
         currentUser={{ id: session.user.id, role: session.user.role }}
+        assignableUsers={assignableUsers}
         canEdit={canEdit}
         canApprove={canApprove}
         canForceOverride={canForceOverride}
