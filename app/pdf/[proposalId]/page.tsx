@@ -285,13 +285,16 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .sheet { position: relative; z-index: 1; width: 794px; min-height: 1120px; background: #fff; }
     .sheet:not(:last-child) { break-after: page; page-break-after: always; }
 
-    /* ── Continuous body flow ─────────────────────────────────────────────── */
-    /* Width comes from the printable area (Puppeteer page margins); sections
-       follow one another with a divider and break across pages naturally. */
+    /* ── One section per page ─────────────────────────────────────────────── */
+    /* Width comes from the printable area (Puppeteer page margins). Each section
+       starts on a fresh page; a section longer than one page still paginates
+       naturally (Puppeteer stamps real "Page X of Y" in the footer either way). */
     #doc-flow { position: relative; z-index: 1; background: #fff; }
     /* Browser preview only (?part absent): simulate the print margins */
     #doc-flow.preview-pad { width: 794px; padding: 52px 64px; }
-    .flow-section + .flow-section { border-top: 1px solid var(--border); margin-top: 34px; padding-top: 30px; }
+    /* The cover (body pass) / first section already starts at the top of the body
+       render, so only break BEFORE each subsequent section. */
+    .flow-section + .flow-section { break-before: page; page-break-before: always; }
 
     /* Section head — never left alone at the bottom of a page */
     .head { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
@@ -352,6 +355,9 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .itable th:nth-child(5), .itable td:nth-child(5) { width: 132px; }
     .col-idx { color: var(--muted); }
     .col-num { text-align: right; white-space: nowrap; padding-left: 12px; }
+    /* The element-level `.itable th` / `.stable th` rules set text-align:left and
+       out-specify `.col-num`; re-assert right alignment for number-column headers. */
+    .itable th.col-num, .stable th.col-num { text-align: right; }
     .li-name { font-weight: 600; color: var(--primary); }
     .li-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
     .amount { font-weight: 600; color: var(--primary); }
