@@ -355,8 +355,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .itable th:nth-child(5), .itable td:nth-child(5) { width: 132px; }
     .col-idx { color: var(--muted); }
     .col-num { text-align: right; white-space: nowrap; padding-left: 12px; }
-    /* The element-level `.itable th` / `.stable th` rules set text-align:left and
-       out-specify `.col-num`; re-assert right alignment for number-column headers. */
+    /* The element-level 'itable th' / 'stable th' rules set text-align:left and
+       out-specify 'col-num'; re-assert right alignment for number-column headers. */
     .itable th.col-num, .stable th.col-num { text-align: right; }
     .li-name { font-weight: 600; color: var(--primary); }
     .li-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
