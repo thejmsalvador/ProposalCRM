@@ -63,6 +63,10 @@ model User {
   teamId            String?
   defaultApproverId String?
   isActive          Boolean   @default(true)
+  // Soft-delete marker. When a departing employee is deleted, the row is kept
+  // (so their proposal/approval/audit history stays intact) but hidden from the
+  // Users list and blocked from signing in. Null = active record.
+  deletedAt         DateTime?
   createdAt         DateTime  @default(now())
   lastLoginAt       DateTime?
 

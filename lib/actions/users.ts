@@ -1,10 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@supabase/supabase-js'
 import { getSession } from '../auth'
 import { can } from '../permissions'
 import { prisma } from '../prisma'
 import { getSupabaseAdmin } from '../supabaseAdmin'
+import { supabaseUrl, supabaseKey } from '@/utils/supabase/env'
+import { rateLimit } from '../rate-limit'
 import type { Role } from '../generated/prisma/enums'
 import { logAudit } from '../audit'
 import {
@@ -30,6 +33,7 @@ export type UserListItem = {
   defaultApproverId: string | null
   signatureImageUrl: string | null
   isActive: boolean
+  deletedAt: string | null
   lastLoginAt: string | null
   createdAt: string
 }
@@ -44,6 +48,9 @@ export type TeamListItem = {
 
 // ─── Queries ────────────────────────────────────────────────────────────────
 
+// Returns ALL users, including soft-deleted ones. The Users list hides deleted
+// records by default and reveals them behind a "Show deleted" toggle, so the
+// client needs both sets; deletedAt lets it partition them.
 export async function getUsers(): Promise<UserListItem[]> {
   const users = await prisma.user.findMany({
     include: { team: { select: { name: true } } },
@@ -60,6 +67,7 @@ export async function getUsers(): Promise<UserListItem[]> {
     defaultApproverId: u.defaultApproverId,
     signatureImageUrl: u.signatureImageUrl,
     isActive: u.isActive,
+    deletedAt: u.deletedAt?.toISOString() ?? null,
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),
   }))
@@ -199,6 +207,107 @@ export async function toggleUserActive(
   })
 
   await logAudit('User', userId, currentIsActive ? 'deactivated' : 'reactivated', session.user.id)
+
+  revalidatePath('/users')
+  return { success: true }
+}
+
+/**
+ * Soft-deletes a user: stamps `deletedAt` so the row is hidden from the Users
+ * list and blocked from signing in, while KEEPING the record (and therefore all
+ * their proposal / approval / audit history) intact. The Supabase Auth login is
+ * removed so they can no longer authenticate. Intentionally guarded:
+ *
+ *  1. Restricted to roles with the `delete:user` permission (SUPER_ADMIN, COO,
+ *     CEO) — a stricter set than the invite/edit flows, which are SUPER_ADMIN
+ *     only via `manage:users`.
+ *  2. The user must ALREADY be deactivated (isActive = false). Deactivation is
+ *     the deliberate first step; only then does delete become available.
+ *  3. Requires the CALLER to re-enter their OWN password as a second confirm,
+ *     re-verified server-side against Supabase Auth. Rate-limited to blunt
+ *     brute-force guessing.
+ *  4. Refuses to delete your own account.
+ */
+export async function deleteUser(
+  userId: string,
+  password: string,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+  if (!can(session.user, 'delete:user')) return { error: 'Unauthorized' }
+
+  if (userId === session.user.id) {
+    return { error: 'You cannot delete your own account.' }
+  }
+
+  if (!password) {
+    return { error: 'Password is required to confirm deletion.' }
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: userId } })
+  if (!target) return { error: 'User not found.' }
+  if (target.deletedAt) return { error: 'This user has already been deleted.' }
+  if (target.isActive) {
+    return { error: 'Deactivate this user before deleting them.' }
+  }
+
+  // Throttle password-guessing on this sensitive action.
+  const limit = rateLimit(`delete-user:${session.user.id}`, 5, 5 * 60 * 1000)
+  if (!limit.ok) {
+    return { error: `Too many attempts. Try again in ${limit.retryAfterSeconds}s.` }
+  }
+
+  // Re-verify the caller's password against Supabase Auth. Use a throwaway
+  // client (persistSession:false) so this sign-in check never touches the
+  // caller's real session cookies.
+  const verifier = createClient(supabaseUrl, supabaseKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { error: authError } = await verifier.auth.signInWithPassword({
+    email: session.user.email,
+    password,
+  })
+  if (authError) {
+    return { error: 'Incorrect password. Deletion cancelled.' }
+  }
+
+  // Remove the Supabase Auth login so the deleted user can never authenticate.
+  // Best-effort: look the auth user up by email (there is no direct
+  // get-by-email admin API, so page through the user list).
+  const supabaseAdmin = getSupabaseAdmin()
+  try {
+    const perPage = 1000
+    let page = 1
+    let authUserId: string | null = null
+    // Cap the scan so a runaway loop can't hang the request.
+    for (let i = 0; i < 20 && !authUserId; i++) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+      if (error) break
+      const match = data.users.find(
+        (u) => u.email?.toLowerCase() === target.email.toLowerCase(),
+      )
+      if (match) authUserId = match.id
+      if (data.users.length < perPage) break
+      page += 1
+    }
+    if (authUserId) {
+      await supabaseAdmin.auth.admin.deleteUser(authUserId)
+    }
+  } catch {
+    // Non-fatal: the soft-delete below is what revokes app access
+    // (getSession() returns null once deletedAt is set).
+  }
+
+  // Soft delete: keep the row (and all its history) but hide + lock it out.
+  await prisma.user.update({
+    where: { id: userId },
+    data: { deletedAt: new Date(), isActive: false },
+  })
+
+  await logAudit('User', userId, 'deleted_user', session.user.id, {
+    deletedUserEmail: target.email,
+    deletedUserName: target.name,
+  })
 
   revalidatePath('/users')
   return { success: true }

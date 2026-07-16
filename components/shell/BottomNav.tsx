@@ -64,7 +64,8 @@ const OVERFLOW_ITEMS: OverflowItem[] = [
     label: 'Users',
     href: '/users',
     icon: UserCog,
-    roles: [Role.SUPER_ADMIN],
+    // SUPER_ADMIN manages users; COO/CEO reach this page to delete users.
+    roles: [Role.SUPER_ADMIN, Role.COO, Role.CEO],
   },
   {
     label: 'Settings',

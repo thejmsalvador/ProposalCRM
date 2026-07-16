@@ -520,6 +520,7 @@ Approval is a **fixed two-stage COO → CEO chain** (see Approval Workflow below
 | `manage:catalog` | — | ✓ | — | — | ✓ | ✓ |
 | `manage:templates` | — | — | — | — | ✓ | ✓ |
 | `manage:users` | — | — | — | — | — | ✓ |
+| `delete:user` | — | — | ✓ | ✓ | — | ✓ |
 | `view:audit_log` | — | — | ✓ | ✓ | ✓ | ✓ |
 | `force:status_override` | — | — | — | — | — | ✓ |
 | `lock:tc_template` | — | — | — | — | — | ✓ |
@@ -528,6 +529,19 @@ Approval is a **fixed two-stage COO → CEO chain** (see Approval Workflow below
 - `SALES_EXEC` → own proposals only (`createdById = currentUser.id`)
 - `SALES_MANAGER` → all proposals in their team (`createdBy.teamId = currentUser.teamId`)
 - `COO` / `CEO` / `ADMIN` / `SUPER_ADMIN` → all proposals
+
+**Deleting users (`delete:user` — SUPER_ADMIN, COO, CEO):** a **soft-delete** that
+stamps `User.deletedAt`. The row (and all the user's proposal/approval/audit
+history) is kept, but the user is hidden from the Users list and blocked from
+signing in (`getSession()` rejects `deletedAt != null`; Auth login is removed).
+This is the clean "employee left" action. It is deliberately gated: the user
+must **already be deactivated** (`isActive = false`), the Delete button lives only
+**inside the Edit Account sheet** (COO/CEO see a read-only version of that sheet
+whose sole action is Delete — the page + sheet are reachable by `manage:users`
+OR `delete:user`), and confirmation requires the **acting user to re-enter their
+own password** (re-verified server-side, rate-limited). Deleted users are hidden
+by default behind a "Show deleted" toggle on the Users list. `deleteUser()` lives
+in `lib/actions/users.ts`.
 
 ---
 
