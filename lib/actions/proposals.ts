@@ -2475,3 +2475,61 @@ export async function revertToDraft(
   revalidatePath('/proposals')
   return { success: true }
 }
+
+// ─── Reopen an approved proposal for revision ─────────────────────────────────
+// Lets the creator (or an edit:any holder) revise an already-APPROVED proposal.
+// Editing approved content invalidates the COO→CEO sign-off, so we move it back
+// to REVISION_REQUIRED and clear both approval stamps + the assigned approver:
+// re-submission restarts the two-stage chain at the COO. The prior approved
+// snapshot stays in Version History; the edits themselves produce a new version.
+// The 'reopened_for_revision' ApprovalEvent surfaces in the Activity Feed.
+export async function reviseProposal(
+  proposalId: string,
+  reason?: string,
+): Promise<{ success: true } | { error: string }> {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthenticated' }
+
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { createdBy: { select: { teamId: true } } },
+  })
+  if (!proposal) return { error: 'Proposal not found' }
+
+  if (proposal.status !== 'APPROVED') {
+    return { error: 'Only approved proposals can be reopened for revision' }
+  }
+
+  if (!canEditProposal(session.user, proposal)) {
+    return { error: 'Unauthorized' }
+  }
+
+  await prisma.proposal.update({
+    where: { id: proposalId },
+    data: {
+      status: 'REVISION_REQUIRED',
+      cooApprovedAt: null,
+      cooApprovedById: null,
+      ceoApprovedAt: null,
+      ceoApprovedById: null,
+      assignedApproverId: null,
+    },
+  })
+
+  await prisma.approvalEvent.create({
+    data: {
+      proposalId,
+      action: 'reopened_for_revision',
+      actorId: session.user.id,
+      comment: reason?.trim() ? reason.trim() : null,
+    },
+  })
+
+  await logAudit('Proposal', proposalId, 'reopened_for_revision', session.user.id, {
+    from: 'APPROVED',
+    reason: reason?.trim() || null,
+  })
+  revalidatePath(`/proposals/${proposalId}`)
+  revalidatePath('/proposals')
+  return { success: true }
+}

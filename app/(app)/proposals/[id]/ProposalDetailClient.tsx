@@ -50,6 +50,7 @@ import {
   markAsWon,
   markAsLost,
   forceOverrideStatus,
+  reviseProposal,
   submitExistingProposal,
   restoreVersion,
   getVersionSnapshot,
@@ -103,6 +104,8 @@ type Props = {
   /** Active users who may be assigned tasks on this proposal's feed. */
   assignableUsers: ActivityUser[]
   canEdit: boolean
+  /** True when this APPROVED proposal may be reopened for revision. */
+  canRevise: boolean
   canApprove: boolean
   canForceOverride: boolean
   /** Set when the linked Client record was renamed after this proposal was
@@ -243,6 +246,7 @@ export function ProposalDetailClient({
   currentUser,
   assignableUsers,
   canEdit,
+  canRevise,
   canApprove,
   canForceOverride,
   clientUpdate,
@@ -319,6 +323,9 @@ export function ProposalDetailClient({
   // Reject dialog
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+
+  const [reviseOpen, setReviseOpen] = useState(false)
+  const [reviseReason, setReviseReason] = useState('')
 
   // Force override dialog
   const [overrideOpen, setOverrideOpen] = useState(false)
@@ -412,6 +419,25 @@ export function ProposalDetailClient({
 
   function handleMarkSent() {
     run(() => markAsSent(proposal.id))
+  }
+
+  // ─── Revise (reopen an approved proposal) ─────────────────────────────────────
+
+  function handleReviseConfirm() {
+    startTransition(async () => {
+      const result = await reviseProposal(proposal.id, reviseReason)
+      if ('error' in result) {
+        toast({ title: 'Error', description: result.error, variant: 'destructive' })
+        return
+      }
+      toast({
+        title: 'Reopened for revision',
+        description: 'Make your changes, then re-submit for approval.',
+      })
+      setReviseOpen(false)
+      setReviseReason('')
+      router.push(`/proposals/${proposal.id}/edit`)
+    })
   }
 
   // ─── Won / Lost ──────────────────────────────────────────────────────────────
@@ -595,6 +621,17 @@ export function ProposalDetailClient({
 
       {status === 'APPROVED' && (
         <>
+          {canRevise && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReviseOpen(true)}
+              disabled={isPending}
+            >
+              <Edit2 className="h-4 w-4 mr-1.5" />
+              Revise
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1544,6 +1581,43 @@ export function ProposalDetailClient({
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               Reject Proposal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revise (reopen approved proposal) Modal */}
+      <Dialog open={reviseOpen} onOpenChange={setReviseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reopen for Revision</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <p className="text-sm text-slate-600">
+              This proposal is <span className="font-medium">Approved</span>. Reopening it moves
+              it to <span className="font-medium">Revision Required</span> so you can edit it. It
+              will need to pass back through COO → CEO approval before it can be sent or its PDF
+              regenerated. The current approved version stays in Version History.
+            </p>
+            <div>
+              <Label htmlFor="revise-reason">Reason for revision (optional)</Label>
+              <Textarea
+                id="revise-reason"
+                value={reviseReason}
+                onChange={(e) => setReviseReason(e.target.value)}
+                placeholder="e.g. Client requested a revised scope and pricing…"
+                className="mt-1"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviseOpen(false)} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleReviseConfirm} disabled={isPending}>
+              <Edit2 className="h-4 w-4 mr-1.5" />
+              Reopen &amp; Edit
             </Button>
           </DialogFooter>
         </DialogContent>
