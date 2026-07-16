@@ -5,7 +5,7 @@ import { can } from '@/lib/permissions'
 import { canViewProposal } from '@/lib/proposal-visibility'
 import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
-import { signPdfToken } from '@/lib/pdf-token'
+import { signPdfToken, proposalPdfFilename } from '@/lib/pdf-token'
 import { rateLimit } from '@/lib/rate-limit'
 import { formatCurrency } from '@/lib/validations/proposals'
 import { LEGAL_ENTITY_NAME } from '@/lib/branding'
@@ -155,8 +155,9 @@ export async function POST(req: NextRequest) {
   // Footer label: Legal Entity / CE# / Account Code / Company Name / Project
   // Title / Year / Grand Total. The grand total mirrors the PDF body — converted
   // to the client currency at the proposal's FX rate (₱ per unit), or left in ₱
-  // when there is no rate. Account code is optional, so blank segments drop out
-  // rather than leaving a stray "/".
+  // when there is no rate. Account code is a required proposal field, so it's
+  // always present; the filter() only guards legacy proposals created before it
+  // became mandatory.
   const totalPhp = parseFloat(proposal.total.toString())
   const fxRate =
     proposal.currency !== 'PHP' && proposal.exchangeRate
@@ -242,9 +243,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Get signed URL (24 h) ─────────────────────────────────────────────────
+  // Client-facing download filename: "CE# - Account Code - Project Title - vN".
+  const downloadName = proposalPdfFilename(proposal)
+
   const { data: signedData, error: signedError } = await supabase.storage
     .from(bucketName)
-    .createSignedUrl(storagePath, 60 * 60 * 24)
+    .createSignedUrl(storagePath, 60 * 60 * 24, { download: downloadName })
 
   if (signedError || !signedData?.signedUrl) {
     console.error('[pdf/generate] Signed URL error:', signedError)

@@ -229,10 +229,14 @@ function AddClientSheet({
       toast({ title: 'Company name is required', variant: 'destructive' })
       return
     }
+    if (!form.accountCode.trim()) {
+      toast({ title: 'Account code is required', variant: 'destructive' })
+      return
+    }
     setIsSaving(true)
     const result = await createClient({
       companyName: form.companyName.trim(),
-      accountCode: form.accountCode.trim() || undefined,
+      accountCode: form.accountCode.trim(),
       industry: form.industry || undefined,
       website: form.website || undefined,
       address: form.address || undefined,
@@ -266,7 +270,7 @@ function AddClientSheet({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="add-account-code">Account Code</Label>
+            <Label htmlFor="add-account-code">Account Code *</Label>
             <Input
               id="add-account-code"
               value={form.accountCode}

@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth'
 import { can } from '@/lib/permissions'
 import { prisma } from '@/lib/prisma'
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
+import { proposalPdfFilename } from '@/lib/pdf-token'
 
 export const maxDuration = 60
 
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
     select: {
       id: true,
       number: true,
+      accountCode: true,
+      projectTitle: true,
+      version: true,
       versions: {
         where: { pdfUrl: { not: null } },
         orderBy: { versionNumber: 'desc' },
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest) {
 
       const arrayBuffer = await data.arrayBuffer()
       pdfEntries.push({
-        filename: `${proposal.number}.pdf`,
+        filename: proposalPdfFilename(proposal),
         buffer: Buffer.from(arrayBuffer),
       })
     }),

@@ -199,19 +199,27 @@ export function Step1ClientDetails() {
 
           {/* Account Code */}
           <div className="space-y-1.5">
-            <Label htmlFor="accountCode">Account Code</Label>
+            <Label htmlFor="accountCode">Account Code *</Label>
             <Input
               id="accountCode"
               placeholder="e.g. SUNB"
               autoCapitalize="characters"
+              aria-invalid={errors.accountCode ? true : undefined}
+              aria-describedby={errors.accountCode ? 'accountCode-error' : undefined}
               {...register('accountCode')}
               onChange={(e) =>
                 setValue('accountCode', e.target.value.toUpperCase(), { shouldDirty: true })
               }
             />
-            <p className="text-xs text-[var(--color-muted)]">
-              Short internal code for this client (usually 3–5 letters).
-            </p>
+            {errors.accountCode ? (
+              <p id="accountCode-error" className="text-xs text-[var(--color-danger)]">
+                {errors.accountCode.message}
+              </p>
+            ) : (
+              <p className="text-xs text-[var(--color-muted)]">
+                Short internal code for this client (usually 3–5 letters).
+              </p>
+            )}
           </div>
 
           {/* Department */}

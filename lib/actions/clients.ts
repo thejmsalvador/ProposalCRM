@@ -26,7 +26,7 @@ export type ClientOption = {
 
 const clientSchema = z.object({
   companyName: z.string().min(1, 'Company name is required'),
-  accountCode: z.string().optional(),
+  accountCode: z.string().trim().min(1, 'Account code is required'),
   industry: z.string().optional(),
   website: z
     .string()
@@ -73,7 +73,7 @@ export async function createClient(
   const client = await prisma.client.create({
     data: {
       companyName: companyName.trim(),
-      accountCode: accountCode?.trim().toUpperCase() || null,
+      accountCode: accountCode.trim().toUpperCase(),
       industry: industry || null,
       website: website || null,
       address: address || null,
@@ -108,7 +108,7 @@ export async function updateClient(
     where: { id },
     data: {
       companyName: companyName.trim(),
-      accountCode: accountCode?.trim().toUpperCase() || null,
+      accountCode: accountCode.trim().toUpperCase(),
       industry: industry || null,
       website: website || null,
       address: address || null,
