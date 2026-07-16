@@ -8,6 +8,7 @@ export type Action =
   | 'manage:catalog'
   | 'manage:templates'
   | 'manage:users'
+  | 'delete:user'
   | 'view:audit_log'
   | 'force:status_override'
   | 'lock:tc_template'
@@ -36,6 +37,7 @@ const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     'edit:own_proposal',
     'edit:any_proposal',
     'approve:proposal',
+    'delete:user',
     'view:audit_log',
   ],
   [Role.CEO]: [
@@ -43,6 +45,7 @@ const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     'edit:own_proposal',
     'edit:any_proposal',
     'approve:proposal',
+    'delete:user',
     'view:audit_log',
   ],
   [Role.ADMIN]: [
@@ -62,6 +65,7 @@ const ROLE_PERMISSIONS: Record<Role, Action[]> = {
     'manage:catalog',
     'manage:templates',
     'manage:users',
+    'delete:user',
     'view:audit_log',
     'force:status_override',
     'lock:tc_template',

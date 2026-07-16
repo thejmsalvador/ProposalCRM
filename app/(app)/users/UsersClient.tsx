@@ -32,25 +32,61 @@ const ROLE_BADGE: Record<string, string> = {
 type Props = {
   users: UserListItem[]
   teams: TeamListItem[]
+  currentUserId: string
+  canManageUsers: boolean
+  canDeleteUsers: boolean
 }
 
-export function UsersClient({ users, teams }: Props) {
+function StatusBadge({ user }: { user: UserListItem }) {
+  if (user.deletedAt) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+        Deleted
+      </span>
+    )
+  }
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+        user.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+      }`}
+    >
+      {user.isActive ? 'Active' : 'Inactive'}
+    </span>
+  )
+}
+
+export function UsersClient({
+  users,
+  teams,
+  currentUserId,
+  canManageUsers,
+  canDeleteUsers,
+}: Props) {
   const [search, setSearch] = useState('')
+  const [showDeleted, setShowDeleted] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
+  const activeCount = useMemo(() => users.filter((u) => !u.deletedAt).length, [users])
+  const deletedCount = useMemo(() => users.filter((u) => u.deletedAt).length, [users])
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    if (!q) return users
-    return users.filter(
-      (u) =>
-        u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
-    )
-  }, [users, search])
+    return users.filter((u) => {
+      if (u.deletedAt && !showDeleted) return false
+      if (!q) return true
+      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    })
+  }, [users, search, showDeleted])
 
-  const managers = users.filter((u) => u.role === 'SALES_MANAGER')
+  const managers = users.filter((u) => u.role === 'SALES_MANAGER' && !u.deletedAt)
+
+  // Anyone who can manage OR delete users can open the account sheet (COO/CEO
+  // get a read-only view whose only action is Delete).
+  const canOpenSheet = canManageUsers || canDeleteUsers
 
   function handleToggleActive(user: UserListItem) {
     setTogglingId(user.id)
@@ -75,35 +111,50 @@ export function UsersClient({ users, teams }: Props) {
             User Management
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {users.length} {users.length === 1 ? 'member' : 'members'} in your organisation
+            {activeCount} {activeCount === 1 ? 'member' : 'members'} in your organisation
           </p>
         </div>
-        <Button
-          type="button"
-          className="gap-2 min-h-[44px]"
-          onClick={() => setInviteOpen(true)}
-        >
-          <UserPlus size={16} aria-hidden="true" />
-          Invite user
-        </Button>
+        {canManageUsers && (
+          <Button
+            type="button"
+            className="gap-2 min-h-[44px]"
+            onClick={() => setInviteOpen(true)}
+          >
+            <UserPlus size={16} aria-hidden="true" />
+            Invite user
+          </Button>
+        )}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]"
-          aria-hidden="true"
-        />
-        <Input
-          id="user-search"
-          type="search"
-          placeholder="Search by name or email…"
-          className="pl-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search users"
-        />
+      {/* Search + deleted toggle */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative max-w-sm w-full">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]"
+            aria-hidden="true"
+          />
+          <Input
+            id="user-search"
+            type="search"
+            placeholder="Search by name or email…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search users"
+          />
+        </div>
+        {deletedCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-[var(--color-muted)] cursor-pointer select-none min-h-[44px]">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-accent)]"
+              checked={showDeleted}
+              onChange={(e) => setShowDeleted(e.target.checked)}
+            />
+            Show deleted ({deletedCount})
+          </label>
+        )}
       </div>
 
       {/* Users table */}
@@ -113,7 +164,7 @@ export function UsersClient({ users, teams }: Props) {
           <p className="text-sm text-[var(--color-muted)]">
             {search ? 'No users match your search.' : 'No users found. Invite your first team member.'}
           </p>
-          {!search && (
+          {!search && canManageUsers && (
             <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
               Invite team member
             </Button>
@@ -150,7 +201,9 @@ export function UsersClient({ users, teams }: Props) {
                 {filtered.map((user) => (
                   <tr
                     key={user.id}
-                    className="hover:bg-[var(--color-surface)] transition-colors"
+                    className={`hover:bg-[var(--color-surface)] transition-colors ${
+                      user.deletedAt ? 'opacity-60' : ''
+                    }`}
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-[var(--color-primary)]">
@@ -178,45 +231,41 @@ export function UsersClient({ users, teams }: Props) {
                         : 'Never'}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          user.isActive
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-slate-100 text-slate-500'
-                        }`}
-                      >
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                      <StatusBadge user={user} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="min-h-[36px]"
-                          onClick={() => setEditingUser(user)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className={`min-h-[36px] ${
-                            user.isActive
-                              ? 'text-[var(--color-danger)] hover:bg-red-50'
-                              : 'text-[var(--color-success)] hover:bg-green-50'
-                          }`}
-                          disabled={togglingId === user.id}
-                          onClick={() => handleToggleActive(user)}
-                        >
-                          {togglingId === user.id
-                            ? '…'
-                            : user.isActive
-                            ? 'Deactivate'
-                            : 'Reactivate'}
-                        </Button>
+                        {canManageUsers && !user.deletedAt && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={`min-h-[36px] ${
+                              user.isActive
+                                ? 'text-[var(--color-danger)] hover:bg-red-50'
+                                : 'text-[var(--color-success)] hover:bg-green-50'
+                            }`}
+                            disabled={togglingId === user.id}
+                            onClick={() => handleToggleActive(user)}
+                          >
+                            {togglingId === user.id
+                              ? '…'
+                              : user.isActive
+                              ? 'Deactivate'
+                              : 'Reactivate'}
+                          </Button>
+                        )}
+                        {canOpenSheet && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-[36px]"
+                            onClick={() => setEditingUser(user)}
+                          >
+                            {canManageUsers && !user.deletedAt ? 'Edit' : 'View'}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -228,20 +277,17 @@ export function UsersClient({ users, teams }: Props) {
           {/* Mobile cards */}
           <div className="md:hidden divide-y divide-[var(--color-border)]">
             {filtered.map((user) => (
-              <div key={user.id} className="p-4 space-y-3">
+              <div
+                key={user.id}
+                className={`p-4 space-y-3 ${user.deletedAt ? 'opacity-60' : ''}`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-medium text-[var(--color-primary)]">{user.name}</p>
                     <p className="text-xs text-[var(--color-muted)]">{user.email}</p>
                   </div>
-                  <span
-                    className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      user.isActive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {user.isActive ? 'Active' : 'Inactive'}
+                  <span className="shrink-0">
+                    <StatusBadge user={user} />
                   </span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--color-muted)]">
@@ -252,34 +298,38 @@ export function UsersClient({ users, teams }: Props) {
                   </span>
                   {user.teamName && <span>{user.teamName}</span>}
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 min-h-[44px]"
-                    onClick={() => setEditingUser(user)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={`flex-1 min-h-[44px] ${
-                      user.isActive
-                        ? 'text-[var(--color-danger)] hover:bg-red-50'
-                        : 'text-[var(--color-success)] hover:bg-green-50'
-                    }`}
-                    disabled={togglingId === user.id}
-                    onClick={() => handleToggleActive(user)}
-                  >
-                    {togglingId === user.id
-                      ? '…'
-                      : user.isActive
-                      ? 'Deactivate'
-                      : 'Reactivate'}
-                  </Button>
+                <div className="flex gap-2 flex-wrap">
+                  {canManageUsers && !user.deletedAt && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={`flex-1 min-h-[44px] ${
+                        user.isActive
+                          ? 'text-[var(--color-danger)] hover:bg-red-50'
+                          : 'text-[var(--color-success)] hover:bg-green-50'
+                      }`}
+                      disabled={togglingId === user.id}
+                      onClick={() => handleToggleActive(user)}
+                    >
+                      {togglingId === user.id
+                        ? '…'
+                        : user.isActive
+                        ? 'Deactivate'
+                        : 'Reactivate'}
+                    </Button>
+                  )}
+                  {canOpenSheet && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 min-h-[44px]"
+                      onClick={() => setEditingUser(user)}
+                    >
+                      {canManageUsers && !user.deletedAt ? 'Edit' : 'View'}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -288,19 +338,26 @@ export function UsersClient({ users, teams }: Props) {
       )}
 
       {/* Teams section */}
-      <TeamsSection teams={teams} managers={managers} />
+      {canManageUsers && <TeamsSection teams={teams} managers={managers} />}
 
       {/* Dialogs / sheets */}
-      <InviteUserDialog
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        teams={teams}
-      />
-      <EditUserSheet
-        user={editingUser}
-        teams={teams}
-        onClose={() => setEditingUser(null)}
-      />
+      {canManageUsers && (
+        <InviteUserDialog
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          teams={teams}
+        />
+      )}
+      {canOpenSheet && (
+        <EditUserSheet
+          user={editingUser}
+          teams={teams}
+          currentUserId={currentUserId}
+          canManageUsers={canManageUsers}
+          canDeleteUsers={canDeleteUsers}
+          onClose={() => setEditingUser(null)}
+        />
+      )}
     </div>
   )
 }

@@ -34,7 +34,8 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     where: { email: authUser.email },
   })
 
-  if (!user || !user.isActive) return null
+  // Soft-deleted users keep their DB row (for history) but must never sign in.
+  if (!user || !user.isActive || user.deletedAt) return null
 
   return {
     supabaseId: authUser.id,
