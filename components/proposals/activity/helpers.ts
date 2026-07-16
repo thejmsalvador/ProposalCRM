@@ -39,6 +39,7 @@ export const APPROVAL_EVENT_LABELS: Record<string, string> = {
   overridden: 'Status force-overridden',
   on_hold: 'Put on hold',
   reverted_to_draft: 'Reverted to draft',
+  reopened_for_revision: 'Reopened for revision',
 }
 
 export function fmtDate(iso: string) {

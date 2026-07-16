@@ -39,6 +39,13 @@ export default async function ProposalDetailPage({ params }: Props) {
     (proposal.status === 'DRAFT' || proposal.status === 'REVISION_REQUIRED') &&
     (proposal.createdBy.id === session.user.id || can(session.user, 'edit:any_proposal'))
 
+  // An approved proposal can be reopened for revision by its creator or any
+  // edit:any holder. Editing invalidates the sign-off, so this re-enters the
+  // COO→CEO approval chain (see reviseProposal in lib/actions/proposals.ts).
+  const canRevise =
+    proposal.status === 'APPROVED' &&
+    (proposal.createdBy.id === session.user.id || can(session.user, 'edit:any_proposal'))
+
   const canApprove = can(session.user, 'approve:proposal')
   const canForceOverride = session.user.role === 'SUPER_ADMIN'
 
@@ -57,6 +64,7 @@ export default async function ProposalDetailPage({ params }: Props) {
         currentUser={{ id: session.user.id, role: session.user.role }}
         assignableUsers={assignableUsers}
         canEdit={canEdit}
+        canRevise={canRevise}
         canApprove={canApprove}
         canForceOverride={canForceOverride}
         clientUpdate={clientUpdate}
