@@ -581,6 +581,14 @@ function EditClientSheet({
   const [isSaving, setIsSaving] = useState(false)
 
   async function handleSave() {
+    if (!form.companyName.trim()) {
+      toast({ title: 'Company name is required', variant: 'destructive' })
+      return
+    }
+    if (!form.accountCode.trim()) {
+      toast({ title: 'Account code is required', variant: 'destructive' })
+      return
+    }
     setIsSaving(true)
     const result = await updateClient(client.id, form)
     setIsSaving(false)
@@ -609,7 +617,7 @@ function EditClientSheet({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ec-account-code">Account Code</Label>
+            <Label htmlFor="ec-account-code">Account Code *</Label>
             <Input
               id="ec-account-code"
               value={form.accountCode}

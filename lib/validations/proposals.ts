@@ -293,7 +293,7 @@ export type ProposalFormData = z.infer<typeof proposalDraftSchema>
 export const proposalSubmitSchema = z
   .object({
     clientName: z.string().min(2, 'Company name is required'),
-    accountCode: z.string().default(''),
+    accountCode: z.string().trim().min(1, 'Account code is required'),
     department: z.string().default(''),
     contactName: z.string().min(1, 'Contact person is required'),
     contactTitle: z.string().min(1, 'Position is required'),
@@ -394,6 +394,7 @@ export type StepValidationResult = {
 export const WIZARD_STEP_FIELDS: Record<number, (keyof ProposalFormData)[]> = {
   1: [
     'clientName',
+    'accountCode',
     'contactName',
     'contactTitle',
     'contactEmail',
@@ -420,6 +421,9 @@ export function validateWizardStep(
   if (step === 1) {
     if (!data.clientName || data.clientName.trim().length < 2) {
       fieldErrors.clientName = 'Company name is required'
+    }
+    if (!data.accountCode || !data.accountCode.trim()) {
+      fieldErrors.accountCode = 'Account code is required'
     }
     if (!data.contactName || !data.contactName.trim()) {
       fieldErrors.contactName = 'Contact person is required'

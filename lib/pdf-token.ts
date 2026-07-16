@@ -39,3 +39,31 @@ export function verifyPdfToken(
   if (provided.length !== expectedBuf.length) return false
   return timingSafeEqual(provided, expectedBuf)
 }
+
+/**
+ * Client-facing download filename for a proposal PDF:
+ * "CE# - Account Code - Project Title - vN.pdf". Account code is a required
+ * proposal field, so it's normally present; the filter() below only guards
+ * legacy proposals created before it became mandatory (and any other blank
+ * segment). Characters illegal in filenames are collapsed to spaces. Callers
+ * get a ready-to-use `.pdf` name.
+ */
+export function proposalPdfFilename(proposal: {
+  number: string
+  accountCode?: string | null
+  projectTitle: string
+  version: number
+}): string {
+  const base = [
+    proposal.number,
+    proposal.accountCode,
+    proposal.projectTitle,
+    `v${proposal.version}`,
+  ]
+    .filter(Boolean)
+    .join(' - ')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return `${base}.pdf`
+}
