@@ -8,6 +8,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { signPdfToken } from '@/lib/pdf-token'
 import { rateLimit } from '@/lib/rate-limit'
 import { formatCurrency } from '@/lib/validations/proposals'
+import { LEGAL_ENTITY_NAME } from '@/lib/branding'
 
 export const maxDuration = 60 // Vercel: 60-second timeout
 
@@ -49,7 +50,7 @@ async function renderProposalPdf(
   const footerTemplate = `
     <div style="width:100%; margin:0 15mm; padding-top:6px; border-top:1px solid #E2E8F0; font-size:8px; font-family:Helvetica,Arial,sans-serif; color:#64748B; display:flex; justify-content:space-between; align-items:center; gap:16px;">
       <span style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(footer.label)}</span>
-      <span style="white-space:nowrap; flex-shrink:0;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+      <span style="white-space:nowrap; flex-shrink:0;">Confidential - Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
     </div>`
 
   await page.goto(`${pdfUrl}&part=body`, { waitUntil: 'networkidle0', timeout: 30000 })
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
       id: true,
       status: true,
       version: true,
+      number: true,
       accountCode: true,
       clientName: true,
       projectTitle: true,
@@ -150,10 +152,11 @@ export async function POST(req: NextRequest) {
   const token = signPdfToken(proposalId, secret)
   const pdfUrl = `${appUrl}/pdf/${proposalId}?token=${encodeURIComponent(token)}`
 
-  // Footer label: Account Code / Company Name / Project Title / Year / Grand Total.
-  // The grand total mirrors the PDF body — converted to the client currency at the
-  // proposal's FX rate (₱ per unit), or left in ₱ when there is no rate. Account
-  // code is optional, so blank segments drop out rather than leaving a stray "/".
+  // Footer label: Legal Entity / CE# / Account Code / Company Name / Project
+  // Title / Year / Grand Total. The grand total mirrors the PDF body — converted
+  // to the client currency at the proposal's FX rate (₱ per unit), or left in ₱
+  // when there is no rate. Account code is optional, so blank segments drop out
+  // rather than leaving a stray "/".
   const totalPhp = parseFloat(proposal.total.toString())
   const fxRate =
     proposal.currency !== 'PHP' && proposal.exchangeRate
@@ -166,6 +169,8 @@ export async function POST(req: NextRequest) {
   )
   const footer = {
     label: [
+      LEGAL_ENTITY_NAME,
+      proposal.number,
       proposal.accountCode,
       proposal.clientName,
       proposal.projectTitle,

@@ -681,10 +681,13 @@ PDF template at `app/pdf/[proposalId]/page.tsx` — server component, no app she
 There is no Executive Summary section (its retirement is tracked separately — see the PRD's Common Mistakes / prior "remove Executive Summary" work); do not reintroduce it here.
 
 Running footer on every body page (the cover is unnumbered): a descriptive
-document label on the left — `Account Code / Company Name / Project Title / Year /
-Grand Total` (account code omitted when blank; grand total in the client-facing
-currency, matching the Investment Summary) — and `Page X of Y` hard against the
-right edge. Built as Puppeteer's `footerTemplate` in `app/api/pdf/generate/route.ts`.
+document label on the left — `Sunday Elephant Creatives Inc. / CE# / Account Code /
+Company Name / Project Title / Year / Grand Total` (`LEGAL_ENTITY_NAME` in
+`lib/branding.ts` — the registered legal entity, distinct from the "Sunday Studio"
+trade name shown elsewhere; account code omitted when blank; grand total in the
+client-facing currency, matching the Investment Summary) — and `Confidential -
+Page X of Y` hard against the right edge. Built as Puppeteer's `footerTemplate`
+in `app/api/pdf/generate/route.ts`.
 If `confidentialWatermark = true`: diagonal "CONFIDENTIAL" watermark via CSS `::before` on `body`.
 
 ---
