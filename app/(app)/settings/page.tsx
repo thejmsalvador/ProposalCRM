@@ -16,7 +16,7 @@ export default async function SettingsPage() {
       initial={{
         agencyName: settings?.agencyName ?? '',
         agencyLogoUrl: settings?.agencyLogoUrl ?? '',
-        brandColorHex: settings?.brandColorHex ?? '#4F46E5',
+        brandColorHex: settings?.brandColorHex ?? '#214ADE',
         defaultValidityDays: settings?.defaultValidityDays ?? 30,
         defaultCurrency: settings?.defaultCurrency ?? 'PHP',
         defaultVatRate: settings ? Number(settings.defaultVatRate) : 12,
