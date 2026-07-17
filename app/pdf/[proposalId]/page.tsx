@@ -77,7 +77,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
         createdBy: { select: { name: true, jobTitle: true } },
         lineItems: {
           orderBy: { sortOrder: 'asc' },
-          include: { service: { select: { category: true } } },
+          include: { service: { select: { name: true, category: true } } },
         },
         paymentTemplate: {
           select: { bodyRichText: true, milestones: true, milestoneBasis: true },
@@ -95,6 +95,19 @@ export default async function PdfPage({ params, searchParams }: Props) {
 
   const nonOptionalItems = proposal.lineItems.filter((li) => !li.isOptional)
   const optionalItems = proposal.lineItems.filter((li) => li.isOptional)
+
+  // The line item's display name: an explicit override wins, else the catalog
+  // service name, else the short description (custom items with no name set).
+  const itemName = (li: (typeof proposal.lineItems)[number]): string =>
+    li.customName || li.service?.name || li.description
+  // "<Engagement Type> <Engagement Term>" — e.g. "One-time", "Monthly · 6 mos".
+  // quantity carries the engagement term; a lone one-time term of 1 is just noise.
+  const engagementText = (unit: string, quantity: string): string => {
+    const label = engagementLabel(unit)
+    const n = parseFloat(quantity) || 0
+    if (/month/i.test(unit)) return n > 0 ? `${label} · ${n} mo${n === 1 ? '' : 's'}` : label
+    return n > 1 ? `${label} · ${n}` : label
+  }
 
   const paymentHtml =
     proposal.paymentTermsOverride || proposal.paymentTemplate?.bodyRichText || ''
@@ -246,8 +259,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
   // Page numbers are no longer computed here — the body flows continuously and
   // Puppeteer's footer template stamps the real "Page X of Y" per physical page.
   const order: string[] = ['cover']
-  if (nonOptionalItems.length > 0) order.push('scope')
-  order.push('invest')
+  // Combined Scope of Work + Investment Summary — a single section.
+  if (proposal.lineItems.length > 0) order.push('scope')
   if (paymentHtml || hasManualMilestones || hasModesOfPayment) order.push('payment')
   if (hasTc) order.push('tc')
   if (hasSignatories) order.push('signatories')
@@ -365,35 +378,38 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .sig-company { font-size: 12px; color: var(--text); margin-top: 2px; }
     .sig-position { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-    /* Scope */
-    .scope-item { break-inside: avoid; page-break-inside: avoid; margin-bottom: 22px; }
-    .scope-item + .scope-item { border-top: 1px solid var(--border); padding-top: 22px; }
-    .scope-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
-    .scope-badge { width: 34px; height: 34px; border-radius: 9px; background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
-    .scope-name { font-size: 17px; font-weight: 600; color: var(--primary); flex: 1; }
     .tag { font-size: 9px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 11px; white-space: nowrap; }
 
-    /* Tables: repeat column headers on page continuation, keep rows whole */
-    .itable thead, .stable thead { display: table-header-group; }
-    .itable tr, .stable tr { break-inside: avoid; page-break-inside: avoid; }
+    /* Tables: repeat column headers on page continuation */
+    .sowtable thead, .stable thead { display: table-header-group; }
+    .stable tr { break-inside: avoid; page-break-inside: avoid; }
 
-    /* Investment table */
-    .itable { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .itable thead tr { border-bottom: 2px solid var(--primary); }
-    .itable th { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; padding: 0 0 10px; text-align: left; }
-    .itable td { font-size: 12.5px; padding: 14px 0; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--text); }
-    .itable tbody tr:last-child td { border-bottom: 2px solid var(--primary); }
-    /* Fixed column widths so the numeric columns never collide */
-    .itable th:nth-child(1), .itable td:nth-child(1) { width: 26px; }
-    .itable th:nth-child(3), .itable td:nth-child(3) { width: 116px; }
-    .itable th:nth-child(4), .itable td:nth-child(4) { width: 120px; }
-    .itable th:nth-child(5), .itable td:nth-child(5) { width: 132px; }
+    /* ── Combined Scope of Work + Investment table ──────────────────────────
+       Column 1 (Service) holds the name, short description and the full scope
+       of work rich text, so rows can be tall — they are allowed to break
+       across pages while the header repeats. */
+    .sowtable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .sowtable thead tr { border-bottom: 2px solid var(--primary); }
+    .sowtable th { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; padding: 0 0 10px; text-align: left; vertical-align: bottom; }
+    .sowtable td { font-size: 12px; padding: 16px 0; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--text); }
+    .sowtable tbody tr { break-inside: auto; page-break-inside: auto; }
+    .sowtable tbody tr:last-child td { border-bottom: 2px solid var(--primary); }
+    /* Fixed widths so the numeric columns never collide; Service takes the rest */
+    .sowtable th:nth-child(1), .sowtable td:nth-child(1) { padding-right: 18px; }
+    .sowtable th:nth-child(2), .sowtable td:nth-child(2) { width: 92px; }
+    .sowtable th:nth-child(3), .sowtable td:nth-child(3) { width: 104px; }
+    .sowtable th:nth-child(4), .sowtable td:nth-child(4) { width: 116px; }
+    .sowtable th.col-num, .stable th.col-num { text-align: right; }
     .col-idx { color: var(--muted); }
     .col-num { text-align: right; white-space: nowrap; padding-left: 12px; }
-    /* The element-level 'itable th' / 'stable th' rules set text-align:left and
-       out-specify 'col-num'; re-assert right alignment for number-column headers. */
-    .itable th.col-num, .stable th.col-num { text-align: right; }
-    .li-name { font-weight: 600; color: var(--primary); }
+
+    /* Service cell: name / short description / scope of work */
+    .sow-name { font-size: 14px; font-weight: 600; color: var(--primary); line-height: 1.35; }
+    .sow-desc { font-size: 11.5px; font-style: italic; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+    .sow-scope { margin-top: 10px; }
+    .sow-scope.rich { font-size: 11.5px; line-height: 1.6; }
+    .sow-scope.rich p:last-child, .sow-scope.rich ul:last-child, .sow-scope.rich ol:last-child { margin-bottom: 0; }
+    .sow-eng { color: var(--text); }
     .li-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
     .amount { font-weight: 600; color: var(--primary); }
 
@@ -601,61 +617,49 @@ export default async function PdfPage({ params, searchParams }: Props) {
         {showBody && (
         <main id="doc-flow" className={part === 'all' ? 'preview-pad' : undefined}>
 
-        {/* ── 3. SCOPE OF WORK ───────────────────────────────────────────────── */}
-        {nonOptionalItems.length > 0 && (
-          <FlowSection pageKey="scope" title="Scope of Work">
-            {nonOptionalItems.map((li, i) => (
-              <div key={li.id} className="scope-item">
-                <div className="scope-head">
-                  <div className="scope-badge">{pad(i + 1)}</div>
-                  <div className="scope-name">{li.description}</div>
-                  {li.service?.category && <span className="tag">{li.service.category}</span>}
-                </div>
-                {li.scopeOfWork && (
-                  <div className="rich" dangerouslySetInnerHTML={{ __html: sanitizeHtml(li.scopeOfWork) }} />
-                )}
-              </div>
-            ))}
-          </FlowSection>
-        )}
+        {/* ── SCOPE OF WORK (Scope of Work + Investment Summary combined) ─────── */}
+        {proposal.lineItems.length > 0 && (
+        <FlowSection pageKey="scope" title="Scope of Work">
+          {displayCurrency !== 'PHP' && (
+            <div className="lead-note">
+              All figures in {displayCurrency}, converted from Philippine Peso at the agreed rate.
+              {optionalItems.length > 0
+                ? ' Optional add-ons are listed separately and are not included in the total below.'
+                : ''}
+            </div>
+          )}
 
-        {/* ── 4. INVESTMENT SUMMARY ──────────────────────────────────────────── */}
-        <FlowSection pageKey="invest" title="Investment Summary">
-          <div className="lead-note">
-            All figures in {displayCurrency}
-            {displayCurrency !== 'PHP' ? ', converted from Philippine Peso at the agreed rate' : ''}.
-            {optionalItems.length > 0
-              ? ' Optional add-ons are listed separately and are not included in the total below.'
-              : ''}
-          </div>
-
-          <table className="itable">
+          {nonOptionalItems.length > 0 && (
+          <table className="sowtable">
             <thead>
               <tr>
-                <th className="col-idx">#</th>
                 <th>Service</th>
-                <th className="col-num">Engagement</th>
-                <th className="col-num">Rate</th>
-                <th className="col-num">Amount</th>
+                <th>Engagement</th>
+                <th className="col-num">Unit Cost</th>
+                <th className="col-num">Total Cost (VAT Ex)</th>
               </tr>
             </thead>
             <tbody>
-              {nonOptionalItems.map((li, i) => (
+              {nonOptionalItems.map((li) => (
                 <tr key={li.id}>
-                  <td className="col-idx">{i + 1}</td>
                   <td>
-                    <div className="li-name">{li.description}</div>
-                    {li.service?.category && <div className="li-sub">{li.service.category}</div>}
+                    <div className="sow-name">{itemName(li)}</div>
+                    {li.description && <div className="sow-desc">{li.description}</div>}
+                    {li.scopeOfWork && (
+                      <div
+                        className="rich sow-scope"
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(li.scopeOfWork) }}
+                      />
+                    )}
                   </td>
-                  <td className="col-num">
-                    {engagementLabel(li.unit)} · {li.quantity.toString()}
-                  </td>
+                  <td className="sow-eng">{engagementText(li.unit, li.quantity.toString())}</td>
                   <td className="col-num">{money(li.unitRate.toString())}</td>
                   <td className="col-num amount">{money(li.lineTotal.toString())}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          )}
 
           <div className="totals">
             <div className="totals-box">
@@ -697,27 +701,29 @@ export default async function PdfPage({ params, searchParams }: Props) {
                 <span className="addon-title">Optional Add-ons</span>
                 <span className="tag">NOT INCLUDED IN TOTAL</span>
               </div>
-              <table className="itable">
+              <table className="sowtable">
                 <thead>
                   <tr>
-                    <th className="col-idx">#</th>
                     <th>Service</th>
-                    <th className="col-num">Engagement</th>
-                    <th className="col-num">Rate</th>
-                    <th className="col-num">Amount</th>
+                    <th>Engagement</th>
+                    <th className="col-num">Unit Cost</th>
+                    <th className="col-num">Total Cost (VAT Ex)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {optionalItems.map((li, i) => (
+                  {optionalItems.map((li) => (
                     <tr key={li.id}>
-                      <td className="col-idx">{i + 1}</td>
                       <td>
-                        <div className="li-name">{li.description}</div>
-                        {li.service?.category && <div className="li-sub">{li.service.category}</div>}
+                        <div className="sow-name">{itemName(li)}</div>
+                        {li.description && <div className="sow-desc">{li.description}</div>}
+                        {li.scopeOfWork && (
+                          <div
+                            className="rich sow-scope"
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(li.scopeOfWork) }}
+                          />
+                        )}
                       </td>
-                      <td className="col-num">
-                        {engagementLabel(li.unit)} · {li.quantity.toString()}
-                      </td>
+                      <td className="sow-eng">{engagementText(li.unit, li.quantity.toString())}</td>
                       <td className="col-num">{money(li.unitRate.toString())}</td>
                       <td className="col-num amount">{money(li.lineTotal.toString())}</td>
                     </tr>
@@ -727,6 +733,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
             </>
           )}
         </FlowSection>
+        )}
 
         {/* ── 5. PAYMENT TERMS ───────────────────────────────────────────────── */}
         {(paymentHtml || hasManualMilestones || hasModesOfPayment) && (
