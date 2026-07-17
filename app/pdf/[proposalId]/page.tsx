@@ -19,7 +19,11 @@ import {
 import { resolveTcSections } from '@/lib/tc-sections'
 import { resolveModesOfPayment } from '@/lib/mode-of-payment-sections'
 import { sanitizeHtml } from '@/lib/sanitize'
-import { DEFAULT_AGENCY_NAME } from '@/lib/branding'
+import {
+  DEFAULT_AGENCY_NAME,
+  LEGAL_ENTITY_NAME,
+  COMPANY_ADDRESS_LINES,
+} from '@/lib/branding'
 
 type Props = {
   params: { proposalId: string }
@@ -86,7 +90,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
 
   if (!proposal) notFound()
 
-  const accent = settings?.brandColorHex ?? '#4F46E5'
+  const accent = settings?.brandColorHex ?? '#214ADE'
   const agencyName = settings?.agencyName ?? DEFAULT_AGENCY_NAME
 
   const nonOptionalItems = proposal.lineItems.filter((li) => !li.isOptional)
@@ -152,6 +156,37 @@ export default async function PdfPage({ params, searchParams }: Props) {
     const safe = isNaN(n) ? 0 : n
     return formatCurrency(fxRate && fxRate > 0 ? safe / fxRate : safe, displayCurrency)
   }
+
+  // ── Cover derived values ─────────────────────────────────────────────────────
+  // Hero title mirrors the Figma cover: "<Brand> - <Project Title>" when a brand
+  // is set, otherwise just the project title.
+  const coverTitle = proposal.brandName
+    ? `${proposal.brandName} - ${proposal.projectTitle}`
+    : proposal.projectTitle
+  // "Prepared for" is the recipient contact; fall back to the company name when no
+  // contact person was captured.
+  const preparedForName = proposal.contactName || proposal.clientName
+  // "Company" block — filter out any blank optional fields.
+  const companyLines = [
+    proposal.clientName,
+    proposal.department,
+    proposal.tin,
+    proposal.businessAddress,
+  ].filter((v): v is string => !!v)
+  // Cover footer mirrors the inner-page running footer (built in the generate
+  // route): legal entity / CE# / account code / company / project / year / grand
+  // total. The cover is unnumbered, so the right side is just "Confidential".
+  const coverFooterLabel = [
+    LEGAL_ENTITY_NAME,
+    proposal.number,
+    proposal.accountCode,
+    proposal.clientName,
+    proposal.projectTitle,
+    new Date(proposal.date).getFullYear(),
+    money(total),
+  ]
+    .filter(Boolean)
+    .join(' / ')
 
   // ── Payment schedule ─────────────────────────────────────────────────────────
   // Engagement length comes from the monthly line items — legacy units may read
@@ -406,23 +441,37 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .addon-title { font-size: 15px; font-weight: 600; color: var(--primary); }
     .lead-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 24px; }
 
-    /* Cover */
-    .cover { background: var(--primary); color: #fff; }
-    .cover-inner { min-height: 1120px; padding: 64px; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
-    .cover-bar { position: absolute; top: 64px; right: 64px; width: 220px; height: 8px; background: var(--accent); border-radius: 4px; }
-    .logo-row { display: flex; align-items: center; gap: 16px; }
-    .logo-mark { width: 52px; height: 52px; border-radius: 14px; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: #fff; flex: none; }
-    .agency { font-size: 19px; font-weight: 600; }
-    .cover-hero { margin-top: 150px; }
-    .cover-pill { display: inline-flex; padding: 7px 14px; border-radius: 999px; background: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; }
-    .cover-title { font-size: 46px; font-weight: 700; line-height: 1.16; margin-top: 22px; }
-    .cover-sub { font-size: 17px; opacity: 0.65; margin-top: 18px; }
-    .cover-divider { border: 0; border-top: 1px solid rgba(255,255,255,0.15); }
-    .cover-meta { display: flex; margin-top: 24px; }
-    .cover-meta-col { flex: 1; }
-    .cover-meta-col .l { font-size: 9px; font-weight: 600; letter-spacing: 0.06em; opacity: 0.5; text-transform: uppercase; }
-    .cover-meta-col .v { font-size: 14px; font-weight: 500; margin-top: 6px; }
-    .cover-confidential { font-size: 10px; opacity: 0.4; margin-top: 28px; }
+    /* ── Cover (Figma node 23:9 — full-bleed brand-blue title page) ─────────── */
+    .cover { background: var(--accent); color: #fff; }
+    .cover-inner { min-height: 1123px; padding: 60px 64px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+    /* Faint brand swoosh watermark */
+    .cover-watermark { position: absolute; top: 128px; left: -60px; width: 697px; height: 698px; pointer-events: none; z-index: 0; }
+    .cover-inner > *:not(.cover-watermark) { position: relative; z-index: 1; }
+
+    /* Header: wordmark left, registered-address block right */
+    .cover-head { display: flex; justify-content: space-between; align-items: flex-start; }
+    .cover-logo { width: 124px; height: 59px; flex: none; }
+    .cover-address { text-align: right; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.65); }
+
+    /* Hero */
+    .cover-hero { margin-top: 258px; }
+    .cover-pill { display: inline-flex; align-items: center; padding: 7px 14px; border-radius: 999px; background: #fff; color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: 0.08em; }
+    .cover-title { font-size: 46px; font-weight: 700; line-height: 1.17; margin-top: 22px; max-width: 666px; }
+
+    /* Recipient + company */
+    .cover-parties { margin-top: 40px; display: flex; flex-direction: column; gap: 24px; }
+    .cover-flabel { font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.5; }
+    .cover-fvalue { font-size: 14px; font-weight: 500; line-height: 1.5; margin-top: 6px; }
+
+    /* Bottom cluster (anchored to the page foot) */
+    .cover-bottom { margin-top: auto; }
+    .cover-total .cover-fvalue { font-size: 24px; font-weight: 700; }
+    .cover-meta { display: grid; grid-template-columns: 225px 1fr; gap: 20px 0; margin-top: 34px; }
+
+    /* Footer — mirrors the inner-page running footer */
+    .cover-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 40px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 8px; color: rgba(255,255,255,0.6); }
+    .cover-footer .fl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .cover-footer .fr { white-space: nowrap; flex-shrink: 0; }
   `
 
   return (
@@ -434,43 +483,114 @@ export default async function PdfPage({ params, searchParams }: Props) {
         {showCover && (
         <section className="sheet cover">
           <div className="cover-inner">
-            <div className="cover-bar" />
+            {/* Faint brand swoosh watermark */}
+            <svg
+              className="cover-watermark"
+              viewBox="0 0 697 698"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M683.406 249.662C590.526 368.25 474.191 371.767 474.191 371.767C309.173 398.216 247.862 315.298 291.782 263.371C322.936 236.203 383.859 250.272 414.376 347.618C474.246 357.366 569.397 322.665 613.095 288.158C617.747 269.713 613.095 131.213 497.092 53.0589C365.499 -35.5913 182.647 -3.82569 90.5703 79.7564C8.07512 154.642 -69.1031 327.733 104.001 459.642C231.828 557.044 422.628 484.29 442.843 473.988C445.585 472.575 447.551 554.745 402.191 572.968C336.09 599.527 303.108 539.264 303.108 539.264C303.108 539.264 228.671 564.577 185.832 578.396C230.859 691.667 367.327 706.428 414.791 694.63C558.597 658.904 607.335 547.185 610.714 411.703C653.47 373.651 678.587 308.153 696.532 256.724C699.357 248.61 688.695 242.877 683.378 249.635"
+                fill="#fff"
+                fillOpacity="0.05"
+              />
+            </svg>
 
-            <div>
-              <div className="logo-row">
-                <div className="logo-mark">{agencyName.charAt(0).toUpperCase()}</div>
-                <div className="agency">{agencyName}</div>
-              </div>
-
-              <div className="cover-hero">
-                <span className="cover-pill">COST ESTIMATE</span>
-                <h1 className="cover-title">{proposal.projectTitle}</h1>
-                <div className="cover-sub">Prepared for {proposal.clientName}</div>
+            {/* Header: wordmark + registered address */}
+            <div className="cover-head">
+              <svg
+                className="cover-logo"
+                viewBox="0 0 124 59"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                role="img"
+                aria-label={agencyName}
+              >
+                <g fill="#fff">
+                  <path d="M5.63547 20.6197C5.82043 22.2618 6.79247 22.9746 9.10648 22.9746C10.7475 22.9746 11.6054 22.6753 11.6054 21.7775C11.6054 20.9544 11.0466 20.6945 7.94948 19.8714C3.80552 18.7885 0.932686 17.1463 0.932686 13.1846C0.932686 9.22293 3.91964 6.79709 8.95693 6.79709C14.4074 6.79709 17.3196 9.56161 17.3196 13.2594H11.6842C11.5346 12.0623 10.5626 11.3928 9.03564 11.3928C7.72909 11.3928 7.0955 11.8024 7.0955 12.5112C7.0955 13.4091 7.69368 13.7084 10.901 14.4921C15.6392 15.6498 17.8824 17.6307 17.8824 21.2143C17.8824 24.798 14.5609 27.5625 9.14977 27.5625C3.73861 27.5625 0.149545 25.2508 0 20.6197H5.63547Z" />
+                  <path d="M31.8412 27.1175V22.6714C30.759 25.6604 28.3702 27.5664 25.2337 27.5664C21.6131 27.5664 19.4841 25.0618 19.4841 20.6197V7.24603H26.5009V18.2647C26.5009 21.0647 27.3588 22.2225 29.0392 22.2225C30.7196 22.2225 31.7625 21.0647 31.7625 18.2647V7.24603H38.7793V27.1175H31.8373H31.8412Z" />
+                  <path d="M48.3383 7.24603V11.8024C49.4599 8.73855 51.9943 6.79709 55.1702 6.79709C58.7907 6.79709 60.9197 9.3017 60.9197 13.7438V27.1175H53.903V16.0988C53.903 13.2988 52.8955 12.141 51.2151 12.141C49.5347 12.141 48.417 13.2988 48.417 16.0988V27.1175H41.4002V7.24603H48.3423H48.3383Z" />
+                  <path d="M76.5589 27.1175V22.6714C75.701 25.4714 73.3477 27.5664 70.2505 27.5664C66.4057 27.5664 62.9346 24.2781 62.9346 17.1818C62.9346 10.0854 66.4804 6.79709 70.2151 6.79709C73.0132 6.79709 75.4767 8.77793 76.4881 11.5425V0H83.5049V27.1175H76.5629H76.5589ZM70.3253 17.1818C70.3253 20.8402 71.9309 22.2225 73.6113 22.2225C75.2918 22.2225 76.5589 20.9899 76.5589 17.8512V16.5083C76.5589 13.3697 75.2524 12.1371 73.6113 12.1371C71.9703 12.1371 70.3253 13.5194 70.3253 17.1778V17.1818Z" />
+                  <path d="M97.1253 27.1175C96.8262 26.1093 96.6412 25.1012 96.6019 23.6441C95.8187 25.9242 94.0635 27.5664 91.2261 27.5664C88.0542 27.5664 85.6654 25.5501 85.6654 21.8877C85.6654 18.2253 88.5028 16.1342 93.5401 15.2403L96.5271 14.7165V14.1179C96.5271 12.4758 95.9289 11.6133 94.3626 11.6133C92.7963 11.6133 92.1982 12.2867 92.1234 14.3385H86.0393C86.1888 9.18355 88.8374 6.79315 95.0356 6.79315C101.234 6.79315 103.473 9.48285 103.473 14.5629V21.5491C103.473 24.0143 103.697 25.7707 104.071 27.1135H97.1292L97.1253 27.1175ZM94.5122 22.8211C95.8935 22.8211 96.6019 22.0374 96.6019 19.3477V18.1151L94.886 18.375C93.3198 18.5995 92.4579 19.4579 92.4579 20.8048C92.4579 22.1516 93.1663 22.8211 94.5122 22.8211Z" />
+                  <path d="M108.436 34.3281C106.755 34.3281 105.598 34.2178 104.555 34.0682V28.9881H107.204C109.258 28.9881 110.266 28.2044 110.86 26.448L103.32 7.24997H110.671L112.092 11.5818C112.69 13.413 113.433 15.8034 114.071 18.119L117.208 7.24997H124L117.357 26.448C115.452 31.9377 112.914 34.3281 108.436 34.3281Z" />
+                  <path d="M5.63547 52.0533C5.82043 53.6954 6.79247 54.4082 9.10648 54.4082C10.7475 54.4082 11.6054 54.1089 11.6054 53.211C11.6054 52.388 11.0466 52.1281 7.94948 51.305C3.80552 50.2221 0.932686 48.5799 0.932686 44.6182C0.932686 40.6565 3.91964 38.2307 8.95693 38.2307C14.4074 38.2307 17.3196 40.9952 17.3196 44.693H11.6842C11.5346 43.4959 10.5626 42.8264 9.03564 42.8264C7.72909 42.8264 7.0955 43.2359 7.0955 43.9487C7.0955 44.8466 7.69368 45.1459 10.901 45.9296C15.6392 47.0874 17.8824 49.0682 17.8824 52.6518C17.8824 56.2355 14.5609 59 9.14977 59C3.73861 59 0.149545 56.6844 0 52.0533H5.63547Z" />
+                  <path d="M26.4654 59C23.0299 59 20.6411 57.094 20.6411 53.5103V43.7243H19.0748V38.6835H20.6411V35.0212H27.6579V38.6835H30.9793V43.7243H27.6579V51.754C27.6579 53.1717 28.3308 53.6954 29.7476 53.6954H30.9793V58.5511C29.9325 58.811 28.2167 59 26.4615 59H26.4654Z" />
+                  <path d="M45.3907 58.5511V54.105C44.3085 57.094 41.9197 59 38.7832 59C35.1627 59 33.0336 56.4954 33.0336 52.0533V38.6796H40.0504V49.6983C40.0504 52.4983 40.9083 53.6561 42.5887 53.6561C44.2691 53.6561 45.312 52.4983 45.312 49.6983V38.6796H52.3288V58.5511H45.3868H45.3907Z" />
+                  <path d="M67.3383 58.5511V54.105C66.4804 56.905 64.1271 59 61.0299 59C57.1851 59 53.714 55.7117 53.714 48.6153C53.714 41.519 57.2598 38.2307 60.9945 38.2307C63.7926 38.2307 66.2561 40.2115 67.2636 42.976V31.4336H74.2804V58.5511H67.3383ZM61.1047 48.6153C61.1047 52.2738 62.7103 53.6561 64.3907 53.6561C66.0711 53.6561 67.3383 52.4234 67.3383 49.2848V47.938C67.3383 44.7994 66.0318 43.5667 64.3907 43.5667C62.7497 43.5667 61.1047 44.949 61.1047 48.6075V48.6153Z" />
+                  <path d="M83.9103 31.5084V37.1123H76.8935V31.5084H83.9103ZM83.9103 38.6796V58.5511H76.8935V38.6796H83.9103Z" />
+                  <path d="M96.4917 38.2307C102.241 38.2307 107.019 42.1884 107.019 48.6153C107.019 55.0422 102.241 59 96.4917 59C90.7421 59 85.9645 55.0422 85.9645 48.6153C85.9645 42.1884 90.7421 38.2307 96.4917 38.2307ZM96.4917 53.7348C98.2823 53.7348 99.6282 52.4274 99.6282 48.6193C99.6282 44.8112 98.2823 43.5037 96.4917 43.5037C94.7011 43.5037 93.3552 44.8112 93.3552 48.6193C93.3552 52.4274 94.6971 53.7348 96.4917 53.7348Z" />
+                </g>
+              </svg>
+              <div className="cover-address">
+                {COMPANY_ADDRESS_LINES.map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
               </div>
             </div>
 
-            <div>
-              <hr className="cover-divider" />
-              <div className="cover-meta">
-                <div className="cover-meta-col">
-                  <div className="l">CE No.</div>
-                  <div className="v">{proposal.number}</div>
-                </div>
-                <div className="cover-meta-col">
-                  <div className="l">Date</div>
-                  <div className="v">{fmtDate(proposal.date)}</div>
-                </div>
-                <div className="cover-meta-col">
-                  <div className="l">Valid Until</div>
-                  <div className="v">{fmtDate(proposal.validUntil)}</div>
-                </div>
-                <div className="cover-meta-col">
-                  <div className="l">Prepared by</div>
-                  <div className="v">{proposal.createdBy.name}</div>
+            {/* Hero */}
+            <div className="cover-hero">
+              <span className="cover-pill">COST PROPOSAL</span>
+              <h1 className="cover-title">{coverTitle}</h1>
+            </div>
+
+            {/* Recipient + company */}
+            <div className="cover-parties">
+              <div>
+                <div className="cover-flabel">Prepared For</div>
+                <div className="cover-fvalue">
+                  {preparedForName}
+                  {proposal.contactTitle && (
+                    <>
+                      <br />
+                      {proposal.contactTitle}
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="cover-confidential">
-                Confidential — For Addressee Only · {agencyName}
+              {companyLines.length > 0 && (
+                <div>
+                  <div className="cover-flabel">Company</div>
+                  <div className="cover-fvalue">
+                    {companyLines.map((line, i) => (
+                      <div key={i}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom cluster */}
+            <div className="cover-bottom">
+              <div className="cover-total">
+                <div className="cover-flabel">Total Investment</div>
+                <div className="cover-fvalue">{money(total)}</div>
+              </div>
+
+              <div className="cover-meta">
+                <div>
+                  <div className="cover-flabel">Cost Estimate No.</div>
+                  <div className="cover-fvalue">{proposal.number}</div>
+                </div>
+                <div>
+                  <div className="cover-flabel">Date Created</div>
+                  <div className="cover-fvalue">{fmtDate(proposal.date)}</div>
+                </div>
+                <div>
+                  <div className="cover-flabel">Prepared By</div>
+                  <div className="cover-fvalue">{proposal.createdBy.name}</div>
+                </div>
+                <div>
+                  <div className="cover-flabel">Valid Until</div>
+                  <div className="cover-fvalue">{fmtDate(proposal.validUntil)}</div>
+                </div>
+              </div>
+
+              <div className="cover-footer">
+                <span className="fl">{coverFooterLabel}</span>
+                <span className="fr">Confidential</span>
               </div>
             </div>
           </div>
