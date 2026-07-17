@@ -402,7 +402,7 @@ model SystemSettings {
   id                  String   @id @default(cuid())
   agencyName          String
   agencyLogoUrl       String?
-  brandColorHex       String   @default("#4F46E5")
+  brandColorHex       String   @default("#214ADE")
   defaultValidityDays Int      @default(30)
   defaultCurrency     String   @default("PHP")
   defaultVatRate      Decimal  @default(12.00) @db.Decimal(5, 2)
