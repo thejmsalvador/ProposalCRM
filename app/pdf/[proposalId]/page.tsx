@@ -356,6 +356,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .rich h1, .rich h2, .rich h3, .rich h4 { color: var(--primary); font-weight: 600; margin: 18px 0 8px; line-height: 1.3; break-after: avoid; page-break-after: avoid; }
     .rich h1 { font-size: 18px; } .rich h2 { font-size: 16px; } .rich h3 { font-size: 14px; } .rich h4 { font-size: 12.5px; }
     .rich ul, .rich ol { margin: 0 0 12px; padding-left: 20px; }
+    .rich ul { list-style: disc outside; }
+    .rich ol { list-style: decimal outside; }
     .rich li { margin: 4px 0; }
     .rich strong { font-weight: 600; color: var(--primary); }
     .rich em { font-style: italic; }
