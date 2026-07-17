@@ -635,8 +635,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
               <tr>
                 <th>Service</th>
                 <th>Engagement</th>
-                <th className="col-num">Unit Cost</th>
-                <th className="col-num">Total Cost (VAT Ex)</th>
+                <th className="col-num">Item Cost</th>
+                <th className="col-num">Item Total</th>
               </tr>
             </thead>
             <tbody>
@@ -706,8 +706,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
                   <tr>
                     <th>Service</th>
                     <th>Engagement</th>
-                    <th className="col-num">Unit Cost</th>
-                    <th className="col-num">Total Cost (VAT Ex)</th>
+                    <th className="col-num">Item Cost</th>
+                    <th className="col-num">Item Total</th>
                   </tr>
                 </thead>
                 <tbody>
