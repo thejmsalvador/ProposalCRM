@@ -73,5 +73,9 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5"
+  },
+    "overridesComment": "jsdom pinned to a CJS-only line: jsdom>=28 switched to @exodus/bytes (ESM-only via html-encoding-sniffer@6), which Next's bundled server loader can't require() -> ERR_REQUIRE_ESM 500s on every rich-text render. jsdom 26 uses whatwg-encoding/html-encoding-sniffer@4 (CJS). Only isomorphic-dompurify pulls jsdom (needs new JSDOM('').window), so the older line is safe.",
+  "overrides": {
+    "jsdom": "26.1.0"
   }
 }
