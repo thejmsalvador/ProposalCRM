@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import type { EmailOtpType } from '@supabase/supabase-js'
 
 /**
  * Handles the OAuth / magic-link callback from Supabase.
@@ -21,17 +22,33 @@ function safeNext(raw: string | null): string {
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url)
   const code = searchParams.get('code')
+  // Recovery/magic-link emails can also arrive as a token_hash + type pair when
+  // the Supabase email template is switched to {{ .TokenHash }}; verifyOtp
+  // handles those without needing the PKCE code verifier. Support both so the
+  // flow works regardless of which template the project uses.
+  const tokenHash = searchParams.get('token_hash')
+  const type = searchParams.get('type') as EmailOtpType | null
   const next = safeNext(searchParams.get('next'))
 
-  if (code) {
-    const supabase = createClient(cookies())
+  const supabase = createClient(cookies())
 
+  if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      return NextResponse.redirect(`${origin}${next}`)
+    }
+  } else if (tokenHash && type) {
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash })
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`)
     }
   }
 
-  // Something went wrong — redirect to login with an error flag
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`)
+  // Something went wrong. Bounce recovery failures back to the reset-request
+  // screen (a stale/reused link) and everything else to login.
+  const failTarget =
+    type === 'recovery' || next === '/reset-password'
+      ? '/forgot-password?error=link_invalid'
+      : '/login?error=auth_callback_failed'
+  return NextResponse.redirect(`${origin}${failTarget}`)
 }

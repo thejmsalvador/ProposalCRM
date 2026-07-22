@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,7 +18,15 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-export function LoginForm({ agencyName }: { agencyName: string }) {
+type Notice = { type: 'success' | 'error'; text: string }
+
+export function LoginForm({
+  agencyName,
+  notice = null,
+}: {
+  agencyName: string
+  notice?: Notice | null
+}) {
   const [serverError, setServerError] = useState<string | null>(null)
 
   const {
@@ -53,6 +62,19 @@ export function LoginForm({ agencyName }: { agencyName: string }) {
         {/* Card */}
         <div className="rounded-xl border bg-white p-8 shadow-sm">
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+            {/* One-time notice from a redirect (e.g. after a password reset) */}
+            {notice && (
+              <div
+                className={
+                  notice.type === 'success'
+                    ? 'rounded-md bg-green-50 px-4 py-3 text-sm text-green-700'
+                    : 'rounded-md bg-red-50 px-4 py-3 text-sm text-red-700'
+                }
+              >
+                {notice.text}
+              </div>
+            )}
+
             {/* Server error */}
             {serverError && (
               <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -78,7 +100,15 @@ export function LoginForm({ agencyName }: { agencyName: string }) {
 
             {/* Password */}
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-[var(--color-accent)] hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"
