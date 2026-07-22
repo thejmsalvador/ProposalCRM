@@ -144,6 +144,7 @@ export function WizardProvider({
       pricingNotes: '',
       paymentTemplateId: defaultPayment?.id ?? '',
       paymentTermsOverride: null,
+      paymentNotesOverride: null,
       paymentMilestones: null,
       milestoneBasis: null,
       tcTemplateId: '',

@@ -92,6 +92,7 @@ export type PaymentTemplateOption = {
   id: string
   name: string
   bodyRichText: string
+  notesRichText: string
   milestones: { label: string; dueDate: string; percent: number }[]
   milestoneBasis: MilestoneBasis
   isDefault: boolean
@@ -162,6 +163,7 @@ export async function getWizardData(): Promise<{
           id: true,
           name: true,
           bodyRichText: true,
+          notesRichText: true,
           milestones: true,
           milestoneBasis: true,
           isDefault: true,
@@ -198,6 +200,7 @@ export async function getWizardData(): Promise<{
       id: p.id,
       name: p.name,
       bodyRichText: p.bodyRichText,
+      notesRichText: p.notesRichText ?? '',
       milestones: parsePaymentMilestones(p.milestones),
       milestoneBasis: normalizeBasis(p.milestoneBasis),
       isDefault: p.isDefault,
@@ -350,6 +353,8 @@ export async function saveProposalDraft(
     pricingNotes: data.pricingNotes || null,
     paymentTemplateId: data.paymentTemplateId || null,
     paymentTermsOverride: data.paymentTermsOverride,
+    // null = inherit the template's payment notes; a string = a per-proposal override.
+    paymentNotesOverride: data.paymentNotesOverride,
     // null = inherit the template's schedule; an array = a per-proposal override.
     paymentMilestones:
       data.paymentMilestones == null
@@ -984,6 +989,7 @@ export type ProposalDetail = {
   total: string
   pricingNotes: string | null
   paymentTermsOverride: string | null
+  paymentNotesOverride: string | null
   paymentMilestones: { label: string; dueDate: string; percent: number }[]
   milestoneBasis: MilestoneBasis
   tcOverride: string | null
@@ -997,7 +1003,12 @@ export type ProposalDetail = {
   assignedApprover: { id: string; name: string } | null
   cooApprovedAt: string | null
   ceoApprovedAt: string | null
-  paymentTemplate: { id: string; name: string; bodyRichText: string } | null
+  paymentTemplate: {
+    id: string
+    name: string
+    bodyRichText: string
+    notesRichText: string | null
+  } | null
   tcTemplate: { id: string; name: string; bodyRichText: string } | null
   // Resolved, ordered T&C sections (override applied) compiled into the PDF.
   tcSections: { tcTemplateId: string; name: string; html: string }[]
@@ -1048,6 +1059,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
           id: true,
           name: true,
           bodyRichText: true,
+          notesRichText: true,
           milestones: true,
           milestoneBasis: true,
         },
@@ -1115,6 +1127,7 @@ export async function getProposalDetail(id: string): Promise<ProposalDetail | nu
     total: String(proposal.total),
     pricingNotes: proposal.pricingNotes,
     paymentTermsOverride: proposal.paymentTermsOverride,
+    paymentNotesOverride: proposal.paymentNotesOverride,
     // Effective schedule: the proposal's override if it has one, else the template's.
     paymentMilestones:
       proposal.paymentMilestones != null
@@ -1295,6 +1308,7 @@ export async function duplicateProposal(id: string): Promise<{ error: string } |
       pricingNotes: source.pricingNotes,
       paymentTemplateId: source.paymentTemplateId,
       paymentTermsOverride: source.paymentTermsOverride,
+      paymentNotesOverride: source.paymentNotesOverride,
       paymentMilestones:
         source.paymentMilestones === null
           ? Prisma.JsonNull
@@ -2027,6 +2041,7 @@ export type ProposalFormDataExport = {
   pricingNotes: string
   paymentTemplateId: string
   paymentTermsOverride: string | null
+  paymentNotesOverride: string | null
   paymentMilestones: { id: string; label: string; dueDate: string; percent: number }[] | null
   milestoneBasis: MilestoneBasis | null
   tcTemplateId: string
@@ -2113,6 +2128,7 @@ export async function getProposalForEdit(
     pricingNotes: proposal.pricingNotes ?? '',
     paymentTemplateId: proposal.paymentTemplateId ?? '',
     paymentTermsOverride: proposal.paymentTermsOverride,
+    paymentNotesOverride: proposal.paymentNotesOverride,
     // null = inherit the template's schedule (no per-proposal override stored).
     paymentMilestones:
       proposal.paymentMilestones == null
@@ -2233,6 +2249,9 @@ function generateChangeSummary(
   if (String(prev.proposal.paymentTermsOverride ?? '') !== String(current.proposal.paymentTermsOverride ?? '')) {
     changes.push('Payment terms overridden from template.')
   }
+  if (String(prev.proposal.paymentNotesOverride ?? '') !== String(current.proposal.paymentNotesOverride ?? '')) {
+    changes.push('Payment notes overridden from template.')
+  }
   if (normalizeBasis(prev.proposal.milestoneBasis) !== normalizeBasis(current.proposal.milestoneBasis)) {
     changes.push(
       normalizeBasis(current.proposal.milestoneBasis) === 'remaining'
@@ -2338,6 +2357,7 @@ export async function restoreVersion(
       pricingNotes: sp.pricingNotes ? String(sp.pricingNotes) : null,
       paymentTemplateId: sp.paymentTemplateId ? String(sp.paymentTemplateId) : null,
       paymentTermsOverride: sp.paymentTermsOverride ? String(sp.paymentTermsOverride) : null,
+      paymentNotesOverride: sp.paymentNotesOverride ? String(sp.paymentNotesOverride) : null,
       paymentMilestones:
         sp.paymentMilestones == null
           ? Prisma.JsonNull

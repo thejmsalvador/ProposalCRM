@@ -264,6 +264,9 @@ export const proposalDraftSchema = z.object({
   // Step 4
   paymentTemplateId: z.string().default(''),
   paymentTermsOverride: z.string().nullable().default(null),
+  // null = inherit the template's payment notes (penalties/invoicing); a string
+  // = a per-proposal override.
+  paymentNotesOverride: z.string().nullable().default(null),
   // null = inherit the selected template's schedule; an array = a per-proposal
   // override (which may be empty to mean "no schedule for this proposal").
   paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
@@ -321,6 +324,7 @@ export const proposalSubmitSchema = z
     pricingNotes: z.string().default(''),
     paymentTemplateId: z.string().min(1, 'Payment terms are required'),
     paymentTermsOverride: z.string().nullable().default(null),
+    paymentNotesOverride: z.string().nullable().default(null),
     paymentMilestones: z.array(paymentMilestoneSchema).nullable().default(null),
     milestoneBasis: z.enum(['total', 'remaining']).nullable().default(null),
     modesOfPayment: z

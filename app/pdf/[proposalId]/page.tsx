@@ -80,7 +80,12 @@ export default async function PdfPage({ params, searchParams }: Props) {
           include: { service: { select: { name: true, category: true } } },
         },
         paymentTemplate: {
-          select: { bodyRichText: true, milestones: true, milestoneBasis: true },
+          select: {
+            bodyRichText: true,
+            notesRichText: true,
+            milestones: true,
+            milestoneBasis: true,
+          },
         },
         tcTemplate: { select: { bodyRichText: true } },
       },
@@ -111,6 +116,11 @@ export default async function PdfPage({ params, searchParams }: Props) {
 
   const paymentHtml =
     proposal.paymentTermsOverride || proposal.paymentTemplate?.bodyRichText || ''
+  // Payment-specific terms (penalties, invoicing) printed after the schedule.
+  // Per-proposal override wins over the template's library notes.
+  const paymentNotesHtml =
+    proposal.paymentNotesOverride || proposal.paymentTemplate?.notesRichText || ''
+  const hasPaymentNotes = !!paymentNotesHtml && paymentNotesHtml !== '<p></p>'
   // New model: ordered, multi-select T&C sections compiled in order (override applied).
   const tcSections = await resolveTcSections(proposal.tcSections)
   // Legacy fallback for proposals created before the section model.
@@ -232,8 +242,17 @@ export default async function PdfPage({ params, searchParams }: Props) {
       ? normalizeBasis(proposal.milestoneBasis)
       : normalizeBasis(proposal.paymentTemplate?.milestoneBasis)
   const hasManualMilestones = manualMilestones.length > 0
+  // Grand total is VAT-inclusive; the schedule shows both the VAT-exclusive (net)
+  // and VAT-inclusive amount per row when VAT applies. netTotal is the net the
+  // ex-VAT column is derived from; when there is no VAT the two columns coincide.
+  const netTotal =
+    vatAmount != null ? Math.round((total - vatAmount) * 100) / 100 : total
+  const showVatColumns = vatAmount != null && vatAmount > 0
   const manualAmounts = hasManualMilestones
     ? computeMilestoneAmountsForBasis(manualMilestones, total, milestoneBasis)
+    : []
+  const manualAmountsExVat = hasManualMilestones
+    ? computeMilestoneAmountsForBasis(manualMilestones, netTotal, milestoneBasis)
     : []
   const manualPercentTotal = milestonesPercentTotal(manualMilestones)
   // In 'remaining' mode the upfront is row 0; the leftover pool funds the rest.
@@ -249,6 +268,10 @@ export default async function PdfPage({ params, searchParams }: Props) {
         monthlyTotal,
         oneTimeTotal,
       })
+  // The prose-derived schedule bills the grand total (VAT-inclusive); scale each
+  // installment down by the net/gross ratio to get its VAT-exclusive amount.
+  const vatExFactor = showVatColumns && total > 0 ? netTotal / total : 1
+  const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
   const scheduleShowsPercent =
     paymentSchedule?.installments.some((i) => i.percent !== null) ?? false
   const scheduleOneTime = paymentSchedule?.installments[0]?.oneTimeAmount ?? 0
@@ -261,7 +284,8 @@ export default async function PdfPage({ params, searchParams }: Props) {
   const order: string[] = ['cover']
   // Combined Scope of Work + Investment Summary — a single section.
   if (proposal.lineItems.length > 0) order.push('scope')
-  if (paymentHtml || hasManualMilestones || hasModesOfPayment) order.push('payment')
+  if (paymentHtml || hasManualMilestones || hasPaymentNotes || hasModesOfPayment)
+    order.push('payment')
   if (hasTc) order.push('tc')
   if (hasSignatories) order.push('signatories')
   const secNum = (key: string) => order.indexOf(key) + 1
@@ -436,12 +460,17 @@ export default async function PdfPage({ params, searchParams }: Props) {
     .stable th { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; padding: 0 0 10px; text-align: left; }
     .stable td { font-size: 12.5px; padding: 12px 0; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--text); }
     .stable th:nth-child(1), .stable td:nth-child(1) { width: 26px; }
-    .stable th:last-child, .stable td:last-child { width: 150px; }
+    .stable th:last-child, .stable td:last-child { width: 120px; }
+    /* Share column sits second (after the row index), narrow and left-aligned. */
+    .col-share { width: 92px; color: var(--primary); font-weight: 500; text-align: left; padding-right: 12px; white-space: nowrap; }
+    .stable tfoot td.col-share { font-weight: 700; }
     .stable tfoot td { border-bottom: 0; border-top: 2px solid var(--primary); padding-top: 12px; }
     .sched-label { color: var(--primary); font-weight: 500; }
     .sched-total-label { color: var(--primary); font-weight: 700; }
     .sched-basis { font-size: 10px; color: var(--muted); font-weight: 400; }
     .schedule-note { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 14px; }
+    /* Payment-specific terms (penalties, invoicing) printed after the schedule. */
+    .payment-notes { margin-top: 28px; break-inside: avoid; page-break-inside: avoid; }
 
     /* Mode of payment (bank accounts) */
     .mop { margin-top: 32px; break-inside: avoid; page-break-inside: avoid; }
@@ -738,7 +767,7 @@ export default async function PdfPage({ params, searchParams }: Props) {
         )}
 
         {/* ── 5. PAYMENT TERMS ───────────────────────────────────────────────── */}
-        {(paymentHtml || hasManualMilestones || hasModesOfPayment) && (
+        {(paymentHtml || hasManualMilestones || hasPaymentNotes || hasModesOfPayment) && (
           <FlowSection pageKey="payment" title="Payment Terms">
             {paymentHtml && (
               <div className="rich" dangerouslySetInnerHTML={{ __html: sanitizeHtml(paymentHtml) }} />
@@ -757,19 +786,24 @@ export default async function PdfPage({ params, searchParams }: Props) {
                   <thead>
                     <tr>
                       <th className="col-idx">#</th>
+                      <th className="col-share">Share</th>
                       <th>Milestone</th>
                       <th>Due Date</th>
-                      <th className="col-num">Share</th>
-                      <th className="col-num">Amount</th>
+                      {showVatColumns ? (
+                        <>
+                          <th className="col-num">VAT Ex</th>
+                          <th className="col-num">VAT Inc</th>
+                        </>
+                      ) : (
+                        <th className="col-num">Amount</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {manualMilestones.map((ms, i) => (
                       <tr key={i}>
                         <td className="col-idx">{i + 1}</td>
-                        <td className="sched-label">{ms.label || `Milestone ${i + 1}`}</td>
-                        <td className="sched-label">{ms.dueDate || '—'}</td>
-                        <td className="col-num">
+                        <td className="col-share">
                           {ms.percent}%
                           {milestoneBasis === 'remaining' && (
                             <span className="sched-basis">
@@ -777,20 +811,36 @@ export default async function PdfPage({ params, searchParams }: Props) {
                             </span>
                           )}
                         </td>
-                        <td className="col-num amount">{money(manualAmounts[i])}</td>
+                        <td className="sched-label">{ms.label || `Milestone ${i + 1}`}</td>
+                        <td className="sched-label">{ms.dueDate || '—'}</td>
+                        {showVatColumns ? (
+                          <>
+                            <td className="col-num">{money(manualAmountsExVat[i])}</td>
+                            <td className="col-num amount">{money(manualAmounts[i])}</td>
+                          </>
+                        ) : (
+                          <td className="col-num amount">{money(manualAmounts[i])}</td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr>
                       <td className="col-idx" />
+                      <td className="col-share sched-total-label">
+                        {milestoneBasis === 'remaining' ? '' : `${manualPercentTotal}%`}
+                      </td>
                       <td className="sched-total-label" colSpan={2}>
                         Total
                       </td>
-                      <td className="col-num">
-                        {milestoneBasis === 'remaining' ? '' : `${manualPercentTotal}%`}
-                      </td>
-                      <td className="col-num amount">{money(total)}</td>
+                      {showVatColumns ? (
+                        <>
+                          <td className="col-num amount">{money(netTotal)}</td>
+                          <td className="col-num amount">{money(total)}</td>
+                        </>
+                      ) : (
+                        <td className="col-num amount">{money(total)}</td>
+                      )}
                     </tr>
                   </tfoot>
                 </table>
@@ -820,15 +870,27 @@ export default async function PdfPage({ params, searchParams }: Props) {
                   <thead>
                     <tr>
                       <th className="col-idx">#</th>
+                      {scheduleShowsPercent && <th className="col-share">Share</th>}
                       <th>{paymentSchedule.kind === 'monthly' ? 'Period' : 'Milestone'}</th>
-                      {scheduleShowsPercent && <th className="col-num">Share</th>}
-                      <th className="col-num">Amount</th>
+                      {showVatColumns ? (
+                        <>
+                          <th className="col-num">VAT Ex</th>
+                          <th className="col-num">VAT Inc</th>
+                        </>
+                      ) : (
+                        <th className="col-num">Amount</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {paymentSchedule.installments.map((inst, i) => (
                       <tr key={i}>
                         <td className="col-idx">{i + 1}</td>
+                        {scheduleShowsPercent && (
+                          <td className="col-share">
+                            {inst.percent !== null ? `${inst.percent}%` : '—'}
+                          </td>
+                        )}
                         <td className="sched-label">
                           {inst.label}
                           {inst.downpaymentAmount ? (
@@ -842,21 +904,30 @@ export default async function PdfPage({ params, searchParams }: Props) {
                             </div>
                           ) : null}
                         </td>
-                        {scheduleShowsPercent && (
-                          <td className="col-num">
-                            {inst.percent !== null ? `${inst.percent}%` : '—'}
-                          </td>
+                        {showVatColumns ? (
+                          <>
+                            <td className="col-num">{money(round2(inst.amount * vatExFactor))}</td>
+                            <td className="col-num amount">{money(inst.amount)}</td>
+                          </>
+                        ) : (
+                          <td className="col-num amount">{money(inst.amount)}</td>
                         )}
-                        <td className="col-num amount">{money(inst.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr>
                       <td className="col-idx" />
+                      {scheduleShowsPercent && <td className="col-share sched-total-label">100%</td>}
                       <td className="sched-total-label">Total</td>
-                      {scheduleShowsPercent && <td className="col-num">100%</td>}
-                      <td className="col-num amount">{money(paymentSchedule.total)}</td>
+                      {showVatColumns ? (
+                        <>
+                          <td className="col-num amount">{money(netTotal)}</td>
+                          <td className="col-num amount">{money(paymentSchedule.total)}</td>
+                        </>
+                      ) : (
+                        <td className="col-num amount">{money(paymentSchedule.total)}</td>
+                      )}
                     </tr>
                   </tfoot>
                 </table>
@@ -870,6 +941,13 @@ export default async function PdfPage({ params, searchParams }: Props) {
                     : `Milestone billing as a share of the grand total of ${money(paymentSchedule.total)}.`}
                 </div>
               </div>
+            )}
+
+            {hasPaymentNotes && (
+              <div
+                className="rich payment-notes"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(paymentNotesHtml) }}
+              />
             )}
 
             {hasModesOfPayment && (

@@ -383,6 +383,27 @@ export function Step7Review() {
                 </table>
               </div>
             )}
+
+            {(() => {
+              const notes = data.paymentNotesOverride || paymentTemplate.notesRichText
+              if (!notes || notes === '<p></p>') return null
+              return (
+                <div className="mt-4">
+                  <h4 className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-1">
+                    Payment notes &amp; penalties
+                    {data.paymentNotesOverride && (
+                      <Badge className="ml-2 bg-amber-100 text-amber-700 hover:bg-amber-100">
+                        Customized
+                      </Badge>
+                    )}
+                  </h4>
+                  <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(notes) }}
+                  />
+                </div>
+              )
+            })()}
           </div>
         )}
 

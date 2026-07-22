@@ -7,6 +7,9 @@ export const paymentTermSchema = z
     name: z.string().min(1, 'Name is required'),
     // Prose is now optional — the milestone schedule is the primary content.
     bodyRichText: z.string().default(''),
+    // Payment-specific terms (penalties, invoicing, grace period) printed after
+    // the schedule. Optional; overridable per proposal.
+    notesRichText: z.string().default(''),
     milestones: z.array(paymentMilestoneSchema).default([]),
     // How the schedule's percentages are calculated. See MilestoneBasis.
     milestoneBasis: z.enum(['total', 'remaining']).default('total'),
