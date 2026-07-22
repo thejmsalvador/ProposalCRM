@@ -129,6 +129,11 @@ model PaymentTemplate {
   id           String    @id @default(cuid())
   name         String
   bodyRichText String    @db.Text
+  // Reusable payment-specific terms (penalties, invoicing, grace period, etc.)
+  // rendered right AFTER the payment schedule table on the PDF — distinct from
+  // bodyRichText, which prints above the schedule. Overridable per proposal via
+  // Proposal.paymentNotesOverride.
+  notesRichText String? @db.Text
   milestones   Json?
   // How milestone percentages are calculated: 'total' (share of grand total) or
   // 'remaining' (upfront % of total, succeeding rows % of the leftover). Null = legacy 'total'.
@@ -248,6 +253,9 @@ model Proposal {
   introText             String?        @db.Text
   paymentTemplateId     String?
   paymentTermsOverride  String?        @db.Text
+  // Per-proposal override of the payment template's notesRichText (penalties,
+  // invoicing, etc.). Null = inherit the template's notes.
+  paymentNotesOverride  String?        @db.Text
   paymentMilestones     Json?
   // Calculation basis for this proposal's milestone override. Null = inherit the template's.
   milestoneBasis        String?        @db.Text

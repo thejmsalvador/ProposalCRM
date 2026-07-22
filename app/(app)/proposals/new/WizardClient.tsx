@@ -181,6 +181,7 @@ function WizardInner({ proposalTemplates }: { proposalTemplates: ProposalTemplat
       pricingNotes: (sp.pricingNotes as string) || '',
       paymentTemplateId: (sp.paymentTemplateId as string) || '',
       paymentTermsOverride: (sp.paymentTermsOverride as string | null) || null,
+      paymentNotesOverride: (sp.paymentNotesOverride as string | null) || null,
       tcTemplateId: (sp.tcTemplateId as string) || '',
       tcOverride: (sp.tcOverride as string | null) || null,
       tcSections: Array.isArray(sp.tcSections)

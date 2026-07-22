@@ -127,6 +127,7 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
     vatRate?: string | null
     total?: string
     paymentTermsOverride?: string | null
+    paymentNotesOverride?: string | null
     tcOverride?: string | null
   }
   const lineItems = snapshot.lineItems as {
@@ -221,6 +222,19 @@ function SnapshotPreview({ snapshot }: { snapshot: VersionSnapshot }) {
           <div
             className="prose prose-sm max-w-none text-slate-700 rounded-lg border border-slate-200 bg-white p-3"
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(sp.paymentTermsOverride) }}
+          />
+        </div>
+      )}
+
+      {/* Payment notes & penalties */}
+      {sp.paymentNotesOverride && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+            Payment Notes &amp; Penalties
+          </p>
+          <div
+            className="prose prose-sm max-w-none text-slate-700 rounded-lg border border-slate-200 bg-white p-3"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(sp.paymentNotesOverride) }}
           />
         </div>
       )}
@@ -981,6 +995,23 @@ export function ProposalDetailClient({
                 </div>
               )
             })()}
+
+          {(() => {
+            const notes =
+              proposal.paymentNotesOverride || proposal.paymentTemplate?.notesRichText
+            if (!notes || notes === '<p></p>') return null
+            return (
+              <div className="mt-4 border-t border-slate-200 pt-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                  Payment notes &amp; penalties
+                </p>
+                <div
+                  className="prose prose-sm max-w-none text-slate-700"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(notes) }}
+                />
+              </div>
+            )
+          })()}
         </div>
       </section>
 

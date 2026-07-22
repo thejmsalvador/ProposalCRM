@@ -26,6 +26,7 @@ export function Step4PaymentTerms() {
 
   const selectedId = watch('paymentTemplateId')
   const override = watch('paymentTermsOverride')
+  const notesOverride = watch('paymentNotesOverride')
   const isOverriding = override !== null
 
   const selectedTemplate = paymentTemplates.find((t) => t.id === selectedId)
@@ -60,6 +61,7 @@ export function Step4PaymentTerms() {
     setValue('paymentTemplateId', id)
     // Reset overrides when changing template so the new template's defaults apply.
     setValue('paymentTermsOverride', null)
+    setValue('paymentNotesOverride', null)
     setValue('paymentMilestones', null)
     setValue('milestoneBasis', null)
   }
@@ -70,6 +72,7 @@ export function Step4PaymentTerms() {
   function toggleOverride(checked: boolean) {
     if (checked) {
       setValue('paymentTermsOverride', selectedTemplate?.bodyRichText ?? '')
+      setValue('paymentNotesOverride', selectedTemplate?.notesRichText ?? '')
       setValue(
         'paymentMilestones',
         templateMilestones.map((m, i) => ({ id: `ms-${i}`, ...m })),
@@ -77,6 +80,7 @@ export function Step4PaymentTerms() {
       setValue('milestoneBasis', selectedTemplate?.milestoneBasis ?? 'total')
     } else {
       setValue('paymentTermsOverride', null)
+      setValue('paymentNotesOverride', null)
       setValue('paymentMilestones', null)
       setValue('milestoneBasis', null)
     }
@@ -199,6 +203,31 @@ export function Step4PaymentTerms() {
               <div
                 className="prose prose-sm max-w-none px-4 py-3 bg-slate-50 rounded-[var(--radius-sm)] border border-[var(--color-border)]"
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedTemplate.bodyRichText) }}
+              />
+            </div>
+          ) : null}
+
+          {/* Payment notes — penalties, invoicing; printed after the schedule */}
+          {isOverriding ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="paymentNotesEditor">Payment notes &amp; penalties</Label>
+              <p className="text-xs text-[var(--color-muted)]">
+                Invoicing, grace period, and late-payment penalties. Printed right after
+                the payment schedule on the PDF.
+              </p>
+              <RichTextEditor
+                value={notesOverride ?? ''}
+                onChange={(html) => setValue('paymentNotesOverride', html)}
+                placeholder="Edit payment notes & penalties..."
+              />
+            </div>
+          ) : selectedTemplate.notesRichText &&
+            selectedTemplate.notesRichText !== '<p></p>' ? (
+            <div className="space-y-1.5">
+              <Label>Payment notes &amp; penalties</Label>
+              <div
+                className="prose prose-sm max-w-none px-4 py-3 bg-slate-50 rounded-[var(--radius-sm)] border border-[var(--color-border)]"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedTemplate.notesRichText) }}
               />
             </div>
           ) : null}

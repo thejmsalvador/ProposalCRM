@@ -64,6 +64,7 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
     defaultValues: {
       name: '',
       bodyRichText: '',
+      notesRichText: '',
       milestones: [],
       milestoneBasis: 'total',
       isDefault: false,
@@ -77,6 +78,7 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
           ? {
               name: template.name,
               bodyRichText: template.bodyRichText,
+              notesRichText: template.notesRichText,
               milestones: template.milestones.map((m, i) => ({ id: `ms-${i}`, ...m })),
               milestoneBasis: template.milestoneBasis,
               isDefault: template.isDefault,
@@ -84,6 +86,7 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
           : {
               name: '',
               bodyRichText: '',
+              notesRichText: '',
               milestones: [],
               milestoneBasis: 'total',
               isDefault: false,
@@ -204,6 +207,29 @@ export function PaymentTermDialog({ open, onOpenChange, template }: Props) {
             />
             {errors.bodyRichText && (
               <p className="text-xs text-[var(--color-danger)]">{errors.bodyRichText.message}</p>
+            )}
+          </div>
+
+          {/* Payment notes — penalties, invoicing, printed after the schedule */}
+          <div className="space-y-1.5">
+            <Label htmlFor="pt-notes">Payment notes &amp; penalties (optional)</Label>
+            <p className="text-xs text-[var(--color-muted)]">
+              Rich text — invoicing, grace period, late-payment penalties, and similar
+              conditions. Printed right after the payment schedule on the proposal.
+            </p>
+            <Controller
+              name="notesRichText"
+              control={control}
+              render={({ field }) => (
+                <RichTextEditor
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="e.g. Please settle within 15 days of invoice. Late payment incurs a 5% monthly penalty…"
+                />
+              )}
+            />
+            {errors.notesRichText && (
+              <p className="text-xs text-[var(--color-danger)]">{errors.notesRichText.message}</p>
             )}
           </div>
 

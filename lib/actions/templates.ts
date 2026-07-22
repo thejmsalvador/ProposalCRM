@@ -57,6 +57,7 @@ export async function saveAsTemplate(
       pricingNotes: proposal.pricingNotes,
       paymentTemplateId: proposal.paymentTemplateId,
       paymentTermsOverride: proposal.paymentTermsOverride,
+      paymentNotesOverride: proposal.paymentNotesOverride,
       tcTemplateId: proposal.tcTemplateId,
       tcOverride: proposal.tcOverride,
       tcSections: proposal.tcSections ?? [],

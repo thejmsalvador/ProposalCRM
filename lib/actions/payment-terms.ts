@@ -16,6 +16,7 @@ export type PaymentTermListItem = {
   id: string
   name: string
   bodyRichText: string
+  notesRichText: string
   milestones: { label: string; dueDate: string; percent: number }[]
   milestoneBasis: MilestoneBasis
   isDefault: boolean
@@ -57,6 +58,7 @@ export async function createPaymentTerm(
     data: {
       name: data.name,
       bodyRichText: data.bodyRichText,
+      notesRichText: data.notesRichText,
       milestones: cleanPaymentMilestones(data.milestones) as Prisma.InputJsonValue,
       milestoneBasis: data.milestoneBasis,
       isDefault: data.isDefault,
@@ -98,6 +100,7 @@ export async function updatePaymentTerm(
     data: {
       name: data.name,
       bodyRichText: data.bodyRichText,
+      notesRichText: data.notesRichText,
       milestones: cleanPaymentMilestones(data.milestones) as Prisma.InputJsonValue,
       milestoneBasis: data.milestoneBasis,
       isDefault: data.isDefault,
@@ -191,6 +194,7 @@ function toListItem(t: {
   id: string
   name: string
   bodyRichText: string
+  notesRichText: string | null
   milestones: unknown
   milestoneBasis: string | null
   isDefault: boolean
@@ -202,6 +206,7 @@ function toListItem(t: {
     id: t.id,
     name: t.name,
     bodyRichText: t.bodyRichText,
+    notesRichText: t.notesRichText ?? '',
     milestones: parsePaymentMilestones(t.milestones),
     milestoneBasis: normalizeBasis(t.milestoneBasis),
     isDefault: t.isDefault,
