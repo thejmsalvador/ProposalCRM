@@ -157,3 +157,15 @@
     --radius-md:          12px;
   }
 }
+
+/* ─── Rich-text (Tiptap) content ─────────────────────────────────────────────
+   `@tailwindcss/typography` is not installed, so `prose`/`prose-sm` are no-op
+   classes. Meanwhile Preflight resets `ul`/`ol` to `list-style: none`, which
+   strips bullets and numbers from every rich-text render (editor + read-only
+   `dangerouslySetInnerHTML` views). Restore markers here. Left unlayered on
+   purpose so it beats Preflight (which lives in `@layer base`) regardless of
+   selector specificity. The PDF route uses its own `.rich` styles, not this. */
+.prose ul { list-style: disc outside; padding-left: 1.25rem; margin: 0.5rem 0; }
+.prose ol { list-style: decimal outside; padding-left: 1.25rem; margin: 0.5rem 0; }
+.prose li { margin: 0.25rem 0; }
+.prose li > p { margin: 0; }
